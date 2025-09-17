@@ -1,0 +1,13 @@
+[package]
+name = "xgrammar-rs"
+version = "0.1.0"
+edition = "2024"
+build = "build.rs"
+links = "xgrammar"
+
+[dependencies]
+
+[build-dependencies]
+bindgen = "0.72.1"
+walkdir = "2.5.0"
+cmake = "0.1.54"

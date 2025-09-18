@@ -12,3 +12,5 @@ include_cpp! {
 }
 
 pub use ffi::*;
+// Re-export core types at crate root for ergonomic paths like `xgrammar_rs::Grammar`
+pub use ffi::xgrammar::{CompiledGrammar, Grammar, GrammarCompiler, TokenizerInfo};

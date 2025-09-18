@@ -6,8 +6,9 @@ build = "build.rs"
 links = "xgrammar"
 
 [dependencies]
+cxx = "1.0.184"
 
 [build-dependencies]
-bindgen = "0.72.1"
 walkdir = "2.5.0"
 cmake = "0.1.54"
+cxx-build = "1.0.184"

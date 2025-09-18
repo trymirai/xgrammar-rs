@@ -14,13 +14,15 @@ fn main() {
     let manifest_dir = abs_path(env::var("CARGO_MANIFEST_DIR").unwrap());
     let xgrammar_src_dir = manifest_dir.join("external/xgrammar");
     let xgrammar_include_dir = xgrammar_src_dir.join("include");
-    let picojson_include_dir = xgrammar_src_dir.join("3rdparty/picojson");
     let dlpack_include_dir = xgrammar_src_dir.join("3rdparty/dlpack/include");
+    let crate_root = manifest_dir.clone();
 
     // Rebuild when headers or sources change
     println!("cargo:rerun-if-changed={}", xgrammar_include_dir.display());
     println!("cargo:rerun-if-changed={}/cpp", xgrammar_src_dir.display());
     println!("cargo:rerun-if-changed={}/3rdparty", xgrammar_src_dir.display());
+    println!("cargo:rerun-if-changed=src/bridge.hxx");
+    println!("cargo:rerun-if-changed=src/bridge.cc");
 
     // Configure CMake build
     let mut cfg = cmake::Config::new(&xgrammar_src_dir);
@@ -73,45 +75,16 @@ fn main() {
         println!("cargo:rustc-link-lib=dylib=pthread");
     }
 
-    // Run bindgen to generate Rust bindings to the public C++ headers
-    let bindings_out = PathBuf::from(env::var("OUT_DIR").unwrap()).join("bindings.rs");
-    // Generate bindings from the stable C API header
-    let header = xgrammar_include_dir.join("xgrammar/c_api.h");
-
-    // Invalidate when the header changes
-    println!("cargo:rerun-if-changed={}", header.display());
-
-    let mut builder = bindgen::Builder::default()
-        .header(header.display().to_string())
-        // Treat input as C
-        .clang_arg("-x")
-        .clang_arg("c")
-        // Include path for public headers
-        .clang_arg(format!("-I{}", xgrammar_include_dir.display()))
-        .allowlist_function("xgrammar_.*")
-        .allowlist_type("xgrammar_.*")
-        .allowlist_var("xgrammar_.*")
-        .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
-        .size_t_is_usize(true)
-        .generate_inline_functions(false);
-
-    // On Apple, bindgen may need sysroot for headers when using clang on some setups
-    if target.contains("apple-darwin") {
-        if let Ok(sdkroot) = env::var("SDKROOT") {
-            builder = builder.clang_arg(format!("-isysroot{}", sdkroot));
-        }
-    }
-
-    let bindings = builder
-        .generate()
-        .expect("Unable to generate xgrammar bindings");
-
-    bindings
-        .write_to_file(&bindings_out)
-        .expect("Couldn't write bindings!");
-
-    // Expose include dir (optional for downstream crates)
+    // Build the C++ bridge with cxx.
+    // The bridge code will include the C++ headers from xgrammar/include.
     println!("cargo:include={}", xgrammar_include_dir.display());
+    cxx_build::bridge("src/lib.rs")
+        .file("src/bridge.cc")
+        .flag_if_supported("-std=c++17")
+        .include(&xgrammar_include_dir)
+        .include(&dlpack_include_dir)
+        .include(&crate_root)
+        .compile("xgrammar_rs_bridge");
 }
 
 fn find_xgrammar_lib_dir(root: &Path) -> Option<PathBuf> {
@@ -119,12 +92,6 @@ fn find_xgrammar_lib_dir(root: &Path) -> Option<PathBuf> {
     let static_candidates = [
         "libxgrammar.a",      // Unix/macOS static
         "xgrammar.lib",       // Windows static
-    ];
-    let shared_candidates = [
-        "libxgrammar.dylib",  // macOS shared
-        "libxgrammar.so",     // Linux shared
-        "xgrammar.dll",       // Windows shared
-        "xgrammar.dll.lib",   // Windows import lib
     ];
 
     // Scan a few levels deep
@@ -134,9 +101,7 @@ fn find_xgrammar_lib_dir(root: &Path) -> Option<PathBuf> {
             continue;
         }
         let name = entry.file_name().to_string_lossy();
-        if static_candidates.iter().any(|c| name == *c)
-            || shared_candidates.iter().any(|c| name == *c)
-        {
+        if static_candidates.iter().any(|c| name == *c) {
             found = Some(entry.path().parent().unwrap().to_path_buf());
             break;
         }

@@ -18,5 +18,8 @@ fn main() {
         .as_ref()
         .map(|s| s.to_string_lossy().into_owned())
         .unwrap_or_else(|| String::from("<null>"));
-    println!("Serialized JSON (prefix): {}", &json_str[..json_str.len().min(200)]);
+    println!(
+        "Serialized JSON (prefix): {}",
+        &json_str[..json_str.len().min(200)]
+    );
 }

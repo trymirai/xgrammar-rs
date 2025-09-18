@@ -4,6 +4,8 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include "xgrammar/xgrammar.h"
+#include "dlpack/dlpack.h"
 
 namespace cxx_utils {
 
@@ -24,6 +26,44 @@ inline void string_vec_push_bytes(std::vector<std::string>& v, const char* data,
 }
 
 }  // namespace cxx_utils
+
+namespace cxx_utils {
+
+inline xgrammar::GrammarMatcher make_grammar_matcher(
+    const xgrammar::CompiledGrammar& compiled,
+    bool terminate_without_stop_token,
+    int max_rollback_tokens
+) {
+  return xgrammar::GrammarMatcher(
+      compiled,
+      std::nullopt,
+      terminate_without_stop_token,
+      max_rollback_tokens
+  );
+}
+
+}
+
+namespace cxx_utils {
+
+inline bool matcher_fill_next_token_bitmask(
+    xgrammar::GrammarMatcher& matcher,
+    DLTensor* next_token_bitmask,
+    int index,
+    bool debug_print
+) {
+  return matcher.FillNextTokenBitmask(next_token_bitmask, index, debug_print);
+}
+
+inline void apply_token_bitmask_inplace_cpu(
+    DLTensor* logits,
+    const DLTensor& bitmask,
+    int vocab_size
+) {
+  xgrammar::ApplyTokenBitmaskInplaceCPU(logits, bitmask, vocab_size, std::nullopt);
+}
+
+}
 
 #endif  // XGRAMMAR_RS_CXX_UTILS_H_
 

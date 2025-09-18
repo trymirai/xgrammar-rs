@@ -27,9 +27,12 @@ include_cpp! {
     generate!("cxx_utils::string_vec_reserve")
     generate!("cxx_utils::string_vec_push")
     generate!("cxx_utils::string_vec_push_bytes")
+    generate!("cxx_utils::make_grammar_matcher")
+    generate!("cxx_utils::matcher_fill_next_token_bitmask")
+    generate!("cxx_utils::apply_token_bitmask_inplace_cpu")
 }
 
-pub use ffi::*;
-pub use ffi::xgrammar::*;
-pub use ffi::{DLDataType, DLDevice, DLDeviceType, DLManagedTensor, DLTensor};
-
+pub use ffi::{
+    DLDataType, DLDevice, DLDeviceType, DLManagedTensor, DLTensor, xgrammar::*,
+    *,
+};

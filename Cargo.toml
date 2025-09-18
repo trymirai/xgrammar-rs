@@ -6,9 +6,10 @@ build = "build.rs"
 links = "xgrammar"
 
 [dependencies]
+autocxx = "0.30.0"
 cxx = "1.0.184"
 
 [build-dependencies]
 walkdir = "2.5.0"
 cmake = "0.1.54"
-cxx-build = "1.0.184"
+autocxx-build = "0.30.0"

@@ -15,14 +15,14 @@ fn main() {
     let xgrammar_src_dir = manifest_dir.join("external/xgrammar");
     let xgrammar_include_dir = xgrammar_src_dir.join("include");
     let dlpack_include_dir = xgrammar_src_dir.join("3rdparty/dlpack/include");
+    let src_include_dir = manifest_dir.join("src");
     let crate_root = manifest_dir.clone();
 
     // Rebuild when headers or sources change
     println!("cargo:rerun-if-changed={}", xgrammar_include_dir.display());
     println!("cargo:rerun-if-changed={}/cpp", xgrammar_src_dir.display());
     println!("cargo:rerun-if-changed={}/3rdparty", xgrammar_src_dir.display());
-    println!("cargo:rerun-if-changed=src/bridge.hxx");
-    println!("cargo:rerun-if-changed=src/bridge.cc");
+    // No longer using cxx bridge files
 
     // Configure CMake build
     let mut cfg = cmake::Config::new(&xgrammar_src_dir);
@@ -75,16 +75,46 @@ fn main() {
         println!("cargo:rustc-link-lib=dylib=pthread");
     }
 
-    // Build the C++ bridge with cxx.
-    // The bridge code will include the C++ headers from xgrammar/include.
-    println!("cargo:include={}", xgrammar_include_dir.display());
-    cxx_build::bridge("src/lib.rs")
-        .file("src/bridge.cc")
-        .flag_if_supported("-std=c++17")
+    // Generate and compile C++ bindings with autocxx.
+    println!("cargo:rerun-if-changed=src/lib.rs");
+    let mut b = autocxx_build::Builder::new(
+        "src/lib.rs",
+        &[
+            &src_include_dir,
+            &xgrammar_include_dir,
+            &dlpack_include_dir,
+        ],
+    )
+    .extra_clang_args(&["-std=c++17"]) // ensure libclang sees C++17 features like optional/variant
+    .build()
+    .expect("autocxx build failed");
+
+    b.flag_if_supported("-std=c++17")
+        .include(&src_include_dir)
         .include(&xgrammar_include_dir)
         .include(&dlpack_include_dir)
         .include(&crate_root)
         .compile("xgrammar_rs_bridge");
+
+    // Ensure headers referenced by generated RS via `include!("src/...")` are present
+    // next to the generated file so that the Rust compiler can resolve them.
+    let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
+    let rs_dir = out_dir.join("autocxx-build-dir/rs");
+    // No legacy includes needed anymore
+    // Provide headers expected by generated RS `include!(...)` paths
+    // 1) autocxxgen_ffi.h
+    let gen_include_dir = out_dir.join("autocxx-build-dir/include");
+    let _ = std::fs::copy(
+        gen_include_dir.join("autocxxgen_ffi.h"),
+        rs_dir.join("autocxxgen_ffi.h"),
+    );
+    // 2) xgrammar/xgrammar.h
+    let rs_xgrammar_dir = rs_dir.join("xgrammar");
+    std::fs::create_dir_all(&rs_xgrammar_dir).ok();
+    let _ = std::fs::copy(
+        xgrammar_include_dir.join("xgrammar/xgrammar.h"),
+        rs_xgrammar_dir.join("xgrammar.h"),
+    );
 }
 
 fn find_xgrammar_lib_dir(root: &Path) -> Option<PathBuf> {

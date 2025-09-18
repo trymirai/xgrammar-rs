@@ -1,3 +1,5 @@
+#![allow(unsafe_op_in_unsafe_fn)]
+
 use autocxx::prelude::*;
 
 include_cpp! {

@@ -1,3 +1,20 @@
 {
-    "cmake.sourceDirectory": "${workspaceFolder}/external/xgrammar"
+    "cmake.sourceDirectory": "${workspaceFolder}/external/xgrammar",
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+        "source.organizeImports": "explicit"
+    },
+    "rust-analyzer.rustfmt.extraArgs": [
+        "+nightly"
+    ],
+    "rust-analyzer.testExplorer": true,
+    "[rust]": {
+        "editor.defaultFormatter": "rust-lang.rust-analyzer",
+    },
+    "[swift]": {
+        "editor.formatOnSave": true
+    },
+    "[toml]": {
+        "editor.defaultFormatter": "tamasfe.even-better-toml"
+    }
 }

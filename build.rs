@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 use cmake::Config as CMakeConfig;
 use std::fs::{create_dir_all, copy};
+use std::process::Command;
 
 fn abs_path<P: AsRef<Path>>(p: P) -> PathBuf {
     if p.as_ref().is_absolute() {
@@ -97,7 +98,6 @@ fn main() {
         .include(&manifest_dir)
         .compile("xgrammar_rs_bridge");
 
-
     let rs_dir = out_dir.join("autocxx-build-dir/rs");
 
     // Provide headers expected by generated RS `include!(...)` paths
@@ -121,6 +121,21 @@ fn main() {
         dlpack_include_dir.join("dlpack/dlpack.h"),
         rs_dlpack_dir.join("dlpack.h"),
     );
+
+    // Best-effort: format generated Rust bindings for easier debugging
+    let gen_rs = out_dir.join("autocxx-build-dir/rs/autocxx-ffi-default-gen.rs");
+    if gen_rs.exists() {
+        match Command::new("rustfmt").arg(&gen_rs).status() {
+            Ok(status) => {
+                if !status.success() {
+                    eprintln!("rustfmt returned non-zero status on {}", gen_rs.display());
+                }
+            }
+            Err(err) => {
+                eprintln!("rustfmt not executed: {}", err);
+            }
+        }
+    }
 }
 
 fn find_xgrammar_lib_dir(root: &Path) -> Option<PathBuf> {

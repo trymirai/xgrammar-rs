@@ -10,16 +10,21 @@ include_cpp! {
     generate!("xgrammar::GrammarCompiler")
     generate!("xgrammar::CompiledGrammar")
     generate!("xgrammar::Grammar")
+    generate!("xgrammar::VocabType")
+    generate!("xgrammar::GrammarMatcher")
+    generate!("xgrammar::GetBitmaskSize")
+    generate!("xgrammar::GetBitmaskDLType")
+    generate!("xgrammar::ApplyTokenBitmaskInplaceCPU")
     // DLPack core types
-    generate!("DLTensor")
+    generate_pod!("DLTensor")
     generate!("DLManagedTensor")
-    generate!("DLDevice")
-    generate!("DLDataType")
+    generate_pod!("DLDevice")
+    generate_pod!("DLDataType")
     generate!("DLDeviceType")
 }
 
 pub use ffi::*;
 // Re-export core types at crate root for ergonomic paths like `xgrammar_rs::Grammar`
-pub use ffi::xgrammar::{CompiledGrammar, Grammar, GrammarCompiler, TokenizerInfo};
+pub use ffi::xgrammar::*;
 // Re-export DLPack types at crate root
 pub use ffi::{DLDataType, DLDevice, DLDeviceType, DLManagedTensor, DLTensor};

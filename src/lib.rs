@@ -18,10 +18,11 @@ include_cpp! {
     generate!("xgrammar::ApplyTokenBitmaskInplaceCPU")
     // DLPack core types
     generate_pod!("DLTensor")
-    generate!("DLManagedTensor")
+    generate!("DLManagedTensor")  // Has function pointer, not POD
     generate_pod!("DLDevice")
     generate_pod!("DLDataType")
-    generate!("DLDeviceType")
+    generate_pod!("DLDeviceType")
+    generate_pod!("DLDataTypeCode")
     // cxx_utils helpers
     generate!("cxx_utils::new_string_vector")
     generate!("cxx_utils::string_vec_reserve")
@@ -33,6 +34,6 @@ include_cpp! {
 }
 
 pub use ffi::{
-    DLDataType, DLDevice, DLDeviceType, DLManagedTensor, DLTensor, xgrammar::*,
-    *,
+    DLDataType, DLDataTypeCode, DLDevice, DLDeviceType, DLManagedTensor,
+    DLTensor, xgrammar::*, *,
 };

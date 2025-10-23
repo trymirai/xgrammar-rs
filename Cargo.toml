@@ -7,7 +7,7 @@ links = "xgrammar"
 
 [dependencies]
 autocxx = "0.30.0"
-cxx = "1.0.184"
+cxx = "1.0.187"
 
 [build-dependencies]
 walkdir = "2.5.0"

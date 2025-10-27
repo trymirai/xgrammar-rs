@@ -7,15 +7,36 @@ include_cpp! {
     #include "dlpack/dlpack.h"
     #include "cxx_utils.hpp"
     safety!(unsafe_ffi)
-    generate!("xgrammar::TokenizerInfo")
-    generate!("xgrammar::GrammarCompiler")
+    // xgrammar/compiler.h
     generate!("xgrammar::CompiledGrammar")
+    generate!("xgrammar::GrammarCompiler")
+
+    // xgrammar/config.h
+    generate!("xgrammar::SetMaxRecursionDepth")
+    generate!("xgrammar::GetMaxRecursionDepth")
+    generate!("xgrammar::GetSerializationVersion")
+
+    // xgrammar/grammar.h
+    generate!("xgrammar::StructuralTagItem")
     generate!("xgrammar::Grammar")
-    generate!("xgrammar::VocabType")
-    generate!("xgrammar::GrammarMatcher")
+
+    // xgrammar/matcher.h
     generate!("xgrammar::GetBitmaskSize")
     generate!("xgrammar::GetBitmaskDLType")
     generate!("xgrammar::ApplyTokenBitmaskInplaceCPU")
+    generate!("xgrammar::GrammarMatcher")
+
+    // xgrammar/tokenizer_info.h
+    generate!("xgrammar::VocabType")
+    generate!("xgrammar::TokenizerInfo")
+
+    // cxx_utils helpers
+    generate!("cxx_utils::new_string_vector")
+    generate!("cxx_utils::string_vec_reserve")
+    generate!("cxx_utils::string_vec_push_bytes")
+    generate!("cxx_utils::make_tokenizer_info")
+    generate!("cxx_utils::make_grammar_matcher")
+
     // DLPack core types
     generate_pod!("DLTensor")
     generate!("DLManagedTensor")  // Has function pointer, not POD
@@ -23,28 +44,24 @@ include_cpp! {
     generate_pod!("DLDataType")
     generate_pod!("DLDeviceType")
     generate_pod!("DLDataTypeCode")
-    // cxx_utils helpers
-    generate!("cxx_utils::new_string_vector")
-    generate!("cxx_utils::string_vec_reserve")
-    generate!("cxx_utils::string_vec_push")
-    generate!("cxx_utils::string_vec_push_bytes")
-    generate!("cxx_utils::make_grammar_matcher")
-    generate!("cxx_utils::matcher_fill_next_token_bitmask")
-    generate!("cxx_utils::apply_token_bitmask_inplace_cpu")
-    // safe wrappers for compiler / compiled
-    generate!("cxx_utils::make_compiler")
-    generate!("cxx_utils::compiler_compile_json_schema_safe")
-    generate!("cxx_utils::compiler_compile_builtin_json_safe")
-    generate!("cxx_utils::compiler_compile_grammar_safe")
-    generate!("cxx_utils::compiler_compile_regex_safe")
-    generate!("cxx_utils::compiler_clear_cache_safe")
-    generate!("cxx_utils::compiler_cache_size_bytes")
-    generate!("cxx_utils::compiler_cache_limit_bytes")
-    generate!("cxx_utils::compiled_serialize_json_safe")
-    generate!("cxx_utils::compiled_deserialize_json_safe")
+
 }
 
-pub use ffi::{
+#[allow(unused_imports)]
+use ffi::{
     DLDataType, DLDataTypeCode, DLDevice, DLDeviceType, DLManagedTensor,
-    DLTensor, xgrammar::*, *,
+    DLTensor, cxx_utils,
+    xgrammar::{
+        CompiledGrammar as FFICompiledGrammar, GetBitmaskDLType,
+        GetBitmaskSize, GetMaxRecursionDepth, GetSerializationVersion,
+        Grammar as FFIGrammar, GrammarCompiler as FFIGrammarCompiler,
+        GrammarMatcher as FFIGrammarMatcher, SetMaxRecursionDepth,
+        StructuralTagItem as FFIStructuralTagItem,
+        TokenizerInfo as FFITokenizerInfo,
+    },
 };
+
+mod tokenizer_info;
+
+pub use ffi::xgrammar::VocabType;
+pub use tokenizer_info::TokenizerInfo;

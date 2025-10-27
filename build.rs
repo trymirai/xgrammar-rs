@@ -1,9 +1,12 @@
-use std::env;
-use std::path::{Path, PathBuf};
-use walkdir::WalkDir;
+use std::{
+    env,
+    fs::{copy, create_dir_all},
+    path::{Path, PathBuf},
+    process::Command,
+};
+
 use cmake::Config as CMakeConfig;
-use std::fs::{create_dir_all, copy};
-use std::process::Command;
+use walkdir::WalkDir;
 
 fn abs_path<P: AsRef<Path>>(p: P) -> PathBuf {
     if p.as_ref().is_absolute() {
@@ -14,7 +17,9 @@ fn abs_path<P: AsRef<Path>>(p: P) -> PathBuf {
 }
 
 fn main() {
-    let manifest_dir = abs_path(env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set"));
+    let manifest_dir = abs_path(
+        env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set"),
+    );
     let xgrammar_src_dir = manifest_dir.join("external/xgrammar");
     let xgrammar_include_dir = xgrammar_src_dir.join("include");
     let dlpack_include_dir = xgrammar_src_dir.join("3rdparty/dlpack/include");
@@ -29,25 +34,49 @@ fn main() {
     cmake_config.define("XGRAMMAR_BUILD_PYTHON_BINDINGS", "OFF");
     cmake_config.define("XGRAMMAR_BUILD_CXX_TESTS", "OFF");
     cmake_config.define("XGRAMMAR_ENABLE_CPPTRACE", "OFF");
+    // Enforce C++23 across the CMake build
+    cmake_config.define("CMAKE_CXX_STANDARD", "23");
+    cmake_config.define("CMAKE_CXX_STANDARD_REQUIRED", "ON");
+    cmake_config.define("CMAKE_CXX_EXTENSIONS", "OFF");
 
-    let build_profile = match env::var("PROFILE").unwrap_or_else(|_| "release".into()).as_str() {
-        "debug" => "Debug",
-        "release" => "Release",
-        other => {
-            eprintln!("Unknown cargo PROFILE '{}' -> using RelWithDebInfo", other);
-            "RelWithDebInfo"
-        }
-    };
+    let build_profile =
+        match env::var("PROFILE").unwrap_or_else(|_| "release".into()).as_str()
+        {
+            "debug" => "Debug",
+            "release" => "Release",
+            other => {
+                eprintln!(
+                    "Unknown cargo PROFILE '{}' -> using RelWithDebInfo",
+                    other
+                );
+                "RelWithDebInfo"
+            },
+        };
     cmake_config.profile(build_profile);
 
     if let Ok(target) = env::var("TARGET") {
         if target.contains("apple-darwin") {
-            let arch = if target.contains("aarch64") { "arm64" } else { "x86_64" };
+            let arch = if target.contains("aarch64") {
+                "arm64"
+            } else {
+                "x86_64"
+            };
             cmake_config.define("CMAKE_OSX_ARCHITECTURES", arch);
-        } else if target.contains("apple-ios") || target.contains("apple-ios-sim") {
-            let is_sim = target.contains("apple-ios-sim") || target.contains("x86_64-apple-ios");
-            let arch = if target.contains("aarch64") { "arm64" } else { "x86_64" };
-            let sysroot = if is_sim { "iphonesimulator" } else { "iphoneos" };
+        } else if target.contains("apple-ios")
+            || target.contains("apple-ios-sim")
+        {
+            let is_sim = target.contains("apple-ios-sim")
+                || target.contains("x86_64-apple-ios");
+            let arch = if target.contains("aarch64") {
+                "arm64"
+            } else {
+                "x86_64"
+            };
+            let sysroot = if is_sim {
+                "iphonesimulator"
+            } else {
+                "iphoneos"
+            };
             cmake_config.define("CMAKE_OSX_ARCHITECTURES", arch);
             cmake_config.define("CMAKE_OSX_SYSROOT", sysroot);
             if let Ok(dep_target) = env::var("IPHONEOS_DEPLOYMENT_TARGET") {
@@ -81,17 +110,14 @@ fn main() {
     println!("cargo:rerun-if-changed=src/lib.rs");
     let mut autocxx_builder = autocxx_build::Builder::new(
         "src/lib.rs",
-        &[
-            &src_include_dir,
-            &xgrammar_include_dir,
-            &dlpack_include_dir,
-        ],
+        &[&src_include_dir, &xgrammar_include_dir, &dlpack_include_dir],
     )
-    .extra_clang_args(&["-std=c++17"])
+    .extra_clang_args(&["-std=c++23"])
     .build()
     .expect("autocxx build failed");
 
-    autocxx_builder.flag_if_supported("-std=c++17")
+    autocxx_builder
+        .flag_if_supported("-std=c++23")
         .include(&src_include_dir)
         .include(&xgrammar_include_dir)
         .include(&dlpack_include_dir)
@@ -123,30 +149,36 @@ fn main() {
     );
 
     // Best-effort: format generated Rust bindings for easier debugging
-    let gen_rs = out_dir.join("autocxx-build-dir/rs/autocxx-ffi-default-gen.rs");
+    let gen_rs =
+        out_dir.join("autocxx-build-dir/rs/autocxx-ffi-default-gen.rs");
     if gen_rs.exists() {
         match Command::new("rustfmt").arg(&gen_rs).status() {
             Ok(status) => {
                 if !status.success() {
-                    eprintln!("rustfmt returned non-zero status on {}", gen_rs.display());
+                    eprintln!(
+                        "rustfmt returned non-zero status on {}",
+                        gen_rs.display()
+                    );
                 }
-            }
+            },
             Err(err) => {
                 eprintln!("rustfmt not executed: {}", err);
-            }
+            },
         }
     }
 }
 
 fn find_xgrammar_lib_dir(root: &Path) -> Option<PathBuf> {
     let static_candidates = [
-        "libxgrammar.a",      // Unix/macOS static
-        "xgrammar.lib",       // Windows static
+        "libxgrammar.a", // Unix/macOS static
+        "xgrammar.lib",  // Windows static
     ];
 
     // Scan a few levels deep
     let mut found: Option<PathBuf> = None;
-    for entry in WalkDir::new(root).max_depth(6).into_iter().filter_map(Result::ok) {
+    for entry in
+        WalkDir::new(root).max_depth(6).into_iter().filter_map(Result::ok)
+    {
         if !entry.file_type().is_file() {
             continue;
         }
@@ -160,5 +192,3 @@ fn find_xgrammar_lib_dir(root: &Path) -> Option<PathBuf> {
     }
     found
 }
-
-

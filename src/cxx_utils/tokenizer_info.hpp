@@ -2,6 +2,7 @@
 #define XGRAMMAR_RS_CXX_UTILS_TOKENIZER_INFO_H_
 
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <string>
 #include <utility>
@@ -41,6 +42,25 @@ inline xgrammar::TokenizerInfo make_tokenizer_info(
       vs,
       stops,
       add_prefix_space
+  );
+}
+
+inline xgrammar::TokenizerInfo tokenizer_info_from_vocab_and_metadata(
+    const std::vector<std::string>& encoded_vocab,
+    const std::string& metadata
+) {
+  return xgrammar::TokenizerInfo::FromVocabAndMetadata(encoded_vocab, metadata);
+}
+
+// Deserialize TokenizerInfo from JSON. Returns nullptr on error.
+inline std::unique_ptr<xgrammar::TokenizerInfo>
+tokenizer_info_deserialize_json_or_null(const std::string& json_string) {
+  auto result = xgrammar::TokenizerInfo::DeserializeJSON(json_string);
+  if (std::holds_alternative<xgrammar::SerializationError>(result)) {
+    return nullptr;
+  }
+  return std::make_unique<xgrammar::TokenizerInfo>(
+      std::get<xgrammar::TokenizerInfo>(std::move(result))
   );
 }
 

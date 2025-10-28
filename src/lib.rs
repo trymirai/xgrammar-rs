@@ -35,7 +35,9 @@ include_cpp! {
     generate!("cxx_utils::string_vec_reserve")
     generate!("cxx_utils::string_vec_push_bytes")
     generate!("cxx_utils::make_tokenizer_info")
+    generate!("cxx_utils::tokenizer_info_from_vocab_and_metadata")
     generate!("cxx_utils::make_grammar_matcher")
+    generate!("cxx_utils::tokenizer_info_deserialize_json_or_null")
 
     // DLPack core types
     generate_pod!("DLTensor")

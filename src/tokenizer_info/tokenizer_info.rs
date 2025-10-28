@@ -4,53 +4,91 @@ use autocxx::prelude::*;
 
 use crate::{FFITokenizerInfo, VocabType, cxx_utils};
 
+type StopTokenIds = Option<Box<[i32]>>;
+
+/// TokenizerInfo contains the vocabulary, its type, and metadata used by the
+/// grammar-guided generation.
+///
+/// Notes:
+/// - Tokens may be encoded differently depending on `VocabType` (e.g. ByteFallback
+///   uses "<0x1B>", ByteLevel uses unicode mappings). This wrapper exposes the
+///   decoded vocabulary in the same form as the original text via
+///   `decoded_vocab_as_bytes`.
+/// - Some models pad their vocab size to a multiple of 32 or similar. If your
+///   model's vocab size differs from `encoded_vocab.len()`, use
+///   `new_with_vocab_size` to pass the model's vocab size so bitmask sizes are
+///   computed correctly.
 pub struct TokenizerInfo {
     inner: Pin<Box<FFITokenizerInfo>>,
 }
 
 impl TokenizerInfo {
-    pub fn new_from_bytes<I, B>(
-        encoded_vocab: I,
+    /// Construct a TokenizerInfo with vocab size derived from `encoded_vocab`.
+    ///
+    /// If the model's vocab size differs from `encoded_vocab.len()`, prefer
+    /// `new_with_vocab_size`.
+    pub fn new<T: AsRef<str>>(
+        encoded_vocab: &[T],
+        vocab_type: VocabType,
+        stop_token_ids: &StopTokenIds,
+        add_prefix_space: bool,
+    ) -> Self {
+        Self::new_with_vocab_size(
+            encoded_vocab,
+            vocab_type,
+            Some(encoded_vocab.len()),
+            stop_token_ids,
+            add_prefix_space,
+        )
+    }
+
+    /// Construct a TokenizerInfo with an explicit model `vocab_size`.
+    ///
+    /// Use this when the model's vocab size (e.g., padded to a multiple of 32)
+    /// differs from the tokenizer's `encoded_vocab.len()`. Indices in the range
+    /// `[encoded_vocab.len(), vocab_size)` are treated as special/reserved.
+    pub fn new_with_vocab_size<T: AsRef<str>>(
+        encoded_vocab: &[T],
         vocab_type: VocabType,
         vocab_size: Option<usize>,
-        stop_token_ids: Option<Vec<i32>>,
+        stop_token_ids: &StopTokenIds,
         add_prefix_space: bool,
-    ) -> Self
-    where
-        I: IntoIterator<Item = B>,
-        B: AsRef<[u8]>,
-    {
-        // Build std::vector<std::string> with helpers
-        let mut vec = cxx_utils::new_string_vector();
+    ) -> Self {
+        let mut cxx_vec = cxx_utils::new_string_vector();
         {
-            let mut pin = vec.pin_mut();
-            // If we can, reserve using an upper bound by collecting into a Vec first
-            let items: Vec<Vec<u8>> = encoded_vocab
-                .into_iter()
-                .map(|b| b.as_ref().to_vec())
-                .collect();
-            cxx_utils::string_vec_reserve(pin.as_mut(), items.len());
-            for item in items.iter() {
-                let ptr = item.as_ptr() as *const i8;
-                let len = item.len();
+            let mut cxx_vec_pin = cxx_vec.pin_mut();
+            cxx_utils::string_vec_reserve(
+                cxx_vec_pin.as_mut(),
+                encoded_vocab.len(),
+            );
+            for s in encoded_vocab.iter() {
+                let bytes = s.as_ref().as_bytes();
+                let ptr = bytes.as_ptr() as *const i8;
+                let len = bytes.len();
                 unsafe {
-                    cxx_utils::string_vec_push_bytes(pin.as_mut(), ptr, len);
+                    cxx_utils::string_vec_push_bytes(
+                        cxx_vec_pin.as_mut(),
+                        ptr,
+                        len,
+                    );
                 }
             }
         }
-
         let (has_vocab_size, vocab_size_i32) = match vocab_size {
-            Some(v) => (true, v as i32),
-            None => (false, 0),
+            Some(sz) => (true, sz as i32),
+            None => (false, 0i32),
         };
-        let (has_stop_ids, stop_ptr, stop_len) = match stop_token_ids {
-            Some(ref v) if !v.is_empty() => (true, v.as_ptr(), v.len()),
+
+        let (has_stop_ids, stop_ptr, stop_len) = match stop_token_ids.as_ref() {
+            Some(slice) if !slice.is_empty() => {
+                (true, slice.as_ptr(), slice.len())
+            },
             _ => (false, std::ptr::null(), 0usize),
         };
 
         let ffi_obj = unsafe {
             cxx_utils::make_tokenizer_info(
-                vec.as_ref().unwrap(),
+                cxx_vec.as_ref().unwrap(),
                 vocab_type,
                 has_vocab_size,
                 vocab_size_i32,
@@ -66,87 +104,125 @@ impl TokenizerInfo {
         }
     }
 
-    pub fn new_from_strings<I, S>(
-        encoded_vocab: I,
-        vocab_type: VocabType,
-        vocab_size: Option<usize>,
-        stop_token_ids: Option<Vec<i32>>,
-        add_prefix_space: bool,
-    ) -> Self
-    where
-        I: IntoIterator<Item = S>,
-        S: AsRef<str>,
-    {
-        let bytes = encoded_vocab
-            .into_iter()
-            .map(|s| s.as_ref().as_bytes().to_vec())
-            .collect::<Vec<_>>();
-        Self::new_from_bytes(
-            bytes,
-            vocab_type,
-            vocab_size,
-            stop_token_ids,
-            add_prefix_space,
-        )
-    }
-
-    pub fn vocab_type(&self) -> VocabType {
-        self.inner.GetVocabType()
-    }
-
-    pub fn vocab_size(&self) -> autocxx::c_int {
-        self.inner.GetVocabSize()
-    }
-
-    pub fn add_prefix_space(&self) -> bool {
-        self.inner.GetAddPrefixSpace()
-    }
-
-    pub fn decoded_vocab_as_bytes(&self) -> Vec<Vec<u8>> {
-        let inner = self.inner.as_ref();
-        let v = inner.GetDecodedVocab();
-        let mut out = Vec::with_capacity(v.len());
-        for s in v.iter() {
-            // CxxString -> bytes; fall back to lossy UTF-8 if needed
-            out.push(s.to_string_lossy().into_owned().into_bytes());
-        }
-        out
-    }
-
-    pub fn stop_token_ids(&self) -> Vec<i32> {
-        let inner = self.inner.as_ref();
-        let v = inner.GetStopTokenIds();
-        v.iter().copied().collect()
-    }
-
-    pub fn special_token_ids(&self) -> Vec<i32> {
-        let inner = self.inner.as_ref();
-        let v = inner.GetSpecialTokenIds();
-        v.iter().copied().collect()
-    }
-
-    pub fn dump_metadata(&self) -> String {
-        self.inner.as_ref().DumpMetadata().to_string()
-    }
-
-    pub fn serialize_json(&self) -> String {
-        self.inner.as_ref().SerializeJSON().to_string()
-    }
-
+    /// Construct TokenizerInfo from encoded vocab (bytes) and a metadata JSON
+    /// string produced by `dump_metadata`.
     pub fn from_vocab_and_metadata_bytes<I, B>(
-        _encoded_vocab: I,
-        _metadata: &str,
+        encoded_vocab: I,
+        metadata: &str,
     ) -> Self
     where
         I: IntoIterator<Item = B>,
         B: AsRef<[u8]>,
     {
-        unimplemented!(
-            "from_vocab_and_metadata not yet implemented in Rust wrapper"
+        let mut cxx_vec = cxx_utils::new_string_vector();
+        {
+            let mut cxx_vec_pin = cxx_vec.pin_mut();
+            // If iterator has no size hint, reserve minimally.
+            for b in encoded_vocab.into_iter() {
+                let bytes = b.as_ref();
+                let ptr = bytes.as_ptr() as *const i8;
+                let len = bytes.len();
+                unsafe {
+                    cxx_utils::string_vec_push_bytes(
+                        cxx_vec_pin.as_mut(),
+                        ptr,
+                        len,
+                    );
+                }
+            }
+        }
+
+        cxx::let_cxx_string!(metadata_cxx = metadata);
+        let ffi_obj = cxx_utils::tokenizer_info_from_vocab_and_metadata(
+            cxx_vec.as_ref().unwrap(),
+            &metadata_cxx,
         );
+        Self {
+            inner: ffi_obj.within_box(),
+        }
     }
 
-    pub fn inner(&self) -> &Pin<Box<FFITokenizerInfo>> {
-        &self.inner
+    /// The type of the vocabulary.
+    pub fn vocab_type(&self) -> VocabType {
+        self.inner.GetVocabType()
+    }
+
+    /// The size of the vocabulary.
+    pub fn vocab_size(&self) -> usize {
+        usize::try_from(self.inner.GetVocabSize().0)
+            .expect("GetVocabSize returned a negative value")
+    }
+
+    /// Whether the tokenizer will prepend a space before the text in the tokenization
+    /// process.
+    pub fn add_prefix_space(&self) -> bool {
+        self.inner.GetAddPrefixSpace()
+    }
+
+    /// The decoded vocabulary of the tokenizer. This converts tokens in the
+    /// LLM's vocabulary back to the original text form (e.g., ByteFallback
+    /// "<0x1B>" -> "\u001b").
+    pub fn decoded_vocab(&self) -> Box<[Box<[u8]>]> {
+        let cxx_vec = self.inner.GetDecodedVocab();
+        let mut result: Vec<Box<[u8]>> = Vec::with_capacity(cxx_vec.len());
+        for cxx_string in cxx_vec.iter() {
+            result.push(
+                cxx_string
+                    .to_string_lossy()
+                    .into_owned()
+                    .into_bytes()
+                    .into_boxed_slice(),
+            );
+        }
+        result.into_boxed_slice()
+    }
+
+    /// Stop token ids.
+    pub fn stop_token_ids(&self) -> Box<[i32]> {
+        let cxx_vec = self.inner.GetStopTokenIds();
+        cxx_vec.iter().copied().collect::<Vec<_>>().into_boxed_slice()
+    }
+
+    /// The special token ids. Special tokens include control tokens, reserved tokens,
+    /// padded tokens, etc. Now it is automatically detected from the vocabulary.
+    pub fn special_token_ids(&self) -> Box<[i32]> {
+        let cxx_vec = self.inner.GetSpecialTokenIds();
+        cxx_vec.iter().copied().collect::<Vec<_>>().into_boxed_slice()
+    }
+
+    /// Dump the metadata of the tokenizer to a json string. It can be used to construct the
+    /// tokenizer info from the vocabulary and the metadata string.
+    pub fn dump_metadata(&self) -> String {
+        self.inner.DumpMetadata().to_string()
+    }
+
+    /// Serialize the tokenizer info to a JSON string.
+    pub fn serialize_json(&self) -> String {
+        self.inner.SerializeJSON().to_string()
+    }
+
+    /// Deserialize a `TokenizerInfo` from a JSON string.
+    ///
+    /// Returns
+    /// - `Some(TokenizerInfo)` on success
+    /// - `None` when deserialization fails due to any of the following:
+    ///   - invalid JSON syntax
+    ///   - schema/format mismatch with `TokenizerInfo` serialization
+    ///   - serialization version mismatch (via the `__VERSION__` field)
+    pub fn deserialize_json(json: &str) -> Option<Self> {
+        cxx::let_cxx_string!(json_cxx = json);
+        let uptr =
+            cxx_utils::tokenizer_info_deserialize_json_or_null(&json_cxx);
+        if uptr.is_null() {
+            return None;
+        }
+        let raw = uptr.into_raw();
+        // SAFETY: ownership transferred from UniquePtr; object is now owned by Box.
+        let boxed = unsafe { Box::from_raw(raw) };
+        // SAFETY: FFI object is heap-allocated and not moved after pinning.
+        let pinned = unsafe { Pin::new_unchecked(boxed) };
+        Some(Self {
+            inner: pinned,
+        })
     }
 }

@@ -30,23 +30,39 @@ include_cpp! {
     generate!("xgrammar::VocabType")
     generate!("xgrammar::TokenizerInfo")
 
-    // cxx_utils helpers
+    // cxx_utils/string_vec.hpp
     generate!("cxx_utils::new_string_vector")
     generate!("cxx_utils::string_vec_reserve")
     generate!("cxx_utils::string_vec_push_bytes")
+
+    // cxx_utils/tokenizer_info.hpp
     generate!("cxx_utils::make_tokenizer_info")
     generate!("cxx_utils::tokenizer_info_deserialize_json_or_error")
+
+    // cxx_utils/structural_tag.hpp
     generate!("cxx_utils::new_structural_tag_vector")
     generate!("cxx_utils::structural_tag_vec_reserve")
     generate!("cxx_utils::structural_tag_vec_push")
+
+    // cxx_utils/grammar.hpp
     generate!("cxx_utils::grammar_from_json_schema")
     generate!("cxx_utils::new_grammar_vector")
     generate!("cxx_utils::grammar_vec_reserve")
     generate!("cxx_utils::grammar_vec_push")
     generate!("cxx_utils::grammar_deserialize_json_or_error")
 
-    // compiler helpers
+    // cxx_utils/compiled_grammar.hpp
     generate!("cxx_utils::compiled_grammar_deserialize_json_or_error")
+
+    // cxx_utils/grammar_compiler.hpp
+    generate!("cxx_utils::compiler_compile_json_schema")
+    generate!("cxx_utils::compiler_compile_builtin_json_grammar")
+    generate!("cxx_utils::compiler_compile_regex")
+    generate!("cxx_utils::compiler_compile_structural_tag")
+    generate!("cxx_utils::compiler_compile_grammar")
+    generate!("cxx_utils::compiler_clear_cache")
+    generate!("cxx_utils::compiler_get_cache_size_bytes")
+    generate!("cxx_utils::compiler_cache_limit_bytes")
 
     // DLPack core types
     generate_pod!("DLTensor")
@@ -76,7 +92,7 @@ mod compiler;
 mod grammar;
 mod tokenizer_info;
 
-pub use compiler::CompiledGrammar;
+pub use compiler::{CompiledGrammar, GrammarCompiler};
 pub use ffi::xgrammar::VocabType;
 pub use grammar::{Grammar, StructuralTagItem};
 pub use tokenizer_info::TokenizerInfo;

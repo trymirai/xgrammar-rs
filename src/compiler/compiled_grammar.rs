@@ -74,4 +74,10 @@ impl CompiledGrammar {
             inner: pinned_ffi,
         })
     }
+
+    pub(crate) fn from_pinned_ffi(inner: Pin<Box<FFICompiledGrammar>>) -> Self {
+        Self {
+            inner,
+        }
+    }
 }

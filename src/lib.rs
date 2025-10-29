@@ -36,8 +36,27 @@ include_cpp! {
     generate!("cxx_utils::string_vec_push_bytes")
     generate!("cxx_utils::make_tokenizer_info")
     generate!("cxx_utils::tokenizer_info_from_vocab_and_metadata")
+
     generate!("cxx_utils::make_grammar_matcher")
     generate!("cxx_utils::tokenizer_info_deserialize_json_or_null")
+
+    // cxx_utils grammar helpers (only where we simplify complex C++ types)
+
+    generate!("cxx_utils::new_structural_tag_vector")
+    generate!("cxx_utils::structural_tag_vec_reserve")
+    generate!("cxx_utils::structural_tag_vec_push")
+    generate!("cxx_utils::grammar_from_json_schema")
+    generate!("cxx_utils::grammar_from_structural_tags")
+    generate!("cxx_utils::new_grammar_vector")
+    generate!("cxx_utils::grammar_vec_reserve")
+    generate!("cxx_utils::grammar_vec_push")
+    generate!("cxx_utils::grammar_concat")
+    generate!("cxx_utils::grammar_union")
+    generate!("cxx_utils::grammar_deserialize_json_or_error")
+    generate!("cxx_utils::grammar_into_unique_ptr")
+
+    // compiler helpers
+    generate!("cxx_utils::compiled_grammar_deserialize_json_or_error")
 
     // DLPack core types
     generate_pod!("DLTensor")
@@ -63,7 +82,11 @@ use ffi::{
     },
 };
 
+mod compiler;
+mod grammar;
 mod tokenizer_info;
 
+pub use compiler::CompiledGrammar;
 pub use ffi::xgrammar::VocabType;
+pub use grammar::{Grammar, StructuralTagItem};
 pub use tokenizer_info::TokenizerInfo;

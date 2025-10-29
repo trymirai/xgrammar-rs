@@ -225,4 +225,14 @@ impl TokenizerInfo {
             inner: pinned,
         })
     }
+
+    pub(crate) fn ffi_ref(&self) -> &FFITokenizerInfo {
+        self.inner.as_ref().get_ref()
+    }
+
+    pub(crate) fn from_pinned_ffi(inner: Pin<Box<FFITokenizerInfo>>) -> Self {
+        Self {
+            inner,
+        }
+    }
 }

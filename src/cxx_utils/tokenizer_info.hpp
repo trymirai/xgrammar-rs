@@ -45,18 +45,17 @@ inline xgrammar::TokenizerInfo make_tokenizer_info(
   );
 }
 
-inline xgrammar::TokenizerInfo tokenizer_info_from_vocab_and_metadata(
-    const std::vector<std::string>& encoded_vocab,
-    const std::string& metadata
-) {
-  return xgrammar::TokenizerInfo::FromVocabAndMetadata(encoded_vocab, metadata);
-}
-
-// Deserialize TokenizerInfo from JSON. Returns nullptr on error.
 inline std::unique_ptr<xgrammar::TokenizerInfo>
-tokenizer_info_deserialize_json_or_null(const std::string& json_string) {
+tokenizer_info_deserialize_json_or_error(
+    const std::string& json_string,
+    std::string* error_out
+) {
   auto result = xgrammar::TokenizerInfo::DeserializeJSON(json_string);
   if (std::holds_alternative<xgrammar::SerializationError>(result)) {
+    if (error_out) {
+      const auto& err = std::get<xgrammar::SerializationError>(result);
+      std::visit([&](const auto& e) { *error_out = e.what(); }, err);
+    }
     return nullptr;
   }
   return std::make_unique<xgrammar::TokenizerInfo>(

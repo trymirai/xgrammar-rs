@@ -202,7 +202,7 @@ impl Grammar {
             }
         }
 
-        let ffi_grammar = cxx_utils::grammar_from_structural_tags(
+        let ffi_grammar = FFIGrammar::FromStructuralTag(
             structural_tag_vector.as_ref().unwrap(),
             trigger_string_vector.as_ref().unwrap(),
         );
@@ -232,7 +232,7 @@ impl Grammar {
                 cxx_utils::grammar_vec_push(vec_pin.as_mut(), g.ffi_ref());
             }
         }
-        let combined = cxx_utils::grammar_concat(vec.as_ref().unwrap());
+        let combined = FFIGrammar::Concat(vec.as_ref().unwrap());
         Self {
             inner: combined.within_box(),
         }
@@ -250,7 +250,7 @@ impl Grammar {
                 cxx_utils::grammar_vec_push(vec_pin.as_mut(), g.ffi_ref());
             }
         }
-        let combined = cxx_utils::grammar_union(vec.as_ref().unwrap());
+        let combined = FFIGrammar::Union(vec.as_ref().unwrap());
         Self {
             inner: combined.within_box(),
         }

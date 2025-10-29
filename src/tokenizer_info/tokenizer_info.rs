@@ -118,8 +118,8 @@ impl TokenizerInfo {
         {
             let mut cxx_vec_pin = cxx_vec.pin_mut();
             // If iterator has no size hint, reserve minimally.
-            for b in encoded_vocab.into_iter() {
-                let bytes = b.as_ref();
+            for bytes_slice in encoded_vocab.into_iter() {
+                let bytes = bytes_slice.as_ref();
                 let ptr = bytes.as_ptr() as *const i8;
                 let len = bytes.len();
                 unsafe {
@@ -133,7 +133,7 @@ impl TokenizerInfo {
         }
 
         cxx::let_cxx_string!(metadata_cxx = metadata);
-        let ffi_obj = cxx_utils::tokenizer_info_from_vocab_and_metadata(
+        let ffi_obj = FFITokenizerInfo::FromVocabAndMetadata(
             cxx_vec.as_ref().unwrap(),
             &metadata_cxx,
         );
@@ -204,24 +204,28 @@ impl TokenizerInfo {
     /// Deserialize a `TokenizerInfo` from a JSON string.
     ///
     /// Returns
-    /// - `Some(TokenizerInfo)` on success
-    /// - `None` when deserialization fails due to any of the following:
+    /// - `Ok(TokenizerInfo)` on success
+    /// - `Err(String)` when deserialization fails due to any of the following:
     ///   - invalid JSON syntax
     ///   - schema/format mismatch with `TokenizerInfo` serialization
     ///   - serialization version mismatch (via the `__VERSION__` field)
-    pub fn deserialize_json(json: &str) -> Option<Self> {
+    /// The error string mirrors the C++ exception message.
+    pub fn deserialize_json(json: &str) -> Result<Self, String> {
         cxx::let_cxx_string!(json_cxx = json);
-        let uptr =
-            cxx_utils::tokenizer_info_deserialize_json_or_null(&json_cxx);
+        cxx::let_cxx_string!(error_out_cxx = "");
+        let uptr = unsafe {
+            cxx_utils::tokenizer_info_deserialize_json_or_error(
+                &json_cxx,
+                error_out_cxx.as_mut().get_unchecked_mut(),
+            )
+        };
         if uptr.is_null() {
-            return None;
+            return Err(error_out_cxx.to_string());
         }
         let raw = uptr.into_raw();
-        // SAFETY: ownership transferred from UniquePtr; object is now owned by Box.
         let boxed = unsafe { Box::from_raw(raw) };
-        // SAFETY: FFI object is heap-allocated and not moved after pinning.
         let pinned = unsafe { Pin::new_unchecked(boxed) };
-        Some(Self {
+        Ok(Self {
             inner: pinned,
         })
     }

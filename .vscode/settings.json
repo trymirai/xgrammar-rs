@@ -42,5 +42,8 @@
     },
     "[toml]": {
         "editor.defaultFormatter": "tamasfe.even-better-toml"
+    },
+    "files.associations": {
+        "stdexcept": "cpp"
     }
 }

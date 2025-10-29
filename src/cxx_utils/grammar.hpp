@@ -43,20 +43,6 @@ inline xgrammar::Grammar grammar_from_json_schema(
   );
 }
 
-inline xgrammar::Grammar grammar_from_structural_tags(
-    const std::vector<xgrammar::StructuralTagItem>& tags,
-    const std::vector<std::string>& triggers
-) {
-  return xgrammar::Grammar::FromStructuralTag(tags, triggers);
-}
-
-inline std::unique_ptr<xgrammar::Grammar> grammar_into_unique_ptr(
-    const xgrammar::Grammar& grammar
-) {
-  return std::make_unique<xgrammar::Grammar>(grammar);
-}
-
-// Vector helpers for Grammar to build argument lists from Rust
 inline std::unique_ptr<std::vector<xgrammar::Grammar>> new_grammar_vector() {
   return std::make_unique<std::vector<xgrammar::Grammar>>();
 }
@@ -72,21 +58,6 @@ inline void grammar_vec_push(
   vec.push_back(g);
 }
 
-// Concat/Union many using vector constructed from Rust
-inline xgrammar::Grammar grammar_concat(
-    const std::vector<xgrammar::Grammar>& grammars
-) {
-  return xgrammar::Grammar::Concat(grammars);
-}
-
-inline xgrammar::Grammar grammar_union(
-    const std::vector<xgrammar::Grammar>& grammars
-) {
-  return xgrammar::Grammar::Union(grammars);
-}
-
-// Deserialize Grammar from JSON. Returns nullptr on error and writes error
-// string.
 inline std::unique_ptr<xgrammar::Grammar> grammar_deserialize_json_or_error(
     const std::string& json_string,
     std::string* error_out

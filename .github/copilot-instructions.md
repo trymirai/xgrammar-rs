@@ -34,6 +34,7 @@ Extending bindings (pattern)
 4) `cargo build` to regenerate the bridge.
 
 Conventions and gotchas
+- Always use full, explicit names for variables and function arguments; avoid abbreviations and single-letter names (except trivial loop indices).
 - Prefer shims over editing upstream C++; construct STL types via `cxx_utils` helpers (e.g., `new_string_vector`, `string_vec_push_bytes`).
 - Deserialization errors return `None` by design (mirrors C++ `SerializationError`).
 - iOS builds are supported by `build.rs`; ensure `TARGET` is an iOS triple when cross-compiling.

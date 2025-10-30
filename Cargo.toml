@@ -18,3 +18,17 @@ autocxx-build = "0.30.0"
 schemars = "1.0.4"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
+serial_test = "3.2.0"
+
+[features]
+default = []
+tokenizers = ["dep:tokenizers"]
+hf = ["tokenizers", "dep:hf-hub"]
+
+[dependencies.tokenizers]
+version = "0.22.1"
+optional = true
+
+[dependencies.hf-hub]
+version = "0.4.3"
+optional = true

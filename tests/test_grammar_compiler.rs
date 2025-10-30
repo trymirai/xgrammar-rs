@@ -1,3 +1,4 @@
+use serial_test::serial;
 use xgrammar::{GrammarCompiler, TokenizerInfo, VocabType};
 
 fn get_allow_empty_rule_ids_via_json(
@@ -15,6 +16,7 @@ fn get_allow_empty_rule_ids_via_json(
 }
 
 #[test]
+#[serial]
 fn test_get_allow_empty_rule_ids() {
     let cases: &[(&str, &[i32])] = &[
         (
@@ -25,10 +27,10 @@ fn test_get_allow_empty_rule_ids() {
             &[0, 1, 2],
         ),
         (
-            r#"root ::= [a]* [b]* rule1
-    rule1 ::= [abc]* [def]*
-"#,
-            &[0, 1],
+            r#"root ::= rule1 rule2 [a-z]*
+    rule1 ::= "abc" | ""
+    rule2 ::= "def" | """#,
+            &[0, 1, 2],
         ),
         (
             r#"root ::= rule1 rule3
@@ -38,10 +40,10 @@ fn test_get_allow_empty_rule_ids() {
             &[0, 1, 2, 3],
         ),
         (
-            r#"root ::= rule1 rule2 [a-z]*
-    rule1 ::= "abc" | ""
-    rule2 ::= "def" | """#,
-            &[0, 1, 2],
+            r#"root ::= [a]* [b]* rule1
+    rule1 ::= [abc]* [def]*
+"#,
+            &[0, 1],
         ),
     ];
 

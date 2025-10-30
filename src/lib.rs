@@ -56,13 +56,6 @@ include_cpp! {
 
     // cxx_utils/grammar_compiler.hpp
     generate!("cxx_utils::compiler_compile_json_schema")
-    generate!("cxx_utils::compiler_compile_builtin_json_grammar")
-    generate!("cxx_utils::compiler_compile_regex")
-    generate!("cxx_utils::compiler_compile_structural_tag")
-    generate!("cxx_utils::compiler_compile_grammar")
-    generate!("cxx_utils::compiler_clear_cache")
-    generate!("cxx_utils::compiler_get_cache_size_bytes")
-    generate!("cxx_utils::compiler_cache_limit_bytes")
 
     // cxx_utils/matcher.hpp
     generate!("cxx_utils::make_grammar_matcher")

@@ -97,30 +97,19 @@ impl GrammarCompiler {
     }
 
     /// Get `CompiledGrammar` from the standard JSON.
-    pub fn compile_builtin_json_grammar(&self) -> CompiledGrammar {
-        let ffi_pin = unsafe {
-            cxx_utils::compiler_compile_builtin_json_grammar(self.ffi_ref()
-                as *const _
-                as *mut _)
-            .within_box()
-        };
-        CompiledGrammar::from_pinned_ffi(ffi_pin)
+    pub fn compile_builtin_json_grammar(&mut self) -> CompiledGrammar {
+        let ffi = self.inner.as_mut().CompileBuiltinJSONGrammar();
+        CompiledGrammar::from_pinned_ffi(ffi.within_box())
     }
 
     /// Get `CompiledGrammar` from the specified regex.
     pub fn compile_regex(
-        &self,
+        &mut self,
         regex: &str,
     ) -> CompiledGrammar {
         cxx::let_cxx_string!(regex_cxx = regex);
-        let ffi_pin = unsafe {
-            cxx_utils::compiler_compile_regex(
-                self.ffi_ref() as *const _ as *mut _,
-                &regex_cxx,
-            )
-            .within_box()
-        };
-        CompiledGrammar::from_pinned_ffi(ffi_pin)
+        let ffi = self.inner.as_mut().CompileRegex(&regex_cxx);
+        CompiledGrammar::from_pinned_ffi(ffi.within_box())
     }
 
     /// Compile a grammar from structural tags.
@@ -129,7 +118,7 @@ impl GrammarCompiler {
     /// - `tags`: The structural tags.
     /// - `triggers`: The triggers. Each trigger should be a prefix of a provided begin tag.
     pub fn compile_structural_tag(
-        &self,
+        &mut self,
         tags: &[StructuralTagItem],
         triggers: &[impl AsRef<str>],
     ) -> CompiledGrammar {
@@ -171,30 +160,20 @@ impl GrammarCompiler {
             }
         }
 
-        let ffi_pin = unsafe {
-            cxx_utils::compiler_compile_structural_tag(
-                self.ffi_ref() as *const _ as *mut _,
-                structural_tag_vector.as_ref().unwrap(),
-                trigger_string_vector.as_ref().unwrap(),
-            )
-            .within_box()
-        };
-        CompiledGrammar::from_pinned_ffi(ffi_pin)
+        let ffi = self.inner.as_mut().CompileStructuralTag(
+            structural_tag_vector.as_ref().unwrap(),
+            trigger_string_vector.as_ref().unwrap(),
+        );
+        CompiledGrammar::from_pinned_ffi(ffi.within_box())
     }
 
     /// Compile a grammar object to a `CompiledGrammar`.
     pub fn compile_grammar(
-        &self,
+        &mut self,
         grammar: &grammar::Grammar,
     ) -> CompiledGrammar {
-        let ffi_pin = unsafe {
-            cxx_utils::compiler_compile_grammar(
-                self.ffi_ref() as *const _ as *mut _,
-                grammar.ffi_ref(),
-            )
-            .within_box()
-        };
-        CompiledGrammar::from_pinned_ffi(ffi_pin)
+        let ffi = self.inner.as_mut().CompileGrammar(grammar.ffi_ref());
+        CompiledGrammar::from_pinned_ffi(ffi.within_box())
     }
 
     /// Compile a grammar from an EBNF string. The string should follow the format described in
@@ -204,7 +183,7 @@ impl GrammarCompiler {
     /// - `ebnf_string`: The grammar string in EBNF format.
     /// - `root_rule_name`: The name of the root rule in the grammar.
     pub fn compile_grammar_from_ebnf(
-        &self,
+        &mut self,
         ebnf_string: &str,
         root_rule_name: &str,
     ) -> CompiledGrammar {
@@ -214,20 +193,17 @@ impl GrammarCompiler {
 
     /// Clear all cached compiled grammars.
     pub fn clear_cache(&mut self) {
-        unsafe {
-            cxx_utils::compiler_clear_cache(self.ffi_ref() as *const _ as *mut _)
-        };
+        self.inner.as_mut().ClearCache();
     }
 
     /// The approximate memory usage of the cache in bytes.
     pub fn get_cache_size_bytes(&self) -> i64 {
-        unsafe { cxx_utils::compiler_get_cache_size_bytes(self.ffi_ref()) }
-            .into()
+        self.inner.GetCacheSizeBytes().into()
     }
 
     /// The maximum memory usage for the cache in bytes. Returns -1 if unlimited.
     pub fn cache_limit_bytes(&self) -> i64 {
-        unsafe { cxx_utils::compiler_cache_limit_bytes(self.ffi_ref()) }.into()
+        self.inner.CacheLimitBytes().into()
     }
 
     pub(crate) fn ffi_ref(&self) -> &FFIGrammarCompiler {

@@ -8,7 +8,7 @@ fn test_grammar_compiler_basic() {
         TokenizerInfo::new(&vocab, VocabType::RAW, &None, false);
 
     // Create a grammar compiler
-    let compiler = GrammarCompiler::new(
+    let mut compiler = GrammarCompiler::new(
         &tokenizer_info,
         8,    // max_threads
         true, // cache_enabled
@@ -52,7 +52,7 @@ fn test_grammar_compiler_regex() {
     let tokenizer_info =
         TokenizerInfo::new(&vocab, VocabType::RAW, &None, false);
 
-    let compiler = GrammarCompiler::new(&tokenizer_info, 1, false, -1);
+    let mut compiler = GrammarCompiler::new(&tokenizer_info, 1, false, -1);
 
     // Simple regex pattern
     let compiled = compiler.compile_regex("[abc]+");
@@ -66,7 +66,7 @@ fn test_grammar_compiler_from_ebnf() {
     let tokenizer_info =
         TokenizerInfo::new(&vocab, VocabType::RAW, &None, false);
 
-    let compiler = GrammarCompiler::new(&tokenizer_info, 1, false, -1);
+    let mut compiler = GrammarCompiler::new(&tokenizer_info, 1, false, -1);
 
     // Simple EBNF grammar
     let ebnf = r#"root ::= "a" "b" | "c""#;

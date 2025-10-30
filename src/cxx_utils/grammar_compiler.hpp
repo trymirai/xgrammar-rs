@@ -37,50 +37,6 @@ inline xgrammar::CompiledGrammar compiler_compile_json_schema(
   );
 }
 
-inline xgrammar::CompiledGrammar compiler_compile_builtin_json_grammar(
-    xgrammar::GrammarCompiler* compiler
-) {
-  return compiler->CompileBuiltinJSONGrammar();
-}
-
-inline xgrammar::CompiledGrammar compiler_compile_regex(
-    xgrammar::GrammarCompiler* compiler,
-    const std::string& regex
-) {
-  return compiler->CompileRegex(regex);
-}
-
-inline xgrammar::CompiledGrammar compiler_compile_structural_tag(
-    xgrammar::GrammarCompiler* compiler,
-    const std::vector<xgrammar::StructuralTagItem>& tags,
-    const std::vector<std::string>& triggers
-) {
-  return compiler->CompileStructuralTag(tags, triggers);
-}
-
-inline xgrammar::CompiledGrammar compiler_compile_grammar(
-    xgrammar::GrammarCompiler* compiler,
-    const xgrammar::Grammar& grammar
-) {
-  return compiler->CompileGrammar(grammar);
-}
-
-inline void compiler_clear_cache(xgrammar::GrammarCompiler* compiler) {
-  compiler->ClearCache();
-}
-
-inline long long compiler_get_cache_size_bytes(
-    const xgrammar::GrammarCompiler* compiler
-) {
-  return compiler->GetCacheSizeBytes();
-}
-
-inline long long compiler_cache_limit_bytes(
-    const xgrammar::GrammarCompiler* compiler
-) {
-  return compiler->CacheLimitBytes();
-}
-
 } // namespace cxx_utils
 
 #endif // XGRAMMAR_RS_CXX_UTILS_GRAMMAR_COMPILER_H_

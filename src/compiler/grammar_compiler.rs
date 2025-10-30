@@ -208,8 +208,4 @@ impl GrammarCompiler {
     pub fn cache_limit_bytes(&self) -> i64 {
         self.inner.CacheLimitBytes().into()
     }
-
-    pub(crate) fn ffi_ref(&self) -> &FFIGrammarCompiler {
-        self.inner.as_ref().get_ref()
-    }
 }

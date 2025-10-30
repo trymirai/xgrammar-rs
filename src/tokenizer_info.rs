@@ -219,10 +219,10 @@ impl TokenizerInfo {
             return Err(error_out_cxx.to_string());
         }
         let raw = uptr.into_raw();
-        let boxed = unsafe { Box::from_raw(raw) };
-        let pinned = unsafe { Pin::new_unchecked(boxed) };
+        let ffi_box = unsafe { Box::from_raw(raw) };
+        let ffi_pin = unsafe { Pin::new_unchecked(ffi_box) };
         Ok(Self {
-            inner: pinned,
+            inner: ffi_pin,
         })
     }
 

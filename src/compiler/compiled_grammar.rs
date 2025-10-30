@@ -68,8 +68,8 @@ impl CompiledGrammar {
             return Err(error_out_cxx.to_string());
         }
         let raw_ptr = unique_ptr.into_raw();
-        let boxed_ffi = unsafe { Box::from_raw(raw_ptr) };
-        let ffi_pin = unsafe { Pin::new_unchecked(boxed_ffi) };
+        let ffi_box = unsafe { Box::from_raw(raw_ptr) };
+        let ffi_pin = unsafe { Pin::new_unchecked(ffi_box) };
         Ok(Self {
             inner: ffi_pin,
         })

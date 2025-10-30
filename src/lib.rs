@@ -86,11 +86,11 @@ use ffi::{
 
 mod compiler;
 mod grammar;
-mod grammar_matcher;
+mod matcher;
 mod tokenizer_info;
 
 pub use compiler::{CompiledGrammar, GrammarCompiler};
 pub use ffi::xgrammar::VocabType;
 pub use grammar::{Grammar, StructuralTagItem};
-pub use grammar_matcher::GrammarMatcher;
+pub use matcher::GrammarMatcher;
 pub use tokenizer_info::TokenizerInfo;

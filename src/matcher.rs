@@ -120,4 +120,9 @@ impl GrammarMatcher {
     pub fn stop_token_ids(&self) -> Box<[i32]> {
         self.stored_stop_token_ids.clone()
     }
+
+    /// Debug: print the internal state of the matcher (unstable, for testing).
+    pub fn debug_print_internal_state(&self) -> String {
+        self.inner._DebugPrintInternalState().to_string()
+    }
 }

@@ -35,7 +35,7 @@ impl GrammarMatcher {
             _ => (false, std::ptr::null(), 0usize),
         };
 
-        let ffi = unsafe {
+        let ffi_pin = unsafe {
             cxx_utils::make_grammar_matcher(
                 compiled_grammar.ffi_ref(),
                 has_override,
@@ -44,9 +44,10 @@ impl GrammarMatcher {
                 terminate_without_stop_token,
                 autocxx::c_int(max_rollback_tokens),
             )
+            .within_box()
         };
         Self {
-            inner: ffi.within_box(),
+            inner: ffi_pin,
             stored_stop_token_ids,
         }
     }
@@ -78,10 +79,9 @@ impl GrammarMatcher {
         index: i32,
         debug_print: bool,
     ) -> bool {
-        let bitmask_ptr: *mut DLTensor = bitmask as *mut _;
         unsafe {
             self.inner.as_mut().FillNextTokenBitmask(
-                bitmask_ptr,
+                bitmask as *mut _,
                 autocxx::c_int(index),
                 debug_print,
             )

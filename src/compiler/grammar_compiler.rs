@@ -59,7 +59,7 @@ impl GrammarCompiler {
     ///   allow properties and items that are not specified in the schema. This is equivalent to
     ///   setting unevaluatedProperties and unevaluatedItems to false.
     pub fn compile_json_schema(
-        &self,
+        &mut self,
         schema: &str,
         any_whitespace: bool,
         indent: Option<i32>,
@@ -78,20 +78,18 @@ impl GrammarCompiler {
         cxx::let_cxx_string!(sep_comma_cxx = sep_comma.as_str());
         cxx::let_cxx_string!(sep_colon_cxx = sep_colon.as_str());
 
-        let ffi_pin = unsafe {
-            cxx_utils::compiler_compile_json_schema(
-                self.ffi_ref() as *const _ as *mut _,
-                &schema_cxx,
-                any_whitespace,
-                has_indent,
-                autocxx::c_int(indent_i32),
-                has_separators,
-                &sep_comma_cxx,
-                &sep_colon_cxx,
-                strict_mode,
-            )
-            .within_box()
-        };
+        let ffi_pin = cxx_utils::compiler_compile_json_schema(
+            self.inner.as_mut(),
+            &schema_cxx,
+            any_whitespace,
+            has_indent,
+            autocxx::c_int(indent_i32),
+            has_separators,
+            &sep_comma_cxx,
+            &sep_colon_cxx,
+            strict_mode,
+        )
+        .within_box();
 
         CompiledGrammar::from_pinned_ffi(ffi_pin)
     }
@@ -108,8 +106,8 @@ impl GrammarCompiler {
         regex: &str,
     ) -> CompiledGrammar {
         cxx::let_cxx_string!(regex_cxx = regex);
-        let ffi = self.inner.as_mut().CompileRegex(&regex_cxx);
-        CompiledGrammar::from_pinned_ffi(ffi.within_box())
+        let ffi_pin = self.inner.as_mut().CompileRegex(&regex_cxx).within_box();
+        CompiledGrammar::from_pinned_ffi(ffi_pin)
     }
 
     /// Compile a grammar from structural tags.
@@ -160,11 +158,15 @@ impl GrammarCompiler {
             }
         }
 
-        let ffi = self.inner.as_mut().CompileStructuralTag(
-            structural_tag_vector.as_ref().unwrap(),
-            trigger_string_vector.as_ref().unwrap(),
-        );
-        CompiledGrammar::from_pinned_ffi(ffi.within_box())
+        let ffi_pin = self
+            .inner
+            .as_mut()
+            .CompileStructuralTag(
+                structural_tag_vector.as_ref().unwrap(),
+                trigger_string_vector.as_ref().unwrap(),
+            )
+            .within_box();
+        CompiledGrammar::from_pinned_ffi(ffi_pin)
     }
 
     /// Compile a grammar object to a `CompiledGrammar`.
@@ -172,8 +174,9 @@ impl GrammarCompiler {
         &mut self,
         grammar: &grammar::Grammar,
     ) -> CompiledGrammar {
-        let ffi = self.inner.as_mut().CompileGrammar(grammar.ffi_ref());
-        CompiledGrammar::from_pinned_ffi(ffi.within_box())
+        let ffi_pin =
+            self.inner.as_mut().CompileGrammar(grammar.ffi_ref()).within_box();
+        CompiledGrammar::from_pinned_ffi(ffi_pin)
     }
 
     /// Compile a grammar from an EBNF string. The string should follow the format described in

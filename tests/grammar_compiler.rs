@@ -29,7 +29,7 @@ fn test_grammar_compiler_json_schema() {
     let tokenizer_info =
         TokenizerInfo::new(&vocab, VocabType::RAW, &None, false);
 
-    let compiler = GrammarCompiler::new(&tokenizer_info, 1, true, -1);
+    let mut compiler = GrammarCompiler::new(&tokenizer_info, 1, true, -1);
 
     // Simple JSON schema
     let schema =

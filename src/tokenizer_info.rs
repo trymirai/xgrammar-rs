@@ -61,15 +61,13 @@ impl TokenizerInfo {
                 cxx_vec_pin.as_mut(),
                 encoded_vocab.len(),
             );
-            for s in encoded_vocab.iter() {
-                let bytes = s.as_ref().as_bytes();
-                let ptr = bytes.as_ptr() as *const i8;
-                let len = bytes.len();
+            for string in encoded_vocab.iter() {
+                let bytes = string.as_ref().as_bytes();
                 unsafe {
                     cxx_utils::string_vec_push_bytes(
                         cxx_vec_pin.as_mut(),
-                        ptr,
-                        len,
+                        bytes.as_ptr() as *const i8,
+                        bytes.len(),
                     );
                 }
             }
@@ -117,28 +115,26 @@ impl TokenizerInfo {
         let mut cxx_vec = cxx_utils::new_string_vector();
         {
             let mut cxx_vec_pin = cxx_vec.pin_mut();
-            // If iterator has no size hint, reserve minimally.
-            for bytes_slice in encoded_vocab.into_iter() {
-                let bytes = bytes_slice.as_ref();
-                let ptr = bytes.as_ptr() as *const i8;
-                let len = bytes.len();
+            for string in encoded_vocab.into_iter() {
+                let bytes = string.as_ref();
                 unsafe {
                     cxx_utils::string_vec_push_bytes(
                         cxx_vec_pin.as_mut(),
-                        ptr,
-                        len,
+                        bytes.as_ptr() as *const i8,
+                        bytes.len(),
                     );
                 }
             }
         }
 
         cxx::let_cxx_string!(metadata_cxx = metadata);
-        let ffi_obj = FFITokenizerInfo::FromVocabAndMetadata(
+        let ffi_pin = FFITokenizerInfo::FromVocabAndMetadata(
             cxx_vec.as_ref().unwrap(),
             &metadata_cxx,
-        );
+        )
+        .within_box();
         Self {
-            inner: ffi_obj.within_box(),
+            inner: ffi_pin,
         }
     }
 

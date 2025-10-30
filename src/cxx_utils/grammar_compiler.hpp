@@ -11,7 +11,7 @@
 namespace cxx_utils {
 
 inline xgrammar::CompiledGrammar compiler_compile_json_schema(
-    xgrammar::GrammarCompiler* compiler,
+    xgrammar::GrammarCompiler& compiler,
     const std::string& schema,
     bool any_whitespace,
     bool has_indent,
@@ -28,7 +28,7 @@ inline xgrammar::CompiledGrammar compiler_compile_json_schema(
                            std::make_pair(separator_comma, separator_colon)
                        )
                      : std::nullopt;
-  return compiler->CompileJSONSchema(
+  return compiler.CompileJSONSchema(
       schema,
       any_whitespace,
       indent_opt,

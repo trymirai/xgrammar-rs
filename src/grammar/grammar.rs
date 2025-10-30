@@ -50,9 +50,10 @@ impl Grammar {
     ) -> Self {
         cxx::let_cxx_string!(ebnf_cxx = ebnf_string);
         cxx::let_cxx_string!(root_rule_name_cxx = root_rule_name);
-        let ffi_grammar = FFIGrammar::FromEBNF(&ebnf_cxx, &root_rule_name_cxx);
+        let ffi_pin =
+            FFIGrammar::FromEBNF(&ebnf_cxx, &root_rule_name_cxx).within_box();
         Self {
-            inner: ffi_grammar.within_box(),
+            inner: ffi_pin,
         }
     }
 
@@ -110,7 +111,7 @@ impl Grammar {
         };
         cxx::let_cxx_string!(separator_comma_cxx = separator_comma.as_str());
         cxx::let_cxx_string!(separator_colon_cxx = separator_colon.as_str());
-        let ffi_grammar = cxx_utils::grammar_from_json_schema(
+        let ffi_pin = cxx_utils::grammar_from_json_schema(
             &schema_cxx,
             any_whitespace,
             has_indent,
@@ -120,9 +121,10 @@ impl Grammar {
             &separator_colon_cxx,
             strict_mode,
             print_converted_ebnf,
-        );
+        )
+        .within_box();
         Self {
-            inner: ffi_grammar.within_box(),
+            inner: ffi_pin,
         }
     }
 
@@ -139,10 +141,10 @@ impl Grammar {
         print_converted_ebnf: bool,
     ) -> Self {
         cxx::let_cxx_string!(regex_cxx = regex_string);
-        let ffi_grammar =
-            FFIGrammar::FromRegex(&regex_cxx, print_converted_ebnf);
+        let ffi_pin = FFIGrammar::FromRegex(&regex_cxx, print_converted_ebnf)
+            .within_box();
         Self {
-            inner: ffi_grammar.within_box(),
+            inner: ffi_pin,
         }
     }
 
@@ -202,21 +204,22 @@ impl Grammar {
             }
         }
 
-        let ffi_grammar = FFIGrammar::FromStructuralTag(
+        let ffi_pin = FFIGrammar::FromStructuralTag(
             structural_tag_vector.as_ref().unwrap(),
             trigger_string_vector.as_ref().unwrap(),
-        );
+        )
+        .within_box();
         Self {
-            inner: ffi_grammar.within_box(),
+            inner: ffi_pin,
         }
     }
 
     /// Get the grammar of standard JSON. This is compatible with the official JSON grammar
     /// specification in https://www.json.org/json-en.html.
     pub fn builtin_json_grammar() -> Self {
-        let ffi_grammar = FFIGrammar::BuiltinJSONGrammar();
+        let ffi_pin = FFIGrammar::BuiltinJSONGrammar().within_box();
         Self {
-            inner: ffi_grammar.within_box(),
+            inner: ffi_pin,
         }
     }
 
@@ -228,13 +231,16 @@ impl Grammar {
         {
             let mut vec_pin = vec.pin_mut();
             cxx_utils::grammar_vec_reserve(vec_pin.as_mut(), grammars.len());
-            for g in grammars {
-                cxx_utils::grammar_vec_push(vec_pin.as_mut(), g.ffi_ref());
+            for grammar in grammars {
+                cxx_utils::grammar_vec_push(
+                    vec_pin.as_mut(),
+                    grammar.ffi_ref(),
+                );
             }
         }
-        let combined = FFIGrammar::Concat(vec.as_ref().unwrap());
+        let ffi_pin = FFIGrammar::Concat(vec.as_ref().unwrap()).within_box();
         Self {
-            inner: combined.within_box(),
+            inner: ffi_pin,
         }
     }
 
@@ -250,9 +256,9 @@ impl Grammar {
                 cxx_utils::grammar_vec_push(vec_pin.as_mut(), g.ffi_ref());
             }
         }
-        let combined = FFIGrammar::Union(vec.as_ref().unwrap());
+        let ffi_pin = FFIGrammar::Union(vec.as_ref().unwrap()).within_box();
         Self {
-            inner: combined.within_box(),
+            inner: ffi_pin,
         }
     }
 
@@ -281,10 +287,10 @@ impl Grammar {
             return Err(error_out_cxx.to_string());
         }
         let raw_ptr = unique_ptr.into_raw();
-        let boxed_ffi = unsafe { Box::from_raw(raw_ptr) };
-        let pinned_ffi = unsafe { Pin::new_unchecked(boxed_ffi) };
+        let ffi_box = unsafe { Box::from_raw(raw_ptr) };
+        let ffi_pin = unsafe { Pin::new_unchecked(ffi_box) };
         Ok(Self {
-            inner: pinned_ffi,
+            inner: ffi_pin,
         })
     }
 

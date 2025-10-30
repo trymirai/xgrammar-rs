@@ -69,9 +69,9 @@ impl CompiledGrammar {
         }
         let raw_ptr = unique_ptr.into_raw();
         let boxed_ffi = unsafe { Box::from_raw(raw_ptr) };
-        let pinned_ffi = unsafe { Pin::new_unchecked(boxed_ffi) };
+        let ffi_pin = unsafe { Pin::new_unchecked(boxed_ffi) };
         Ok(Self {
-            inner: pinned_ffi,
+            inner: ffi_pin,
         })
     }
 

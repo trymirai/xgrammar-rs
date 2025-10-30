@@ -80,4 +80,8 @@ impl CompiledGrammar {
             inner,
         }
     }
+
+    pub(crate) fn ffi_ref(&self) -> &FFICompiledGrammar {
+        self.inner.as_ref().get_ref()
+    }
 }

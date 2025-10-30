@@ -64,6 +64,9 @@ include_cpp! {
     generate!("cxx_utils::compiler_get_cache_size_bytes")
     generate!("cxx_utils::compiler_cache_limit_bytes")
 
+    // cxx_utils/matcher.hpp
+    generate!("cxx_utils::make_grammar_matcher")
+
     // DLPack core types
     generate_pod!("DLTensor")
     generate!("DLManagedTensor")  // Has function pointer, not POD
@@ -90,9 +93,11 @@ use ffi::{
 
 mod compiler;
 mod grammar;
+mod matcher;
 mod tokenizer_info;
 
 pub use compiler::{CompiledGrammar, GrammarCompiler};
 pub use ffi::xgrammar::VocabType;
 pub use grammar::{Grammar, StructuralTagItem};
+pub use matcher::GrammarMatcher;
 pub use tokenizer_info::TokenizerInfo;

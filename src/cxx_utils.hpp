@@ -7,5 +7,6 @@
 #include "cxx_utils/grammar.hpp"
 #include "cxx_utils/compiled_grammar.hpp"
 #include "cxx_utils/grammar_compiler.hpp"
+#include "cxx_utils/matcher.hpp"
 
 #endif // XGRAMMAR_RS_CXX_UTILS_H_

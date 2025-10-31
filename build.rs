@@ -20,7 +20,7 @@ fn main() {
     let manifest_dir = abs_path(
         env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set"),
     );
-    let xgrammar_src_dir = manifest_dir.join("external/xgrammar-0.1.26");
+    let xgrammar_src_dir = manifest_dir.join("external/xgrammar");
     let xgrammar_include_dir = xgrammar_src_dir.join("include");
     let dlpack_include_dir = xgrammar_src_dir.join("3rdparty/dlpack/include");
     let src_include_dir = manifest_dir.join("src");

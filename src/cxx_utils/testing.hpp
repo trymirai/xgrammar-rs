@@ -2,7 +2,7 @@
 
 #include <string>
 #include <vector>
-#include "../../external/xgrammar-0.1.26/cpp/testing.h"
+#include "../../external/xgrammar/cpp/testing.h"
 
 namespace cxx_utils {
 

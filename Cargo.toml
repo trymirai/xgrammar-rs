@@ -1,9 +1,18 @@
 [package]
 name = "xgrammar"
-version = "0.1.0"
+version = "0.1.26"
 edition = "2024"
 build = "build.rs"
 links = "xgrammar"
+authors = ["Eugene Bokhan <eugenebokhan@gmail.com>"]
+description = "Efficient, Flexible and Portable Structured Generation for Rust - Rust bindings for XGrammar"
+license = "Apache-2.0"
+repository = "https://github.com/trymirai/xgrammar-rs"
+homepage = "https://github.com/trymirai/xgrammar-rs"
+documentation = "https://docs.rs/xgrammar"
+readme = "README.md"
+keywords = ["llm", "grammar", "structured-generation", "json-schema", "parser"]
+categories = ["parsing", "text-processing"]
 
 [dependencies]
 autocxx = "0.30.0"

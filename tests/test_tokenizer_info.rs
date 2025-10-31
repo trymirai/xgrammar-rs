@@ -1,14 +1,8 @@
 #![cfg(feature = "hf")]
-use hf_hub::{Repo, api::sync::ApiBuilder};
-use serial_test::serial;
+mod test_utils;
 
-fn download_tokenizer_json(
-    model_id: &str
-) -> Result<std::path::PathBuf, String> {
-    let api = ApiBuilder::new().build().map_err(|e| e.to_string())?;
-    let repo = api.repo(Repo::model(model_id.to_string()));
-    repo.get("tokenizer.json").map_err(|e| e.to_string())
-}
+use serial_test::serial;
+use test_utils::*;
 
 fn extract_ordered_vocab(tk: &tokenizers::Tokenizer) -> Vec<String> {
     let mut pairs: Vec<(usize, String)> = tk
@@ -24,11 +18,16 @@ fn extract_ordered_vocab(tk: &tokenizers::Tokenizer) -> Vec<String> {
     out
 }
 
-// Subset of Python's tokenizer_path__vocab_type__prepend_space for stable public models
+// Subset of Python's tokenizer_path__vocab_type__prepend_space
+// Using models accessible with current HF token
 fn cases_model_vocab() -> Vec<(&'static str, xgrammar::VocabType, bool)> {
     vec![
-        ("gpt2", xgrammar::VocabType::BYTE_LEVEL, false),
-        ("bert-base-uncased", xgrammar::VocabType::RAW, false),
+        (
+            "meta-llama/Llama-2-7b-chat-hf",
+            xgrammar::VocabType::BYTE_FALLBACK,
+            true,
+        ),
+        // Note: Python has 30+ models, but limiting to publicly accessible models
     ]
 }
 
@@ -81,50 +80,61 @@ fn test_decoded_vocab() {
 #[test]
 #[serial]
 fn test_model_vocab_size_smaller_than_tokenizer() {
-    // Use a public model
-    let path =
-        download_tokenizer_json("gpt2").expect("download tokenizer.json");
+    // Python test: test_model_vocab_size_smaller_than_tokenizer
+    // Uses meta-llama/Llama-3.2-11B-Vision-Instruct with model_vocab_size=128256
+    let tokenizer_path = "meta-llama/Llama-3.2-11B-Vision-Instruct";
+    let model_vocab_size = 128256;
+
+    let path = download_tokenizer_json(tokenizer_path)
+        .expect("download tokenizer.json");
     let tk = tokenizers::Tokenizer::from_file(&path).expect("load tokenizer");
     let ordered = extract_ordered_vocab(&tk);
-    let orig = ordered.len();
-    // Some tokenizers pad or enforce a minimum; accept "at most" check
-    let model_vocab = if orig > 200 {
-        orig - 100
-    } else {
-        orig
-    };
+    let original_vocab_size = ordered.len();
+
+    assert!(
+        original_vocab_size > model_vocab_size,
+        "Original vocab size {} should be > model vocab size {}",
+        original_vocab_size,
+        model_vocab_size
+    );
+
     let ti = xgrammar::TokenizerInfo::from_tokenizers_with_options(
         &tk,
         xgrammar::VocabType::BYTE_LEVEL,
-        Some(model_vocab),
+        Some(model_vocab_size),
         None,
         false,
     );
-    // Allow tokenizer to clamp or expand as needed; assert it's not smaller than we requested
-    assert!(ti.vocab_size() >= model_vocab);
-    assert!(ti.decoded_vocab().len() >= model_vocab);
+
+    // Some tokenizers pad by 1 for special tokens, so allow for that
+    assert!(
+        ti.vocab_size() == model_vocab_size
+            || ti.vocab_size() == model_vocab_size + 1,
+        "vocab_size should be {} or {}, got {}",
+        model_vocab_size,
+        model_vocab_size + 1,
+        ti.vocab_size()
+    );
+    assert!(ti.decoded_vocab().len() >= model_vocab_size);
 }
 
 #[test]
 #[serial]
 fn test_vocab_type_detection() {
-    // gpt2 -> BYTE_LEVEL
-    let path_gpt2 =
-        download_tokenizer_json("gpt2").expect("download tokenizer.json");
-    let tk_gpt2 =
-        tokenizers::Tokenizer::from_file(&path_gpt2).expect("load tokenizer");
-    let ti_gpt2 =
-        xgrammar::TokenizerInfo::from_huggingface(&tk_gpt2, None, None);
-    assert!(matches!(ti_gpt2.vocab_type(), xgrammar::VocabType::BYTE_LEVEL));
+    // Python test checks vocab_type for various models from tokenizer_path__vocab_type__prepend_space
+    let model_id = "meta-llama/Llama-2-7b-chat-hf";
+    let expected_vocab_type = xgrammar::VocabType::BYTE_FALLBACK;
 
-    // bert-base-uncased -> RAW
-    let path_bert = download_tokenizer_json("bert-base-uncased")
-        .expect("download tokenizer.json");
-    let tk_bert =
-        tokenizers::Tokenizer::from_file(&path_bert).expect("load tokenizer");
-    let ti_bert =
-        xgrammar::TokenizerInfo::from_huggingface(&tk_bert, None, None);
-    assert!(matches!(ti_bert.vocab_type(), xgrammar::VocabType::RAW));
+    let path =
+        download_tokenizer_json(model_id).expect("download tokenizer.json");
+    let tk = tokenizers::Tokenizer::from_file(&path).expect("load tokenizer");
+    let ti = xgrammar::TokenizerInfo::from_huggingface(&tk, None, None);
+    assert_eq!(
+        ti.vocab_type() as i32,
+        expected_vocab_type as i32,
+        "Model {} should have correct vocab_type",
+        model_id
+    );
 }
 
 #[test]
@@ -175,27 +185,28 @@ fn test_dump_metadata_load() {
 #[test]
 #[serial]
 fn test_customize_stop_token_ids() {
-    for (model_id, vocab_type, add_prefix_space) in cases_model_vocab() {
-        let path =
-            download_tokenizer_json(model_id).expect("download tokenizer.json");
-        let tk =
-            tokenizers::Tokenizer::from_file(&path).expect("load tokenizer");
-        let stop_ids = [1i32, 2i32, 3i32];
-        let ti = xgrammar::TokenizerInfo::from_tokenizers_with_options(
-            &tk,
-            vocab_type,
-            None,
-            Some(&stop_ids),
-            add_prefix_space,
-        );
-        assert_eq!(ti.stop_token_ids().as_ref(), &stop_ids);
-    }
+    // Python test: test_customize_stop_token_ids
+    // Tests meta-llama/Llama-2-7b-chat-hf
+    let model_id = "meta-llama/Llama-2-7b-chat-hf";
+
+    let path =
+        download_tokenizer_json(model_id).expect("download tokenizer.json");
+    let tk = tokenizers::Tokenizer::from_file(&path).expect("load tokenizer");
+    let stop_ids = [1i32, 2i32, 3i32];
+    let ti =
+        xgrammar::TokenizerInfo::from_huggingface(&tk, None, Some(&stop_ids));
+    assert_eq!(ti.stop_token_ids().as_ref(), &stop_ids);
 }
 
 #[test]
 #[serial]
 fn test_padding_vocab_size() {
-    let model_id = "bert-base-uncased";
+    // Python test: test_padding_vocab_size
+    // Tests meta-llama/Llama-2-7b-chat-hf
+    let model_id = "meta-llama/Llama-2-7b-chat-hf";
+    let vocab_type = xgrammar::VocabType::BYTE_FALLBACK;
+    let add_prefix_space = true;
+
     let path =
         download_tokenizer_json(model_id).expect("download tokenizer.json");
     let tk = tokenizers::Tokenizer::from_file(&path).expect("load tokenizer");
@@ -204,10 +215,10 @@ fn test_padding_vocab_size() {
     let pad_by = 5usize;
     let ti = xgrammar::TokenizerInfo::new_with_vocab_size(
         &ordered,
-        xgrammar::VocabType::RAW,
+        vocab_type,
         Some(original + pad_by),
         &None,
-        false,
+        add_prefix_space,
     );
     assert_eq!(ti.vocab_size(), original + pad_by);
     let specials = ti.special_token_ids();

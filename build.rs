@@ -20,7 +20,7 @@ fn main() {
     let manifest_dir = abs_path(
         env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set"),
     );
-    let xgrammar_src_dir = manifest_dir.join("external/xgrammar");
+    let xgrammar_src_dir = manifest_dir.join("external/xgrammar-0.1.26");
     let xgrammar_include_dir = xgrammar_src_dir.join("include");
     let dlpack_include_dir = xgrammar_src_dir.join("3rdparty/dlpack/include");
     let src_include_dir = manifest_dir.join("src");
@@ -30,12 +30,26 @@ fn main() {
     println!("cargo:rerun-if-changed={}/cpp", xgrammar_src_dir.display());
     println!("cargo:rerun-if-changed={}/3rdparty", xgrammar_src_dir.display());
 
+    // Create a config.cmake in the build directory to override defaults
+    // This will be found first by CMake and prevent Python bindings from being built
+    let cmake_build_dir = out_dir.join("build");
+    create_dir_all(&cmake_build_dir).ok();
+    let config_cmake_path = cmake_build_dir.join("config.cmake");
+    std::fs::write(
+        &config_cmake_path,
+        "set(XGRAMMAR_BUILD_PYTHON_BINDINGS OFF)\n\
+         set(XGRAMMAR_BUILD_CXX_TESTS OFF)\n\
+         set(XGRAMMAR_ENABLE_CPPTRACE OFF)\n\
+         set(CMAKE_BUILD_TYPE RelWithDebInfo)\n",
+    )
+    .expect("Failed to write config.cmake");
+
     let mut cmake_config = CMakeConfig::new(&xgrammar_src_dir);
+    cmake_config.out_dir(&out_dir);
     cmake_config.define("XGRAMMAR_BUILD_PYTHON_BINDINGS", "OFF");
     cmake_config.define("XGRAMMAR_BUILD_CXX_TESTS", "OFF");
     cmake_config.define("XGRAMMAR_ENABLE_CPPTRACE", "OFF");
-    // Enforce C++23 across the CMake build
-    cmake_config.define("CMAKE_CXX_STANDARD", "23");
+    cmake_config.define("CMAKE_CXX_STANDARD", "17");
     cmake_config.define("CMAKE_CXX_STANDARD_REQUIRED", "ON");
     cmake_config.define("CMAKE_CXX_EXTENSIONS", "OFF");
 
@@ -112,12 +126,12 @@ fn main() {
         "src/lib.rs",
         &[&src_include_dir, &xgrammar_include_dir, &dlpack_include_dir],
     )
-    .extra_clang_args(&["-std=c++23"])
+    .extra_clang_args(&["-std=c++17"])
     .build()
     .expect("autocxx build failed");
 
     autocxx_builder
-        .flag_if_supported("-std=c++23")
+        .flag_if_supported("-std=c++17")
         .include(&src_include_dir)
         .include(&xgrammar_include_dir)
         .include(&dlpack_include_dir)

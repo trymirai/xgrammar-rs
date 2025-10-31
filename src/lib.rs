@@ -63,6 +63,9 @@ include_cpp! {
 
     // cxx_utils/testing.hpp
     generate!("cxx_utils::qwen_xml_tool_calling_to_ebnf")
+    generate!("cxx_utils::get_masked_tokens_from_bitmask")
+    generate!("cxx_utils::SingleTokenResult")
+    generate!("cxx_utils::is_single_token_bitmask")
 
     // DLPack core types
     generate_pod!("DLTensor")
@@ -74,10 +77,14 @@ include_cpp! {
 
 }
 
+// Re-export DLPack types for public use
+pub use ffi::{
+    DLDataType, DLDataTypeCode, DLDevice, DLDeviceType, DLManagedTensor,
+    DLTensor,
+};
 #[allow(unused_imports)]
 use ffi::{
-    DLDataType, DLDataTypeCode, DLDevice, DLDeviceType, DLManagedTensor,
-    DLTensor, cxx_utils,
+    cxx_utils,
     xgrammar::{
         CompiledGrammar as FFICompiledGrammar,
         GetBitmaskDLType as FFIGetBitmaskDLType,
@@ -98,22 +105,13 @@ mod grammar;
 mod matcher;
 mod tokenizer_info;
 
+pub mod testing;
+
 pub use compiler::{CompiledGrammar, GrammarCompiler};
 pub use config::{
     get_max_recursion_depth, get_serialization_version, set_max_recursion_depth,
 };
 pub use ffi::xgrammar::VocabType;
 pub use grammar::{Grammar, StructuralTagItem};
-pub use matcher::GrammarMatcher;
+pub use matcher::{GrammarMatcher, allocate_token_bitmask, get_bitmask_shape};
 pub use tokenizer_info::TokenizerInfo;
-
-// Testing utilities
-pub mod testing {
-    use super::*;
-
-    /// Convert a function call schema to EBNF grammar in Qwen XML style.
-    pub fn qwen_xml_tool_calling_to_ebnf(schema_json: &str) -> String {
-        let schema_cxx = ffi::make_string(schema_json);
-        ffi::cxx_utils::qwen_xml_tool_calling_to_ebnf(&schema_cxx).to_string()
-    }
-}

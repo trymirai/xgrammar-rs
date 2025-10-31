@@ -36,14 +36,17 @@ impl Grammar {
     }
 
     /// Construct a grammar from EBNF string. The EBNF string should follow the format
-    /// in https://github.com/ggerganov/llama.cpp/blob/master/grammars/README.md.
+    /// in <https://github.com/ggerganov/llama.cpp/blob/master/grammars/README.md>.
     ///
-    /// Parameters
+    /// # Parameters
     /// - `ebnf_string`: The grammar string in EBNF format.
-    /// - `root_rule_name`: The name of the root rule in the grammar.
+    /// - `root_rule_name`: The name of the root rule in the grammar (default: "root").
     ///
-    /// Errors
-    /// - Panics if converting the EBNF fails. The C++ layer would normally throw with details.
+    /// # Returns
+    /// The constructed grammar.
+    ///
+    /// # Panics
+    /// When converting the EBNF fails, with details about the parsing error.
     pub fn from_ebnf(
         ebnf_string: &str,
         root_rule_name: &str,
@@ -61,30 +64,40 @@ impl Grammar {
     ///
     /// It allows any whitespace by default. If you want to specify the format of the JSON,
     /// set `any_whitespace` to false and use the `indent` and `separators` parameters. The
-    /// meaning and the default values of the parameters follows the convention in `serde_json`
-    ////python `json.dumps()`.
+    /// meaning and the default values of the parameters follows the convention in Python's
+    /// `json.dumps()`.
     ///
     /// It internally converts the JSON schema to an EBNF grammar.
     ///
-    /// Parameters
-    /// - `schema`: The schema string (JSON schema as a string).
-    /// - `any_whitespace`: Whether to use any whitespace. If true, the generated grammar will
+    /// # Parameters
+    /// - `schema`: The schema string or Pydantic model or JSON schema dict (only string supported in Rust).
+    /// - `any_whitespace`: Whether to use any whitespace (default: true). If true, the generated grammar will
     ///   ignore the indent and separators parameters, and allow any whitespace.
-    /// - `indent`: The number of spaces for indentation. If None, the output will be in one line.
+    /// - `indent`: The number of spaces for indentation (default: None). If None, the output will be in one line.
+    ///   
     ///   Note that specifying the indentation means forcing the LLM to generate JSON strings
     ///   strictly formatted. However, some models may tend to generate JSON strings that are not
     ///   strictly formatted. In this case, forcing the LLM to generate strictly formatted JSON
-    ///   strings may degrade the generation quality.
-    /// - `separators`: Two separators used in the schema: comma and colon. Examples: (",", ":"),
-    ///   (", ", ": "). If None, the default separators will be used: (",", ": ") when the
-    ///   indent is Some, and (", ", ": ") otherwise.
-    /// - `strict_mode`: Whether to use strict mode. In strict mode, the generated grammar will not
-    ///   allow properties and items that is not specified in the schema. This is equivalent to
-    ///   setting unevaluatedProperties and unevaluatedItems to false.
-    /// - `print_converted_ebnf`: If true, the converted EBNF string will be printed. For debugging.
+    ///   strings may degrade the generation quality. See
+    ///   <https://github.com/sgl-project/sglang/issues/2216#issuecomment-2516192009> for more details.
     ///
-    /// Errors
-    /// - Panics if converting the JSON schema fails. The C++ layer would normally throw with details.
+    /// - `separators`: Two separators used in the schema: comma and colon (default: None).
+    ///   Examples: `(",", ":")`, `(", ", ": ")`. If None, the default separators will be used:
+    ///   `(",", ": ")` when the indent is not None, and `(", ", ": ")` otherwise.
+    /// - `strict_mode`: Whether to use strict mode (default: true). In strict mode, the generated grammar will not
+    ///   allow properties and items that is not specified in the schema. This is equivalent to
+    ///   setting `unevaluatedProperties` and `unevaluatedItems` to false.
+    ///   
+    ///   This helps LLM to generate accurate output in the grammar-guided generation with JSON schema.
+    ///
+    /// - `print_converted_ebnf`: If true, the converted EBNF string will be printed (default: false).
+    ///   For debugging purposes.
+    ///
+    /// # Returns
+    /// The constructed grammar.
+    ///
+    /// # Panics
+    /// When converting the JSON schema fails, with details about the parsing error.
     pub fn from_json_schema(
         schema: &str,
         any_whitespace: bool,
@@ -130,12 +143,17 @@ impl Grammar {
 
     /// Create a grammar from a regular expression string.
     ///
-    /// Parameters
+    /// # Parameters
     /// - `regex_string`: The regular expression pattern to create the grammar from.
-    /// - `print_converted_ebnf`: If true, print the converted EBNF for debugging.
+    /// - `print_converted_ebnf`: This method will convert the regex pattern to EBNF first.
+    ///   If this is true, the converted EBNF string will be printed. For debugging purposes
+    ///   (default: false).
     ///
-    /// Errors
-    /// - Panics if parsing the regex fails. The C++ layer would normally throw with details.
+    /// # Returns
+    /// The constructed grammar from the regex pattern.
+    ///
+    /// # Panics
+    /// When parsing the regex pattern fails, with details about the parsing error.
     pub fn from_regex(
         regex_string: &str,
         print_converted_ebnf: bool,
@@ -148,19 +166,49 @@ impl Grammar {
         }
     }
 
-    /// Create a grammar from structural tags.
+    /// Create a grammar from structural tags. The structural tag handles the dispatching
+    /// of different grammars based on the tags and triggers: it initially allows any output,
+    /// until a trigger is encountered, then dispatch to the corresponding tag; when the end tag
+    /// is encountered, the grammar will allow any following output, until the next trigger is
+    /// encountered.
     ///
-    /// The structural tag handles the dispatching of different grammars based on the tags and
-    /// triggers: it initially allows any output, until a trigger is encountered, then dispatch to
-    /// the corresponding tag; when the end tag is encountered, the grammar will allow any following
-    /// output, until the next trigger is encountered.
+    /// The tags parameter is used to specify the output pattern. It is especially useful for LLM
+    /// function calling, where the pattern is:
+    /// `<function=func_name>{"arg1": ..., "arg2": ...}</function>`.
+    /// This pattern consists of three parts: a begin tag (`<function=func_name>`), a parameter list
+    /// according to some schema (`{"arg1": ..., "arg2": ...}`), and an end tag (`</function>`). This
+    /// pattern can be described in a [`StructuralTagItem`] with a begin tag, a schema, and an end tag.
+    /// The structural tag is able to handle multiple such patterns by passing them into multiple
+    /// tags.
     ///
-    /// Parameters
+    /// The triggers parameter is used to trigger the dispatching of different grammars. The trigger
+    /// should be a prefix of a provided begin tag. When the trigger is encountered, the
+    /// corresponding tag should be used to constrain the following output. There can be multiple
+    /// tags matching the same trigger. Then if the trigger is encountered, the following output
+    /// should match one of the tags. For example, in function calling, the triggers can be
+    /// `["<function="]`. Then if `"<function="` is encountered, the following output must match one
+    /// of the tags (e.g. `<function=get_weather>{"city": "Beijing"}</function>`).
+    ///
+    /// The correspondence of tags and triggers is automatically determined: all tags with the
+    /// same trigger will be grouped together. User should make sure any trigger is not a prefix
+    /// of another trigger: then the correspondence of tags and triggers will be ambiguous.
+    ///
+    /// To use this grammar in grammar-guided generation, the [`crate::GrammarMatcher`] constructed from
+    /// structural tag will generate a mask for each token. When the trigger is not encountered,
+    /// the mask will likely be all-1 and not have to be used ([`crate::GrammarMatcher::fill_next_token_bitmask`] returns
+    /// false, meaning no token is masked). When a trigger is encountered, the mask should be
+    /// enforced ([`crate::GrammarMatcher::fill_next_token_bitmask`] will return true, meaning some token is masked) to the
+    /// output logits.
+    ///
+    /// The benefit of this method is the token boundary between tags and triggers is automatically
+    /// handled. The user does not need to worry about the token boundary.
+    ///
+    /// # Parameters
     /// - `tags`: The structural tags.
     /// - `triggers`: The triggers. Each trigger should be a prefix of a provided begin tag.
     ///
-    /// Returns
-    /// - The constructed grammar.
+    /// # Returns
+    /// The constructed grammar.
     pub fn from_structural_tag(
         tags: &[StructuralTagItem],
         triggers: &[impl AsRef<str>],
@@ -215,7 +263,10 @@ impl Grammar {
     }
 
     /// Get the grammar of standard JSON. This is compatible with the official JSON grammar
-    /// specification in https://www.json.org/json-en.html.
+    /// specification in <https://www.json.org/json-en.html>.
+    ///
+    /// # Returns
+    /// The constructed grammar for JSON.
     pub fn builtin_json_grammar() -> Self {
         let ffi_pin = FFIGrammar::BuiltinJSONGrammar().within_box();
         Self {
@@ -223,8 +274,15 @@ impl Grammar {
         }
     }
 
-    /// Create a grammar that matches the concatenation of the grammars in the slice. That is
-    /// equivalent to using the `+` operator to concatenate the grammars in the slice.
+    /// Create a grammar that matches the concatenation of the grammars in the slice.
+    ///
+    /// This is equivalent to using the `+` operator to concatenate the grammars in the slice.
+    ///
+    /// # Parameters
+    /// - `grammars`: The grammars to concatenate. Must contain at least one grammar.
+    ///
+    /// # Returns
+    /// The constructed grammar.
     pub fn concat(grammars: &[Grammar]) -> Self {
         assert!(!grammars.is_empty(), "concat requires at least one grammar");
         let mut vec = cxx_utils::new_grammar_vector();
@@ -244,8 +302,15 @@ impl Grammar {
         }
     }
 
-    /// Create a grammar that matches any of the grammars in the slice. That is equivalent to
-    /// using the `|` operator to create the union of the grammars in the slice.
+    /// Create a grammar that matches any of the grammars in the slice.
+    ///
+    /// This is equivalent to using the `|` operator to create the union of the grammars in the slice.
+    ///
+    /// # Parameters
+    /// - `grammars`: The grammars to union. Must contain at least one grammar.
+    ///
+    /// # Returns
+    /// The constructed grammar.
     pub fn union(grammars: &[Grammar]) -> Self {
         assert!(!grammars.is_empty(), "union requires at least one grammar");
         let mut vec = cxx_utils::new_grammar_vector();

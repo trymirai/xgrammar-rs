@@ -6,17 +6,33 @@ use crate::ffi::xgrammar::{
     SetMaxRecursionDepth as FFISetMaxRecursionDepth,
 };
 
-/// Return the serialization version string (e.g., "v5").
+/// Get the serialization version number. The current version is "v5".
+///
+/// # Returns
+/// The serialization version number.
 pub fn get_serialization_version() -> String {
     FFIGetSerializationVersion().to_string()
 }
 
-/// Set the maximum recursion depth used by the parser/matcher.
-pub fn set_max_recursion_depth(depth: i32) {
-    FFISetMaxRecursionDepth(c_int(depth))
-}
-
-/// Get the maximum recursion depth used by the parser/matcher.
+/// Get the maximum allowed recursion depth. The depth is shared per process.
+///
+/// The maximum recursion depth is determined in the following order:
+///
+/// 1. Manually set via [`set_max_recursion_depth`]
+/// 2. `XGRAMMAR_MAX_RECURSION_DEPTH` environment variable (if set and is a valid integer <= 1,000,000)
+/// 3. Default value of 10,000
+///
+/// # Returns
+/// The maximum allowed recursion depth.
 pub fn get_max_recursion_depth() -> i32 {
     FFIGetMaxRecursionDepth().0
+}
+
+/// Set the maximum allowed recursion depth. The depth is shared per process.
+/// This method is thread-safe.
+///
+/// # Parameters
+/// - `max_recursion_depth`: The maximum allowed recursion depth.
+pub fn set_max_recursion_depth(max_recursion_depth: i32) {
+    FFISetMaxRecursionDepth(c_int(max_recursion_depth))
 }

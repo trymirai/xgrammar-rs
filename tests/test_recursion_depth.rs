@@ -1,3 +1,5 @@
+mod test_utils;
+
 use serial_test::serial;
 
 #[test]

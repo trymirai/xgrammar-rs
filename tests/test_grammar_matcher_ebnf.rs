@@ -1,30 +1,12 @@
+mod test_utils;
+
 use serial_test::serial;
+use test_utils::*;
+use xgrammar::Grammar;
+#[cfg(feature = "hf")]
 use xgrammar::{
-    Grammar, GrammarCompiler, GrammarMatcher, TokenizerInfo, VocabType,
+    GrammarCompiler, GrammarMatcher, allocate_token_bitmask, testing,
 };
-
-fn matcher_from_grammar(grammar: &Grammar) -> GrammarMatcher {
-    // Minimal tokenizer info is sufficient for string acceptance tests
-    let empty_vocab: Vec<&str> = vec![];
-    let stop_ids: Option<Box<[i32]>> = None;
-    let tokenizer_info =
-        TokenizerInfo::new(&empty_vocab, VocabType::RAW, &stop_ids, false);
-    let mut compiler = GrammarCompiler::new(&tokenizer_info, 1, false, -1);
-    let compiled = compiler.compile_grammar(grammar);
-    GrammarMatcher::new(&compiled, None, true, -1)
-}
-
-fn is_grammar_accept_string(
-    grammar: &Grammar,
-    input: &str,
-) -> bool {
-    let mut matcher = matcher_from_grammar(grammar);
-    let accepted = matcher.accept_string(input, false);
-    if !accepted {
-        return false;
-    }
-    matcher.is_terminated()
-}
 
 #[test]
 #[serial]
@@ -193,6 +175,8 @@ fn test_json_refuse() {
 #[serial]
 fn test_json_pressure() {
     let grammar = Grammar::from_ebnf(json_grammar_ebnf(), "root");
+
+    // Extra long string: 1k chars
     let long_1k: &str = concat!(
         "[\"Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec odio. Praesent ",
         "libero. Sed cursus ante dapibus diam. Sed nisi. Nulla quis sem at nibh elementum ",
@@ -214,6 +198,7 @@ fn test_json_pressure() {
     );
     assert!(is_grammar_accept_string(&grammar, long_1k));
 
+    // long and complex json: 3k chars
     let long_3k = r#"{
     "web-app": {
     "servlet": [
@@ -319,6 +304,99 @@ fn test_json_pressure() {
 
 #[test]
 #[serial]
+#[cfg(feature = "hf")]
+fn test_fill_next_token_bitmask() {
+    let test_cases: &[(&str, &str, &[usize])] = &[
+        (
+            "meta-llama/Llama-2-7b-chat-hf",
+            "{\"id\": 1,\"name\": \"Example\"}",
+            &[
+                31989, 31912, 270, 270, 270, 31973, 31846, 31846, 31948, 31915,
+                270, 270, 270, 270, 270, 31973, 31846, 31846, 263, 263, 263,
+                263, 263, 263, 263, 263, 31974, 31999,
+            ],
+        ),
+        (
+            "meta-llama/Llama-2-7b-chat-hf",
+            "{\n\"id\": 1,\n\"na\": \"ex\",\n\"ac\": true,\n\"t\": [\"t1\", \"t2\"],\n\"ne\": {\"lv2\": {\"val\": \"dp\"}, \"arr\": [1, 2, 3]},\n\"res\": \"res\"\n}",
+            &[
+                31989, 31912, 31912, 270, 270, 270, 31973, 31846, 31846, 31948,
+                31915, 31915, 270, 270, 270, 31973, 31846, 31846, 263, 263,
+                263, 31974, 31915, 31915, 270, 270, 270, 31973, 31846, 31846,
+                31997, 31997, 31998, 31974, 31915, 31915, 270, 270, 31973,
+                31846, 31846, 31840, 262, 262, 262, 31969, 31846, 31846, 262,
+                262, 262, 31969, 31974, 31915, 31915, 270, 270, 270, 31973,
+                31846, 31846, 31908, 270, 270, 270, 270, 31973, 31846, 31846,
+                31906, 270, 270, 270, 270, 31973, 31846, 31846, 262, 262, 262,
+                31968, 31970, 31915, 31915, 270, 270, 270, 270, 31973, 31846,
+                31846, 31840, 31943, 31846, 31846, 31943, 31846, 31846, 31943,
+                31970, 31974, 31915, 31915, 270, 270, 270, 270, 31973, 31846,
+                31846, 263, 263, 263, 263, 31974, 31974, 31999,
+            ],
+        ),
+        // Note: Skipping meta-llama/Meta-Llama-3-8B-Instruct test case as it requires
+        // additional authentication beyond HF_TOKEN
+    ];
+
+    for (tokenizer_path, input_str, expected_rejected_sizes) in test_cases {
+        let tokenizer_info = make_hf_tokenizer_info(tokenizer_path);
+        let mut grammar_compiler =
+            GrammarCompiler::new(&tokenizer_info, 8, false, -1);
+        let grammar = Grammar::from_ebnf(json_grammar_ebnf(), "root");
+        let compiled_grammar = grammar_compiler.compile_grammar(&grammar);
+        let mut matcher =
+            GrammarMatcher::new(&compiled_grammar, None, false, -1);
+
+        let vocab_size = tokenizer_info.vocab_size();
+        let mut bitmask_data = allocate_token_bitmask(1, vocab_size);
+
+        let input_bytes = input_str.as_bytes();
+
+        for (i, &c) in input_bytes.iter().enumerate() {
+            let (mut tensor, _shape, _strides) =
+                create_bitmask_dltensor(&mut bitmask_data, 1, vocab_size);
+
+            matcher.fill_next_token_bitmask(&mut tensor, 0, false);
+
+            let rejected_token_ids = testing::get_masked_tokens_from_bitmask(
+                &tensor,
+                vocab_size as i32,
+                0,
+            );
+            assert_eq!(
+                rejected_token_ids.len(),
+                expected_rejected_sizes[i],
+                "Mismatch at byte index {} (char: {})",
+                i,
+                c as char
+            );
+
+            let byte_array = [c];
+            let byte_str = std::str::from_utf8(&byte_array).unwrap_or("");
+            assert!(matcher.accept_string(byte_str, false));
+
+            // Reset bitmask for next iteration
+            bitmask_data.fill(-1);
+        }
+
+        // Final correctness verification
+        let (mut tensor, _shape, _strides) =
+            create_bitmask_dltensor(&mut bitmask_data, 1, vocab_size);
+        matcher.fill_next_token_bitmask(&mut tensor, 0, false);
+        let rejected_token_ids = testing::get_masked_tokens_from_bitmask(
+            &tensor,
+            vocab_size as i32,
+            0,
+        );
+        assert_eq!(
+            rejected_token_ids.len(),
+            expected_rejected_sizes[expected_rejected_sizes.len() - 1]
+        );
+    }
+}
+
+#[test]
+#[serial]
 fn test_nullable_grammar() {
     let grammar_str = r#"
     root ::= rule1 | (rule1 rule1 rule1 rule3)+
@@ -412,6 +490,30 @@ fn test_character_class_star_utf8() {
     let test_string = "worldせかい世界";
     let grammar = Grammar::from_ebnf(ebnf_grammar_str, "root");
     assert!(is_grammar_accept_string(&grammar, test_string));
+}
+
+#[test]
+#[serial]
+#[cfg(feature = "hf")]
+fn test_not_neighbour_character_class() {
+    let raw_grammar = "root ::= [a-cx-z]*";
+    let tokenizer_path = "meta-llama/Llama-2-7b-chat-hf";
+    let tokenizer_info = make_hf_tokenizer_info(tokenizer_path);
+    let grammar = Grammar::from_ebnf(raw_grammar, "root");
+    let mut grammar_compiler =
+        GrammarCompiler::new(&tokenizer_info, 8, false, -1);
+    let compiled_grammar = grammar_compiler.compile_grammar(&grammar);
+    let mut matcher = GrammarMatcher::new(&compiled_grammar, None, false, -1);
+
+    let vocab_size = tokenizer_info.vocab_size();
+    let mut bitmask_data = allocate_token_bitmask(1, vocab_size);
+    let (mut tensor, _shape, _strides) =
+        create_bitmask_dltensor(&mut bitmask_data, 1, vocab_size);
+
+    matcher.fill_next_token_bitmask(&mut tensor, 0, false);
+    let rejected_token_ids =
+        testing::get_masked_tokens_from_bitmask(&tensor, vocab_size as i32, 0);
+    assert_eq!(rejected_token_ids.len(), 31933);
 }
 
 #[test]

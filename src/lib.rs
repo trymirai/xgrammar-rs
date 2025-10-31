@@ -4,7 +4,6 @@ use autocxx::prelude::*;
 
 include_cpp! {
     #include "xgrammar/xgrammar.h"
-    #include "cxx_utils/testing_decl.hpp"
     #include "dlpack/dlpack.h"
     #include "cxx_utils.hpp"
     safety!(unsafe_ffi)
@@ -26,9 +25,6 @@ include_cpp! {
     generate!("xgrammar::GetBitmaskDLType")
     generate!("xgrammar::ApplyTokenBitmaskInplaceCPU")
     generate!("xgrammar::GrammarMatcher")
-
-    // xgrammar/testing.h
-    generate!("xgrammar::_QwenXMLToolCallingToEBNF")
 
     // xgrammar/tokenizer_info.h
     generate!("xgrammar::VocabType")
@@ -79,7 +75,6 @@ use ffi::{
     DLDataType, DLDataTypeCode, DLDevice, DLDeviceType, DLManagedTensor,
     DLTensor, cxx_utils,
     xgrammar::{
-        _QwenXMLToolCallingToEBNF as FFI_QwenXMLToolCallingToEBNF,
         CompiledGrammar as FFICompiledGrammar,
         GetBitmaskDLType as FFIGetBitmaskDLType,
         GetBitmaskSize as FFIGetBitmaskSize,
@@ -94,34 +89,16 @@ use ffi::{
 };
 
 mod compiler;
+mod config;
 mod grammar;
 mod matcher;
 mod tokenizer_info;
 
 pub use compiler::{CompiledGrammar, GrammarCompiler};
+pub use config::{
+    get_max_recursion_depth, get_serialization_version, set_max_recursion_depth,
+};
 pub use ffi::xgrammar::VocabType;
 pub use grammar::{Grammar, StructuralTagItem};
 pub use matcher::GrammarMatcher;
 pub use tokenizer_info::TokenizerInfo;
-
-/// Return the serialization version string (e.g., "v5").
-pub fn get_serialization_version() -> String {
-    FFIGetSerializationVersion().to_string()
-}
-
-/// Set the maximum recursion depth used by the parser/matcher.
-pub fn set_max_recursion_depth(depth: i32) {
-    FFISetMaxRecursionDepth(autocxx::c_int(depth))
-}
-
-/// Get the maximum recursion depth used by the parser/matcher.
-pub fn get_max_recursion_depth() -> i32 {
-    FFIGetMaxRecursionDepth().0
-}
-
-/// Convert Qwen XML tool calling schema (JSON string) to an EBNF grammar string.
-/// Mirrors Python testing `_qwen_xml_tool_calling_to_ebnf`.
-pub fn qwen_xml_tool_calling_to_ebnf(schema_json: &str) -> String {
-    cxx::let_cxx_string!(schema_cxx = schema_json);
-    FFI_QwenXMLToolCallingToEBNF(&schema_cxx).to_string()
-}

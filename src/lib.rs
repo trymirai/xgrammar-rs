@@ -6,6 +6,7 @@ include_cpp! {
     #include "xgrammar/xgrammar.h"
     #include "dlpack/dlpack.h"
     #include "cxx_utils.hpp"
+    #include "cxx_utils/testing.hpp"
     safety!(unsafe_ffi)
     // xgrammar/compiler.h
     generate!("xgrammar::CompiledGrammar")
@@ -60,6 +61,9 @@ include_cpp! {
     // cxx_utils/matcher.hpp
     generate!("cxx_utils::make_grammar_matcher")
 
+    // cxx_utils/testing.hpp
+    generate!("cxx_utils::qwen_xml_tool_calling_to_ebnf")
+
     // DLPack core types
     generate_pod!("DLTensor")
     generate!("DLManagedTensor")  // Has function pointer, not POD
@@ -102,3 +106,14 @@ pub use ffi::xgrammar::VocabType;
 pub use grammar::{Grammar, StructuralTagItem};
 pub use matcher::GrammarMatcher;
 pub use tokenizer_info::TokenizerInfo;
+
+// Testing utilities
+pub mod testing {
+    use super::*;
+
+    /// Convert a function call schema to EBNF grammar in Qwen XML style.
+    pub fn qwen_xml_tool_calling_to_ebnf(schema_json: &str) -> String {
+        let schema_cxx = ffi::make_string(schema_json);
+        ffi::cxx_utils::qwen_xml_tool_calling_to_ebnf(&schema_cxx).to_string()
+    }
+}

@@ -4,10 +4,7 @@ use serial_test::serial;
 fn download_tokenizer_json(
     model_id: &str
 ) -> Result<std::path::PathBuf, String> {
-    use hf_hub::{
-        Repo,
-        api::sync::{Api, ApiBuilder},
-    };
+    use hf_hub::{Repo, api::sync::ApiBuilder};
     let api = ApiBuilder::new().build().map_err(|e| e.to_string())?;
     let repo = api.repo(Repo::model(model_id.to_string()));
     repo.get("tokenizer.json").map_err(|e| e.to_string())

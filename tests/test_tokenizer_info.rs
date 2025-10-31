@@ -1,13 +1,10 @@
 #![cfg(feature = "hf")]
+use hf_hub::{Repo, api::sync::ApiBuilder};
 use serial_test::serial;
 
 fn download_tokenizer_json(
     model_id: &str
 ) -> Result<std::path::PathBuf, String> {
-    use hf_hub::{
-        Repo,
-        api::sync::{Api, ApiBuilder},
-    };
     let api = ApiBuilder::new().build().map_err(|e| e.to_string())?;
     let repo = api.repo(Repo::model(model_id.to_string()));
     repo.get("tokenizer.json").map_err(|e| e.to_string())
@@ -38,7 +35,7 @@ fn cases_model_vocab() -> Vec<(&'static str, xgrammar::VocabType, bool)> {
 #[test]
 #[serial]
 fn test_build_tokenizer_info() {
-    for (model_id, vocab_type, add_prefix_space) in cases_model_vocab() {
+    for (model_id, _vocab_type, _add_prefix_space) in cases_model_vocab() {
         let path =
             download_tokenizer_json(model_id).expect("download tokenizer.json");
         let tk =
@@ -51,7 +48,7 @@ fn test_build_tokenizer_info() {
 #[test]
 #[serial]
 fn test_properties() {
-    for (model_id, vocab_type, add_prefix_space) in cases_model_vocab() {
+    for (model_id, _vocab_type, add_prefix_space) in cases_model_vocab() {
         let path =
             download_tokenizer_json(model_id).expect("download tokenizer.json");
         let tk =
@@ -67,7 +64,7 @@ fn test_properties() {
 #[test]
 #[serial]
 fn test_decoded_vocab() {
-    for (model_id, vocab_type, add_prefix_space) in cases_model_vocab() {
+    for (model_id, _vocab_type, _add_prefix_space) in cases_model_vocab() {
         let path =
             download_tokenizer_json(model_id).expect("download tokenizer.json");
         let tk =
@@ -85,12 +82,17 @@ fn test_decoded_vocab() {
 #[serial]
 fn test_model_vocab_size_smaller_than_tokenizer() {
     // Use a public model
-    let path = download_tokenizer_json("gpt2").expect("download tokenizer.json");
+    let path =
+        download_tokenizer_json("gpt2").expect("download tokenizer.json");
     let tk = tokenizers::Tokenizer::from_file(&path).expect("load tokenizer");
     let ordered = extract_ordered_vocab(&tk);
     let orig = ordered.len();
     // Some tokenizers pad or enforce a minimum; accept "at most" check
-    let model_vocab = if orig > 200 { orig - 100 } else { orig };
+    let model_vocab = if orig > 200 {
+        orig - 100
+    } else {
+        orig
+    };
     let ti = xgrammar::TokenizerInfo::from_tokenizers_with_options(
         &tk,
         xgrammar::VocabType::BYTE_LEVEL,
@@ -107,15 +109,21 @@ fn test_model_vocab_size_smaller_than_tokenizer() {
 #[serial]
 fn test_vocab_type_detection() {
     // gpt2 -> BYTE_LEVEL
-    let path_gpt2 = download_tokenizer_json("gpt2").expect("download tokenizer.json");
-    let tk_gpt2 = tokenizers::Tokenizer::from_file(&path_gpt2).expect("load tokenizer");
-    let ti_gpt2 = xgrammar::TokenizerInfo::from_huggingface(&tk_gpt2, None, None);
+    let path_gpt2 =
+        download_tokenizer_json("gpt2").expect("download tokenizer.json");
+    let tk_gpt2 =
+        tokenizers::Tokenizer::from_file(&path_gpt2).expect("load tokenizer");
+    let ti_gpt2 =
+        xgrammar::TokenizerInfo::from_huggingface(&tk_gpt2, None, None);
     assert!(matches!(ti_gpt2.vocab_type(), xgrammar::VocabType::BYTE_LEVEL));
 
     // bert-base-uncased -> RAW
-    let path_bert = download_tokenizer_json("bert-base-uncased").expect("download tokenizer.json");
-    let tk_bert = tokenizers::Tokenizer::from_file(&path_bert).expect("load tokenizer");
-    let ti_bert = xgrammar::TokenizerInfo::from_huggingface(&tk_bert, None, None);
+    let path_bert = download_tokenizer_json("bert-base-uncased")
+        .expect("download tokenizer.json");
+    let tk_bert =
+        tokenizers::Tokenizer::from_file(&path_bert).expect("load tokenizer");
+    let ti_bert =
+        xgrammar::TokenizerInfo::from_huggingface(&tk_bert, None, None);
     assert!(matches!(ti_bert.vocab_type(), xgrammar::VocabType::RAW));
 }
 
@@ -123,7 +131,8 @@ fn test_vocab_type_detection() {
 #[serial]
 fn test_stop_token_ids_match_eos() {
     // Use a chat model with EOS token id
-    let path = download_tokenizer_json("meta-llama/Llama-2-7b-chat-hf").expect("download tokenizer.json");
+    let path = download_tokenizer_json("meta-llama/Llama-2-7b-chat-hf")
+        .expect("download tokenizer.json");
     let tk = tokenizers::Tokenizer::from_file(&path).expect("load tokenizer");
     let ti = xgrammar::TokenizerInfo::from_huggingface(&tk, None, None);
     // If the tokenizer exposes an EOS id in added tokens metadata, it should be reflected.
@@ -147,7 +156,7 @@ fn test_vocab_type_and_prefix_space_llama2() {
 #[test]
 #[serial]
 fn test_dump_metadata_load() {
-    for (model_id, vocab_type, add_prefix_space) in cases_model_vocab() {
+    for (model_id, _vocab_type, _add_prefix_space) in cases_model_vocab() {
         let path =
             download_tokenizer_json(model_id).expect("download tokenizer.json");
         let tk =

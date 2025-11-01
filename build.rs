@@ -53,6 +53,11 @@ fn main() {
     cmake_config.define("CMAKE_CXX_STANDARD_REQUIRED", "ON");
     cmake_config.define("CMAKE_CXX_EXTENSIONS", "OFF");
 
+    // Disable LTO to avoid linking issues with Rust on some platforms
+    cmake_config.define("CMAKE_INTERPROCEDURAL_OPTIMIZATION", "OFF");
+    cmake_config.cflag("-fno-lto");
+    cmake_config.cxxflag("-fno-lto");
+
     let build_profile =
         match env::var("PROFILE").unwrap_or_else(|_| "release".into()).as_str()
         {

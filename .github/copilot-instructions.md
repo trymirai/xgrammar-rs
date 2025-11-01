@@ -15,8 +15,8 @@ Build and test (macOS, zsh)
 - Build: `cargo build`. Test: `cargo test`. For paths to generated code: `cargo build -vv`.
 
 Non-obvious build details
-- `build.rs` sets CMake flags: C++23, disables upstream Python/C++ tests.
-- Links C++ stdlib per target: macOS `c++`, Linux `stdc++` and `pthread`.
+- `build.rs` sets CMake flags: C++17, disables upstream Python/C++ tests.
+- C++ standard library linking is handled automatically by the `cxx`/`autocxx` crates (via `link-cplusplus`).
 - Apple targets: configures `CMAKE_OSX_ARCHITECTURES` and iOS `CMAKE_OSX_SYSROOT`; honors `IPHONEOS_DEPLOYMENT_TARGET`.
 - Copies headers into `OUT_DIR/autocxx-build-dir/rs` to satisfy generated `include!(...)` paths.
 

@@ -108,18 +108,6 @@ fn main() {
     println!("cargo:rustc-link-search=native={}", lib_search_dir.display());
     println!("cargo:rustc-link-lib=static=xgrammar");
 
-    // Link C++ standard library depending on target
-    let target = env::var("TARGET").expect("TARGET not set");
-    if target.contains("apple-darwin") {
-        println!("cargo:rustc-link-lib=dylib=c++");
-    } else if target.contains("windows") {
-        // MSVC links the C++ runtime automatically
-    } else {
-        // Linux and others
-        println!("cargo:rustc-link-lib=dylib=stdc++");
-        println!("cargo:rustc-link-lib=dylib=pthread");
-    }
-
     // Generate and compile C++ bindings with autocxx.
     println!("cargo:rerun-if-changed=src/lib.rs");
     let mut autocxx_builder = autocxx_build::Builder::new(

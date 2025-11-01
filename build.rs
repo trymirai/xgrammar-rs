@@ -49,14 +49,22 @@ fn main() {
     cmake_config.define("XGRAMMAR_BUILD_PYTHON_BINDINGS", "OFF");
     cmake_config.define("XGRAMMAR_BUILD_CXX_TESTS", "OFF");
     cmake_config.define("XGRAMMAR_ENABLE_CPPTRACE", "OFF");
-    cmake_config.define("CMAKE_CXX_STANDARD", "17");
+    // Prefer a newer C++ standard on Windows to improve STL feature detection
+    cmake_config.define("CMAKE_CXX_STANDARD", "20");
     cmake_config.define("CMAKE_CXX_STANDARD_REQUIRED", "ON");
     cmake_config.define("CMAKE_CXX_EXTENSIONS", "OFF");
 
     // Disable LTO to avoid linking issues with Rust on some platforms
     cmake_config.define("CMAKE_INTERPROCEDURAL_OPTIMIZATION", "OFF");
-    cmake_config.cflag("-fno-lto");
-    cmake_config.cxxflag("-fno-lto");
+
+    // Apply LTO flags only for non-MSVC compilers (GCC/Clang)
+    // MSVC doesn't recognize the -fno-lto flag
+    let target = env::var("TARGET").unwrap_or_default();
+    let is_msvc = target.contains("msvc");
+    if !is_msvc {
+        cmake_config.cflag("-fno-lto");
+        cmake_config.cxxflag("-fno-lto");
+    }
 
     let build_profile =
         match env::var("PROFILE").unwrap_or_else(|_| "release".into()).as_str()
@@ -115,16 +123,37 @@ fn main() {
 
     // Generate and compile C++ bindings with autocxx.
     println!("cargo:rerun-if-changed=src/lib.rs");
+
+    // Prepare extra clang args for autocxx
+    let mut extra_clang_args = vec!["-std=c++20".to_string()];
+
+    // On Windows, explicitly set the target and disable problematic intrinsics
+    // to avoid ARM NEON header issues from Swift toolchain or other clang installations
+    let target = env::var("TARGET").unwrap_or_default();
+    if target.contains("windows") {
+        if target.contains("aarch64") {
+            extra_clang_args
+                .push("--target=aarch64-pc-windows-msvc".to_string());
+        } else if target.contains("x86_64") {
+            extra_clang_args
+                .push("--target=x86_64-pc-windows-msvc".to_string());
+        }
+    }
+
+    let extra_clang_args_refs: Vec<&str> =
+        extra_clang_args.iter().map(|s| s.as_str()).collect();
+
     let mut autocxx_builder = autocxx_build::Builder::new(
         "src/lib.rs",
         &[&src_include_dir, &xgrammar_include_dir, &dlpack_include_dir],
     )
-    .extra_clang_args(&["-std=c++17"])
+    .extra_clang_args(&extra_clang_args_refs) // for libclang parsing
     .build()
     .expect("autocxx build failed");
 
     autocxx_builder
-        .flag_if_supported("-std=c++17")
+        .flag_if_supported("-std=c++20")
+        .flag_if_supported("/std:c++20")
         .include(&src_include_dir)
         .include(&xgrammar_include_dir)
         .include(&dlpack_include_dir)

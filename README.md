@@ -172,7 +172,7 @@ HF_TOKEN=your_token cargo test --features hf
 
 - Rust 1.70 or later
 - CMake 3.18 or later (for building C++ components)
-- C++17 compatible compiler
+- C++20 compatible compiler
 
 ## Related Projects
 

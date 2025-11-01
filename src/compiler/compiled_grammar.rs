@@ -30,7 +30,7 @@ impl CompiledGrammar {
 
     /// The approximate memory usage of the compiled grammar in bytes.
     pub fn memory_size_bytes(&self) -> usize {
-        self.inner.MemorySizeBytes()
+        self.inner.MemorySizeBytes() as usize
     }
 
     /// Serialize the compiled grammar to a JSON string.

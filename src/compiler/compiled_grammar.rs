@@ -30,7 +30,9 @@ impl CompiledGrammar {
 
     /// The approximate memory usage of the compiled grammar in bytes.
     pub fn memory_size_bytes(&self) -> usize {
-        self.inner.MemorySizeBytes()
+        // MemorySizeBytes comes from C++ and maps to Rust's usize via cxx.
+        // Avoid usize -> u64 -> usize conversions which are not universally infallible.
+        self.inner.MemorySizeBytes() as usize
     }
 
     /// Serialize the compiled grammar to a JSON string.

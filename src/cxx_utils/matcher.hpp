@@ -39,6 +39,75 @@ inline xgrammar::GrammarMatcher make_grammar_matcher(
   );
 }
 
+inline xgrammar::BatchGrammarMatcher make_batch_grammar_matcher(
+    int32_t max_threads
+) {
+  return xgrammar::BatchGrammarMatcher(max_threads);
+}
+
+inline std::unique_ptr<std::vector<xgrammar::GrammarMatcher>>
+new_grammar_matcher_vector() {
+  return std::make_unique<std::vector<xgrammar::GrammarMatcher>>();
+}
+
+inline void grammar_matcher_vec_reserve(
+    std::vector<xgrammar::GrammarMatcher>& vec,
+    size_t n
+) {
+  vec.reserve(n);
+}
+
+inline void grammar_matcher_vec_push(
+    std::vector<xgrammar::GrammarMatcher>& vec,
+    const xgrammar::GrammarMatcher& matcher
+) {
+  vec.push_back(matcher);
+}
+
+inline void batch_matcher_batch_fill_next_token_bitmask(
+    xgrammar::BatchGrammarMatcher& batch_matcher,
+    std::vector<xgrammar::GrammarMatcher>* matchers,
+    DLTensor* bitmask,
+    bool has_indices,
+    const int32_t* indices_ptr,
+    size_t indices_len,
+    bool debug_print
+) {
+  std::optional<std::vector<int32_t>> indices_opt;
+  if (has_indices) {
+    std::vector<int32_t> tmp(indices_ptr, indices_ptr + indices_len);
+    indices_opt = std::move(tmp);
+  }
+  batch_matcher
+      .BatchFillNextTokenBitmask(matchers, bitmask, indices_opt, debug_print);
+}
+
+inline std::vector<uint8_t> batch_accept_token(
+    std::vector<xgrammar::GrammarMatcher>* matchers,
+    const int32_t* token_ids_ptr,
+    size_t token_ids_len,
+    bool debug_print
+) {
+  std::vector<int32_t> token_ids(token_ids_ptr, token_ids_ptr + token_ids_len);
+  return xgrammar::BatchGrammarMatcher::BatchAcceptToken(
+      matchers,
+      token_ids,
+      debug_print
+  );
+}
+
+inline std::vector<uint8_t> batch_accept_string(
+    std::vector<xgrammar::GrammarMatcher>* matchers,
+    const std::vector<std::string>& strings,
+    bool debug_print
+) {
+  return xgrammar::BatchGrammarMatcher::BatchAcceptString(
+      matchers,
+      strings,
+      debug_print
+  );
+}
+
 } // namespace cxx_utils
 
 #endif // XGRAMMAR_RS_CXX_UTILS_MATCHER_H_

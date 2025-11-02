@@ -75,6 +75,23 @@ inline std::unique_ptr<xgrammar::Grammar> grammar_deserialize_json_or_error(
   );
 }
 
+inline std::unique_ptr<xgrammar::Grammar> grammar_from_structural_tag(
+    const std::string& structural_tag_json,
+    std::string* error_out
+) {
+  auto result = xgrammar::Grammar::FromStructuralTag(structural_tag_json);
+  if (std::holds_alternative<xgrammar::StructuralTagError>(result)) {
+    if (error_out) {
+      const auto& err = std::get<xgrammar::StructuralTagError>(result);
+      std::visit([&](const auto& e) { *error_out = e.what(); }, err);
+    }
+    return nullptr;
+  }
+  return std::make_unique<xgrammar::Grammar>(
+      std::get<xgrammar::Grammar>(std::move(result))
+  );
+}
+
 } // namespace cxx_utils
 
 #endif // XGRAMMAR_RS_CXX_UTILS_GRAMMAR_H_

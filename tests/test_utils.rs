@@ -12,7 +12,15 @@ use xgrammar::{
 pub fn download_tokenizer_json(
     model_id: &str
 ) -> Result<std::path::PathBuf, String> {
-    let api = ApiBuilder::new().build().map_err(|e| e.to_string())?;
+    // Pass HF token explicitly from env to ensure access to gated models in CI/WSL
+    let token = std::env::var("HUGGING_FACE_HUB_TOKEN")
+        .or_else(|_| std::env::var("HF_HUB_TOKEN"))
+        .or_else(|_| std::env::var("HF_TOKEN"))
+        .ok();
+    let api = ApiBuilder::new()
+        .with_token(token)
+        .build()
+        .map_err(|e| e.to_string())?;
     let repo = api.repo(Repo::model(model_id.to_string()));
     repo.get("tokenizer.json").map_err(|e| e.to_string())
 }

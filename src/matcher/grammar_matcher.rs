@@ -2,44 +2,7 @@ use std::pin::Pin;
 
 use autocxx::prelude::*;
 
-use crate::{
-    DLTensor, FFIGrammarMatcher, compiler::CompiledGrammar, cxx_utils,
-};
-
-/// Get the shape of the bitmask for next token prediction.
-///
-/// # Parameters
-/// - `batch_size`: The batch size of the bitmask.
-/// - `vocab_size`: The size of the vocabulary.
-///
-/// # Returns
-/// A tuple of (batch_size, ceil(vocab_size / 32)).
-pub fn get_bitmask_shape(
-    batch_size: usize,
-    vocab_size: usize,
-) -> (usize, usize) {
-    (batch_size, (vocab_size + 31) / 32)
-}
-
-/// Allocate the bitmask for the next token prediction. The bitmask is an int32 tensor on
-/// CPU with shape (batch_size, ceil(vocab_size / 32)).
-///
-/// The reason why we use int32 instead of uint32 is compatibility with various tensor libraries.
-///
-/// # Parameters
-/// - `batch_size`: The batch size of the bitmask.
-/// - `vocab_size`: The size of the vocabulary.
-///
-/// # Returns
-/// A boxed slice containing the bitmask data, initialized to all bits set (no masking).
-pub fn allocate_token_bitmask(
-    batch_size: usize,
-    vocab_size: usize,
-) -> Box<[i32]> {
-    let (_, bitmask_size) = get_bitmask_shape(batch_size, vocab_size);
-    let total_size = batch_size * bitmask_size;
-    vec![-1i32; total_size].into_boxed_slice()
-}
+use crate::{DLTensor, FFIGrammarMatcher, compiler::CompiledGrammar, cxx_utils};
 
 /// Match tokens/strings to a compiled grammar and generate next-token masks.
 pub struct GrammarMatcher {
@@ -211,10 +174,8 @@ impl GrammarMatcher {
 
     /// Get the maximum number of rollback tokens allowed.
     ///
-    /// Deprecated. Now max_rollback_tokens is always unlimited (-1).
-    ///
     /// # Returns
-    /// The maximum number of rollback tokens.
+    /// The maximum number of rollback tokens. Always returns -1 (unlimited).
     pub fn max_rollback_tokens(&self) -> i32 {
         -1
     }
@@ -238,5 +199,9 @@ impl GrammarMatcher {
     /// The internal state of the matcher.
     pub fn debug_print_internal_state(&self) -> String {
         self.inner._DebugPrintInternalState().to_string()
+    }
+
+    pub(crate) fn ffi_ref(&self) -> &FFIGrammarMatcher {
+        self.inner.as_ref().get_ref()
     }
 }

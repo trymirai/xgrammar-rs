@@ -3,6 +3,8 @@ mod test_utils;
 use serial_test::serial;
 use test_utils::*;
 use xgrammar::{Grammar, TokenizerInfo, VocabType};
+#[cfg(feature = "hf")]
+use xgrammar::{GrammarCompiler, GrammarMatcher};
 
 #[test]
 #[serial]
@@ -430,4 +432,36 @@ fn test_vocab_size() {
     // Only token 7 ("{") should be accepted at the start
     assert_eq!(rejected_count, 63);
     assert!(is_token_accepted_helper(7, &bitmask));
+}
+
+#[test]
+#[serial]
+#[cfg(feature = "hf")]
+fn test_override_stop_tokens() {
+    // Mirror Python: ensure stop token overrides work at both TokenizerInfo and Matcher levels
+    let model_id = "meta-llama/Llama-2-7b-chat-hf";
+    let override_stop_tokens: &[i32] = &[2];
+
+    // Build tokenizers::Tokenizer and TokenizerInfo with override stops
+    let path = test_utils::download_tokenizer_json(model_id)
+        .expect("download tokenizer.json");
+    let tk = tokenizers::Tokenizer::from_file(&path).expect("load tokenizer");
+    let tokenizer_info_1 = TokenizerInfo::from_huggingface(&tk, None, Some(override_stop_tokens));
+    assert_eq!(&*tokenizer_info_1.stop_token_ids(), override_stop_tokens);
+
+    // Compile a grammar with tokenizer_info_1 and verify matcher inherits stop ids
+    let grammar = Grammar::builtin_json_grammar();
+    let mut compiler = GrammarCompiler::new(&tokenizer_info_1, 1, false, -1);
+    let compiled = compiler.compile_grammar(&grammar);
+    let matcher_1 = GrammarMatcher::new(&compiled, None, true, -1);
+    assert_eq!(&*matcher_1.stop_token_ids(), override_stop_tokens);
+
+    // Build TokenizerInfo without overrides
+    let tokenizer_info_2 = TokenizerInfo::from_huggingface(&tk, None, None);
+    let mut compiler2 = GrammarCompiler::new(&tokenizer_info_2, 1, false, -1);
+    let compiled2 = compiler2.compile_grammar(&grammar);
+
+    // Override at matcher creation
+    let matcher_2 = GrammarMatcher::new(&compiled2, Some(override_stop_tokens), true, -1);
+    assert_eq!(&*matcher_2.stop_token_ids(), override_stop_tokens);
 }

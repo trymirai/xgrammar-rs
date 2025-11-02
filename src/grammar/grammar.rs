@@ -2,10 +2,7 @@ use std::pin::Pin;
 
 use autocxx::prelude::*;
 
-use crate::{
-    ffi::{cxx_utils, xgrammar::Grammar as FFIGrammar},
-    grammar::structural_tag_item::StructuralTagItem,
-};
+use crate::ffi::{cxx_utils, xgrammar::Grammar as FFIGrammar};
 
 /// This class represents a grammar object in XGrammar, and can be used later in the
 /// grammar-guided generation.
@@ -166,102 +163,60 @@ impl Grammar {
         }
     }
 
-    /// Create a grammar from structural tags. The structural tag handles the dispatching
-    /// of different grammars based on the tags and triggers: it initially allows any output,
-    /// until a trigger is encountered, then dispatch to the corresponding tag; when the end tag
-    /// is encountered, the grammar will allow any following output, until the next trigger is
-    /// encountered.
+    /// Create a grammar from a structural tag JSON string.
     ///
-    /// The tags parameter is used to specify the output pattern. It is especially useful for LLM
-    /// function calling, where the pattern is:
-    /// `<function=func_name>{"arg1": ..., "arg2": ...}</function>`.
-    /// This pattern consists of three parts: a begin tag (`<function=func_name>`), a parameter list
-    /// according to some schema (`{"arg1": ..., "arg2": ...}`), and an end tag (`</function>`). This
-    /// pattern can be described in a [`StructuralTagItem`] with a begin tag, a schema, and an end tag.
-    /// The structural tag is able to handle multiple such patterns by passing them into multiple
-    /// tags.
-    ///
-    /// The triggers parameter is used to trigger the dispatching of different grammars. The trigger
-    /// should be a prefix of a provided begin tag. When the trigger is encountered, the
-    /// corresponding tag should be used to constrain the following output. There can be multiple
-    /// tags matching the same trigger. Then if the trigger is encountered, the following output
-    /// should match one of the tags. For example, in function calling, the triggers can be
-    /// `["<function="]`. Then if `"<function="` is encountered, the following output must match one
-    /// of the tags (e.g. `<function=get_weather>{"city": "Beijing"}</function>`).
-    ///
-    /// The correspondence of tags and triggers is automatically determined: all tags with the
-    /// same trigger will be grouped together. User should make sure any trigger is not a prefix
-    /// of another trigger: then the correspondence of tags and triggers will be ambiguous.
-    ///
-    /// To use this grammar in grammar-guided generation, the [`crate::GrammarMatcher`] constructed from
-    /// structural tag will generate a mask for each token. When the trigger is not encountered,
-    /// the mask will likely be all-1 and not have to be used ([`crate::GrammarMatcher::fill_next_token_bitmask`] returns
-    /// false, meaning no token is masked). When a trigger is encountered, the mask should be
-    /// enforced ([`crate::GrammarMatcher::fill_next_token_bitmask`] will return true, meaning some token is masked) to the
-    /// output logits.
-    ///
-    /// The benefit of this method is the token boundary between tags and triggers is automatically
-    /// handled. The user does not need to worry about the token boundary.
+    /// The structural tag handles the dispatching of different grammars based on the
+    /// tags and triggers: it initially allows any output, until a trigger is encountered,
+    /// then dispatch to the corresponding tag; when the end tag is encountered, the grammar
+    /// will allow any following output, until the next trigger is encountered.
     ///
     /// # Parameters
-    /// - `tags`: The structural tags.
-    /// - `triggers`: The triggers. Each trigger should be a prefix of a provided begin tag.
+    /// - `structural_tag_json`: The structural tag as a JSON string. The JSON should follow
+    ///   the StructuralTag format with type "structural_tag" and a format object containing
+    ///   triggered_tags with triggers and tags arrays.
     ///
     /// # Returns
-    /// The constructed grammar.
-    pub fn from_structural_tag(
-        tags: &[StructuralTagItem],
-        triggers: &[impl AsRef<str>],
-    ) -> Self {
-        let mut structural_tag_vector = cxx_utils::new_structural_tag_vector();
-        let mut trigger_string_vector = cxx_utils::new_string_vector();
-
-        {
-            let mut structural_tag_vector_pin = structural_tag_vector.pin_mut();
-            let mut trigger_vector_pin = trigger_string_vector.pin_mut();
-
-            cxx_utils::structural_tag_vec_reserve(
-                structural_tag_vector_pin.as_mut(),
-                tags.len(),
-            );
-            cxx_utils::string_vec_reserve(
-                trigger_vector_pin.as_mut(),
-                triggers.len(),
-            );
-
-            for tag in tags {
-                cxx::let_cxx_string!(begin_cxx = tag.begin.as_str());
-                cxx::let_cxx_string!(schema_cxx = tag.schema.as_str());
-                cxx::let_cxx_string!(end_cxx = tag.end.as_str());
-                cxx_utils::structural_tag_vec_push(
-                    structural_tag_vector_pin.as_mut(),
-                    &begin_cxx,
-                    &schema_cxx,
-                    &end_cxx,
-                );
-            }
-            for trig in triggers {
-                let trigger_bytes = trig.as_ref().as_bytes();
-                unsafe {
-                    cxx_utils::string_vec_push_bytes(
-                        trigger_vector_pin.as_mut(),
-                        trigger_bytes.as_ptr() as *const i8,
-                        trigger_bytes.len(),
-                    );
-                }
-            }
+    /// - `Ok(Grammar)` on success
+    /// - `Err(String)` when the structural tag JSON is invalid or malformed.
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// use serde_json::json;
+    /// let structural_tag_json = json!({
+    ///     "type": "structural_tag",
+    ///     "format": {
+    ///         "type": "triggered_tags",
+    ///         "triggers": ["<tool>"],
+    ///         "tags": [{
+    ///             "type": "tag",
+    ///             "begin": "<tool>",
+    ///             "content": {
+    ///                 "type": "json_schema",
+    ///                 "json_schema": {"type": "object", "properties": {...}}
+    ///             },
+    ///             "end": "</tool>"
+    ///         }]
+    ///     }
+    /// }).to_string();
+    /// let grammar = Grammar::from_structural_tag(&structural_tag_json)?;
+    /// ```
+    pub fn from_structural_tag(structural_tag_json: &str) -> Result<Self, String> {
+        cxx::let_cxx_string!(json_cxx = structural_tag_json);
+        cxx::let_cxx_string!(error_out_cxx = "");
+        let unique_ptr = unsafe {
+            cxx_utils::grammar_from_structural_tag(
+                &json_cxx,
+                error_out_cxx.as_mut().get_unchecked_mut(),
+            )
+        };
+        if unique_ptr.is_null() {
+            return Err(error_out_cxx.to_string());
         }
-
-        let ffi_pin = FFIGrammar::FromStructuralTag(
-            structural_tag_vector.as_ref().unwrap(),
-            trigger_string_vector.as_ref().unwrap(),
-        )
-        .within_box();
-        Self {
-            inner: ffi_pin,
-        }
+        let raw_ptr = unique_ptr.into_raw();
+        let ffi_box = unsafe { Box::from_raw(raw_ptr) };
+        let ffi_pin = unsafe { Pin::new_unchecked(ffi_box) };
+        Ok(Self { inner: ffi_pin })
     }
-
     /// Get the grammar of standard JSON. This is compatible with the official JSON grammar
     /// specification in <https://www.json.org/json-en.html>.
     ///

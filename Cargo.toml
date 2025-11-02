@@ -17,6 +17,7 @@ categories = ["parsing", "text-processing"]
 [dependencies]
 autocxx = "0.30.0"
 cxx = "1.0.187"
+serde_json = "1.0.145"
 
 [build-dependencies]
 walkdir = "2.5.0"

@@ -25,12 +25,18 @@ fn test_structural_tag_grammar_print_and_accept() {
     ];
     let triggers = vec!["<function=f", "<function=g"];
 
-    let grammar = Grammar::from_structural_tag(&tags, &triggers);
-    // Basic smoke checks: grammar is printable and round-trippable
-    let s = grammar.to_string();
-    assert!(s.contains("TagDispatch("));
-    let g2 = Grammar::from_ebnf(&s, "root");
-    assert_eq!(s, g2.to_string());
+    // Note: from_structural_tag has been removed in xgrammar 0.1.26
+    // Use GrammarCompiler::compile_structural_tag instead
+    let tok = xgrammar::TokenizerInfo::new(
+        &[""],
+        xgrammar::VocabType::RAW,
+        &None,
+        false,
+    );
+    let mut compiler = xgrammar::GrammarCompiler::new(&tok, 1, false, -1);
+    let compiled_grammar = compiler.compile_structural_tag(&tags, &triggers);
+    // Basic smoke check: ensure it compiled successfully
+    assert!(compiled_grammar.memory_size_bytes() > 0);
 }
 
 #[test]

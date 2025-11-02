@@ -26,6 +26,7 @@ include_cpp! {
     generate!("xgrammar::GetBitmaskDLType")
     generate!("xgrammar::ApplyTokenBitmaskInplaceCPU")
     generate!("xgrammar::GrammarMatcher")
+    generate!("xgrammar::BatchGrammarMatcher")
 
     // xgrammar/tokenizer_info.h
     generate!("xgrammar::VocabType")
@@ -47,6 +48,7 @@ include_cpp! {
 
     // cxx_utils/grammar.hpp
     generate!("cxx_utils::grammar_from_json_schema")
+    generate!("cxx_utils::grammar_from_structural_tag")
     generate!("cxx_utils::new_grammar_vector")
     generate!("cxx_utils::grammar_vec_reserve")
     generate!("cxx_utils::grammar_vec_push")
@@ -60,6 +62,13 @@ include_cpp! {
 
     // cxx_utils/matcher.hpp
     generate!("cxx_utils::make_grammar_matcher")
+    generate!("cxx_utils::make_batch_grammar_matcher")
+    generate!("cxx_utils::new_grammar_matcher_vector")
+    generate!("cxx_utils::grammar_matcher_vec_reserve")
+    generate!("cxx_utils::grammar_matcher_vec_push")
+    generate!("cxx_utils::batch_matcher_batch_fill_next_token_bitmask")
+    generate!("cxx_utils::batch_accept_token")
+    generate!("cxx_utils::batch_accept_string")
 
     // cxx_utils/testing.hpp
     generate!("cxx_utils::qwen_xml_tool_calling_to_ebnf")
@@ -86,6 +95,7 @@ pub use ffi::{
 use ffi::{
     cxx_utils,
     xgrammar::{
+        BatchGrammarMatcher as FFIBatchGrammarMatcher,
         CompiledGrammar as FFICompiledGrammar,
         GetBitmaskDLType as FFIGetBitmaskDLType,
         GetBitmaskSize as FFIGetBitmaskSize,
@@ -113,5 +123,8 @@ pub use config::{
 };
 pub use ffi::xgrammar::VocabType;
 pub use grammar::{Grammar, StructuralTagItem};
-pub use matcher::{GrammarMatcher, allocate_token_bitmask, get_bitmask_shape};
+pub use matcher::{
+    BatchGrammarMatcher, GrammarMatcher, allocate_token_bitmask, get_bitmask_shape,
+    reset_token_bitmask,
+};
 pub use tokenizer_info::TokenizerInfo;

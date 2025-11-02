@@ -38,7 +38,7 @@ impl GrammarCompiler {
                 tokenizer_info.ffi_ref(),
                 autocxx::c_int(max_threads),
                 cache_enabled,
-                autocxx::c_longlong(cache_limit_bytes as i64),
+                cache_limit_bytes as i64,
             )
             .within_box(),
         }
@@ -120,51 +120,39 @@ impl GrammarCompiler {
         tags: &[StructuralTagItem],
         triggers: &[impl AsRef<str>],
     ) -> CompiledGrammar {
-        let mut structural_tag_vector = cxx_utils::new_structural_tag_vector();
-        let mut trigger_string_vector = cxx_utils::new_string_vector();
-
-        {
-            let mut tag_vec_pin = structural_tag_vector.pin_mut();
-            let mut trig_vec_pin = trigger_string_vector.pin_mut();
-            cxx_utils::structural_tag_vec_reserve(
-                tag_vec_pin.as_mut(),
-                tags.len(),
-            );
-            cxx_utils::string_vec_reserve(
-                trig_vec_pin.as_mut(),
-                triggers.len(),
-            );
-
-            for tag in tags {
-                cxx::let_cxx_string!(begin_cxx = tag.begin.as_str());
-                cxx::let_cxx_string!(schema_cxx = tag.schema.as_str());
-                cxx::let_cxx_string!(end_cxx = tag.end.as_str());
-                cxx_utils::structural_tag_vec_push(
-                    tag_vec_pin.as_mut(),
-                    &begin_cxx,
-                    &schema_cxx,
-                    &end_cxx,
-                );
-            }
-            for trig in triggers {
-                let tb = trig.as_ref().as_bytes();
-                unsafe {
-                    cxx_utils::string_vec_push_bytes(
-                        trig_vec_pin.as_mut(),
-                        tb.as_ptr() as *const i8,
-                        tb.len(),
-                    );
-                }
-            }
+        // Build StructuralTag JSON: {"type":"structural_tag","format":{...}}
+        use serde_json::json;
+        let mut tag_entries = Vec::new();
+        for tag in tags {
+            let schema_value: serde_json::Value = serde_json::from_str(&tag.schema)
+                .expect("Invalid JSON schema in StructuralTagItem");
+            let content = json!({
+                "type": "json_schema",
+                "json_schema": schema_value
+            });
+            tag_entries.push(json!({
+                "type": "tag",
+                "begin": tag.begin,
+                "content": content,
+                "end": tag.end,
+            }));
         }
-
+        let triggers_vec: Vec<String> = triggers.iter().map(|t| t.as_ref().to_string()).collect();
+        let format_obj = json!({
+            "type": "triggered_tags",
+            "triggers": triggers_vec,
+            "tags": tag_entries,
+        });
+        let structural_tag_json = json!({
+            "type": "structural_tag",
+            "format": format_obj,
+        }).to_string();
+        
+        cxx::let_cxx_string!(structural_tag_str = structural_tag_json);
         let ffi_pin = self
             .inner
             .as_mut()
-            .CompileStructuralTag(
-                structural_tag_vector.as_ref().unwrap(),
-                trigger_string_vector.as_ref().unwrap(),
-            )
+            .CompileStructuralTag(&structural_tag_str)
             .within_box();
         CompiledGrammar::from_pinned_ffi(ffi_pin)
     }

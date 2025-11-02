@@ -17,12 +17,29 @@ fn abs_path<P: AsRef<Path>>(p: P) -> PathBuf {
 }
 
 fn main() {
+    // Best effort: find libclang automatically on Windows so users don't need to set LIBCLANG_PATH
+    if env::var("LIBCLANG_PATH").is_err() {
+        if cfg!(target_os = "windows") {
+            if let Some(dir) = find_libclang_windows() {
+                // Make available to this build script and to downstream rustc invocations
+                unsafe {
+                    env::set_var("LIBCLANG_PATH", &dir);
+                }
+                println!(
+                    "cargo:rustc-env=LIBCLANG_PATH={}",
+                    dir.display()
+                );
+            }
+        }
+    }
+
     let manifest_dir = abs_path(
         env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set"),
     );
-    let xgrammar_src_dir = manifest_dir.join("external/xgrammar");
+    let xgrammar_src_dir = manifest_dir.join("external/xgrammar-0.1.26");
     let xgrammar_include_dir = xgrammar_src_dir.join("include");
     let dlpack_include_dir = xgrammar_src_dir.join("3rdparty/dlpack/include");
+    let picojson_include_dir = xgrammar_src_dir.join("3rdparty/picojson");
     let src_include_dir = manifest_dir.join("src");
     let out_dir = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR not set"));
 
@@ -64,12 +81,27 @@ fn main() {
     if !is_msvc {
         cmake_config.cflag("-fno-lto");
         cmake_config.cxxflag("-fno-lto");
+    } else {
+        // On MSVC, force dynamic CRT consistently to avoid allocator/iterator mismatches
+        // Use DLL runtime for all configs; combined with RelWithDebInfo this avoids MDd
+        cmake_config.define(
+            "CMAKE_MSVC_RUNTIME_LIBRARY",
+            "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL",
+        );
     }
 
     let build_profile =
         match env::var("PROFILE").unwrap_or_else(|_| "release".into()).as_str()
         {
-            "debug" => "Debug",
+            "debug" => {
+                // On Windows MSVC, use RelWithDebInfo instead of Debug to avoid
+                // runtime library mismatch (_ITERATOR_DEBUG_LEVEL and CRT linking issues)
+                if is_msvc {
+                    "RelWithDebInfo"
+                } else {
+                    "Debug"
+                }
+            },
             "release" => "Release",
             other => {
                 eprintln!(
@@ -145,7 +177,7 @@ fn main() {
 
     let mut autocxx_builder = autocxx_build::Builder::new(
         "src/lib.rs",
-        &[&src_include_dir, &xgrammar_include_dir, &dlpack_include_dir],
+        &[&src_include_dir, &xgrammar_include_dir, &dlpack_include_dir, &picojson_include_dir],
     )
     .extra_clang_args(&extra_clang_args_refs) // for libclang parsing
     .build()
@@ -157,6 +189,7 @@ fn main() {
         .include(&src_include_dir)
         .include(&xgrammar_include_dir)
         .include(&dlpack_include_dir)
+        .include(&picojson_include_dir)
         .include(&manifest_dir)
         .compile("xgrammar_rs_bridge");
 
@@ -228,3 +261,58 @@ fn find_xgrammar_lib_dir(root: &Path) -> Option<PathBuf> {
     }
     found
 }
+
+#[cfg(target_os = "windows")]
+fn find_libclang_windows() -> Option<PathBuf> {
+    // 1) Try vswhere to locate VS with LLVM Clang component
+    let vswhere = PathBuf::from(
+        r"C:\\Program Files (x86)\\Microsoft Visual Studio\\Installer\\vswhere.exe",
+    );
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    if vswhere.exists() {
+        let args = [
+            "-latest",
+            "-products",
+            "*",
+            "-requires",
+            "Microsoft.VisualStudio.Component.VC.Llvm.Clang",
+            "-property",
+            "installationPath",
+        ];
+        if let Ok(out) = Command::new(&vswhere).args(args).output() {
+            if out.status.success() {
+                let stdout = String::from_utf8_lossy(&out.stdout);
+                for line in stdout.lines().filter(|l| !l.trim().is_empty()) {
+                    let base = PathBuf::from(line.trim());
+                    candidates.push(base.join(r"VC\\Tools\\Llvm\\x64\\bin"));
+                    candidates.push(base.join(r"VC\\Tools\\Llvm\\bin"));
+                }
+            }
+        }
+    }
+    // 2) Common fallback locations (VS 2022 editions)
+    for edition in ["Community", "Professional", "Enterprise"] {
+        candidates.push(PathBuf::from(format!(
+            r"C:\\Program Files\\Microsoft Visual Studio\\2022\\{}\\VC\\Tools\\Llvm\\x64\\bin",
+            edition
+        )));
+        candidates.push(PathBuf::from(format!(
+            r"C:\\Program Files\\Microsoft Visual Studio\\2022\\{}\\VC\\Tools\\Llvm\\bin",
+            edition
+        )));
+    }
+    // 3) Standalone LLVM installation
+    candidates.push(PathBuf::from(r"C:\\Program Files\\LLVM\\bin"));
+
+    // Return the first directory that contains libclang.dll
+    for dir in candidates {
+        let dll = dir.join("libclang.dll");
+        if dll.exists() {
+            return Some(dir);
+        }
+    }
+    None
+}
+
+#[cfg(not(target_os = "windows"))]
+fn find_libclang_windows() -> Option<PathBuf> { None }

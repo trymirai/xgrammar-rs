@@ -1,0 +1,19 @@
+{
+    "configurations": [
+        {
+            "name": "Linux",
+            "includePath": [
+                "${workspaceFolder}/external/xgrammar-0.1.26/include",
+                "${workspaceFolder}/external/xgrammar-0.1.26/3rdparty/dlpack/include",
+                "${workspaceFolder}/external/xgrammar-0.1.26/3rdparty/picojson",
+                "${workspaceFolder}/src"
+            ],
+            "defines": [],
+            "compilerPath": "/usr/bin/g++",
+            "cStandard": "c17",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "linux-gcc-x64"
+        }
+    ],
+    "version": 4
+}

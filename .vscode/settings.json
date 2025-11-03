@@ -1,0 +1,110 @@
+{
+    "cmake.sourceDirectory": "${workspaceFolder}/external/xgrammar",
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+        "source.organizeImports": "explicit"
+    },
+    "C_Cpp.default.cppStandard": "c++23",
+    "C_Cpp.default.compileCommands": "${workspaceFolder}/build/compile_commands.json",
+    "C_Cpp.default.includePath": [
+        "${workspaceFolder}/src",
+        "${workspaceFolder}/external/xgrammar/include",
+        "${workspaceFolder}/external/xgrammar/3rdparty/dlpack/include",
+        "${workspaceFolder}/target/**/autocxx-build-dir/include",
+        "${workspaceFolder}/target/**/autocxx-build-dir/rs"
+    ],
+    "C_Cpp.default.browse.path": [
+        "${workspaceFolder}/src",
+        "${workspaceFolder}/external/xgrammar/include",
+        "${workspaceFolder}/external/xgrammar/3rdparty/dlpack/include",
+        "${workspaceFolder}/target/**/autocxx-build-dir/include",
+        "${workspaceFolder}/target/**/autocxx-build-dir/rs"
+    ],
+    "C_Cpp.formatting": "clangFormat",
+    "C_Cpp.clang_format_style": "file",
+    "rust-analyzer.rustfmt.extraArgs": [
+        "+nightly"
+    ],
+    "rust-analyzer.testExplorer": true,
+    "[rust]": {
+        "editor.defaultFormatter": "rust-lang.rust-analyzer",
+    },
+    "[cpp]": {
+        "editor.defaultFormatter": "ms-vscode.cpptools",
+        "editor.formatOnSave": true
+    },
+    "[c]": {
+        "editor.defaultFormatter": "ms-vscode.cpptools",
+        "editor.formatOnSave": true
+    },
+    "[swift]": {
+        "editor.formatOnSave": true
+    },
+    "[toml]": {
+        "editor.defaultFormatter": "tamasfe.even-better-toml"
+    },
+    "files.associations": {
+        "stdexcept": "cpp",
+        "__bit_reference": "cpp",
+        "__hash_table": "cpp",
+        "__split_buffer": "cpp",
+        "__verbose_abort": "cpp",
+        "any": "cpp",
+        "array": "cpp",
+        "charconv": "cpp",
+        "clocale": "cpp",
+        "cmath": "cpp",
+        "condition_variable": "cpp",
+        "cstdarg": "cpp",
+        "cstddef": "cpp",
+        "cstdio": "cpp",
+        "cstring": "cpp",
+        "cwchar": "cpp",
+        "cwctype": "cpp",
+        "deque": "cpp",
+        "execution": "cpp",
+        "memory": "cpp",
+        "future": "cpp",
+        "initializer_list": "cpp",
+        "iosfwd": "cpp",
+        "iostream": "cpp",
+        "limits": "cpp",
+        "list": "cpp",
+        "map": "cpp",
+        "mutex": "cpp",
+        "new": "cpp",
+        "optional": "cpp",
+        "queue": "cpp",
+        "set": "cpp",
+        "shared_mutex": "cpp",
+        "span": "cpp",
+        "stack": "cpp",
+        "string": "cpp",
+        "string_view": "cpp",
+        "typeinfo": "cpp",
+        "variant": "cpp",
+        "vector": "cpp",
+        "__locale": "cpp",
+        "__node_handle": "cpp",
+        "__tree": "cpp",
+        "bitset": "cpp",
+        "cctype": "cpp",
+        "complex": "cpp",
+        "cstdint": "cpp",
+        "cstdlib": "cpp",
+        "ctime": "cpp",
+        "forward_list": "cpp",
+        "iomanip": "cpp",
+        "ios": "cpp",
+        "istream": "cpp",
+        "locale": "cpp",
+        "print": "cpp",
+        "ratio": "cpp",
+        "sstream": "cpp",
+        "streambuf": "cpp",
+        "unordered_map": "cpp",
+        "unordered_set": "cpp",
+        "algorithm": "cpp"
+    },
+    "cmake.ignoreCMakeListsMissing": true
+}

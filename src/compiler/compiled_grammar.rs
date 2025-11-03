@@ -30,14 +30,17 @@ impl CompiledGrammar {
 
     /// The approximate memory usage of the compiled grammar in bytes.
     pub fn memory_size_bytes(&self) -> usize {
+        // MemorySizeBytes() returns different types on different platforms:
+        // - On some platforms: primitive usize (can cast directly)
+        // - On other platforms: autocxx::c_ulong (needs conversion via From trait)
+        // We handle both cases by converting to u64 first, then to usize.
         let size = self.inner.MemorySizeBytes();
-        #[cfg(target_pointer_width = "64")]
+
+        #[allow(clippy::useless_conversion)]
         {
-            size as u64 as usize
-        }
-        #[cfg(not(target_pointer_width = "64"))]
-        {
-            size as u32 as usize
+            let size_as_u64 =
+                u64::try_from(size as u64).unwrap_or_else(|_| size as u64);
+            size_as_u64 as usize
         }
     }
 

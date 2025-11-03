@@ -2,7 +2,10 @@ use std::pin::Pin;
 
 use autocxx::prelude::*;
 
-use crate::{FFICompiledGrammar, Grammar, TokenizerInfo, cxx_utils};
+use crate::{
+    CxxUniquePtr, FFICompiledGrammar, Grammar, TokenizerInfo, cxx_ulong, cxx_ulonglong,
+    cxx_utils,
+};
 
 /// This is the primary object to store compiled grammar.
 ///
@@ -12,27 +15,27 @@ use crate::{FFICompiledGrammar, Grammar, TokenizerInfo, cxx_utils};
 /// -----
 /// Do not construct this class directly, instead use GrammarCompiler to construct the object.
 pub struct CompiledGrammar {
-    inner: Pin<Box<FFICompiledGrammar>>,
+    inner: CxxUniquePtr<FFICompiledGrammar>,
 }
 
 impl CompiledGrammar {
     /// The original grammar.
     pub fn grammar(&self) -> Grammar {
-        Grammar::from_pinned_ffi(self.inner.GetGrammar().within_box())
+        let inner_ref = self.inner.as_ref().expect("CompiledGrammar inner is null");
+        Grammar::from_unique_ptr(inner_ref.GetGrammar().within_unique_ptr())
     }
 
     /// The tokenizer info associated with the compiled grammar.
     pub fn tokenizer_info(&self) -> TokenizerInfo {
-        TokenizerInfo::from_pinned_ffi(
-            self.inner.GetTokenizerInfo().within_box(),
-        )
+        let inner_ref = self.inner.as_ref().expect("CompiledGrammar inner is null");
+        TokenizerInfo::from_unique_ptr(inner_ref.GetTokenizerInfo().within_unique_ptr())
     }
 
     /// The approximate memory usage of the compiled grammar in bytes.
     pub fn memory_size_bytes(&self) -> usize {
         // MemorySizeBytes() returns C size_t, which autocxx may represent as either:
         // - primitive usize (some build environments)
-        // - autocxx::c_ulong newtype (other build environments)
+        // - cxx_ulong newtype (other build environments)
         //
         // We define a trait to handle both uniformly
         trait ToUsize {
@@ -45,14 +48,40 @@ impl CompiledGrammar {
             }
         }
 
-        impl ToUsize for autocxx::c_ulong {
+        #[cfg(target_os = "windows")]
+        impl ToUsize for cxx_ulong {
+            fn to_usize(self) -> usize {
+                self.0 as usize
+            }
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        impl ToUsize for cxx_ulong {
             fn to_usize(self) -> usize {
                 let val: u64 = self.into();
                 val as usize
             }
         }
 
-        self.inner.MemorySizeBytes().to_usize()
+        #[cfg(target_os = "windows")]
+        impl ToUsize for cxx_ulonglong {
+            fn to_usize(self) -> usize {
+                let val: u64 = self.0.into();
+                val as usize
+            }
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        impl ToUsize for cxx_ulonglong {
+            fn to_usize(self) -> usize {
+                let val: u64 = self.into();
+                val as usize
+            }
+        }
+
+        let inner_ref = self.inner.as_ref().expect("CompiledGrammar inner is null");
+        let sz = inner_ref.MemorySizeBytes().to_usize();
+        sz
     }
     /// Serialize the compiled grammar to a JSON string.
     /// It will serialize the compiled grammar without the tokenizer info,
@@ -62,7 +91,8 @@ impl CompiledGrammar {
     /// -----
     /// The metadata of the tokenizer info is serialized and will be checked when deserializing.
     pub fn serialize_json(&self) -> String {
-        self.inner.SerializeJSON().to_string()
+        let inner_ref = self.inner.as_ref().expect("CompiledGrammar inner is null");
+        inner_ref.SerializeJSON().to_string()
     }
 
     /// Deserialize the compiled grammar from a JSON string and associate it with the specified
@@ -88,21 +118,19 @@ impl CompiledGrammar {
         if unique_ptr.is_null() {
             return Err(error_out_cxx.to_string());
         }
-        let raw_ptr = unique_ptr.into_raw();
-        let ffi_box = unsafe { Box::from_raw(raw_ptr) };
-        let ffi_pin = unsafe { Pin::new_unchecked(ffi_box) };
-        Ok(Self {
-            inner: ffi_pin,
-        })
+        Ok(Self { inner: unique_ptr })
     }
 
-    pub(crate) fn from_pinned_ffi(inner: Pin<Box<FFICompiledGrammar>>) -> Self {
-        Self {
-            inner,
-        }
+    pub(crate) fn from_unique_ptr(inner: cxx::UniquePtr<FFICompiledGrammar>) -> Self {
+        Self { inner }
     }
 
     pub(crate) fn ffi_ref(&self) -> &FFICompiledGrammar {
-        self.inner.as_ref().get_ref()
+        self.inner.as_ref().expect("CompiledGrammar inner is null")
+    }
+}
+
+impl Drop for CompiledGrammar {
+    fn drop(&mut self) {
     }
 }

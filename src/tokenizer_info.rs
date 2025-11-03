@@ -1,8 +1,6 @@
-use std::pin::Pin;
-
 use autocxx::prelude::*;
 
-use crate::{FFITokenizerInfo, VocabType, cxx_utils};
+use crate::{CxxUniquePtr, FFITokenizerInfo, VocabType, cxx_utils};
 
 type StopTokenIds = Option<Box<[i32]>>;
 
@@ -19,7 +17,7 @@ type StopTokenIds = Option<Box<[i32]>>;
 ///   `new_with_vocab_size` to pass the model's vocab size so bitmask sizes are
 ///   computed correctly.
 pub struct TokenizerInfo {
-    inner: Pin<Box<FFITokenizerInfo>>,
+    inner: CxxUniquePtr<FFITokenizerInfo>,
 }
 
 impl TokenizerInfo {
@@ -97,9 +95,8 @@ impl TokenizerInfo {
             )
         };
 
-        Self {
-            inner: ffi_obj.within_box(),
-        }
+        let inner = ffi_obj;
+        Self { inner }
     }
 
     /// Construct TokenizerInfo from encoded vocab (bytes) and a metadata JSON
@@ -128,31 +125,45 @@ impl TokenizerInfo {
         }
 
         cxx::let_cxx_string!(metadata_cxx = metadata);
-        let ffi_pin = FFITokenizerInfo::FromVocabAndMetadata(
+        let ffi_ptr = FFITokenizerInfo::FromVocabAndMetadata(
             cxx_vec.as_ref().unwrap(),
             &metadata_cxx,
         )
-        .within_box();
-        Self {
-            inner: ffi_pin,
-        }
+        .within_unique_ptr();
+        Self { inner: ffi_ptr }
     }
 
     /// The type of the vocabulary.
     pub fn vocab_type(&self) -> VocabType {
-        self.inner.GetVocabType()
+        self.inner
+            .as_ref()
+            .expect("FFITokenizerInfo UniquePtr was null")
+            .GetVocabType()
     }
 
     /// The size of the vocabulary.
     pub fn vocab_size(&self) -> usize {
-        usize::try_from(self.inner.GetVocabSize().0)
+        let sz = usize::try_from(
+            self.inner
+                .as_ref()
+                .expect("FFITokenizerInfo UniquePtr was null")
+                .GetVocabSize()
+                .0,
+        )
             .expect("GetVocabSize returned a negative value")
+            ;
+        sz
     }
 
     /// Whether the tokenizer will prepend a space before the text in the tokenization
     /// process.
     pub fn add_prefix_space(&self) -> bool {
-        self.inner.GetAddPrefixSpace()
+        let val = self
+            .inner
+            .as_ref()
+            .expect("FFITokenizerInfo UniquePtr was null")
+            .GetAddPrefixSpace();
+        val
     }
 
     /// The decoded vocabulary of the tokenizer. This converts tokens in the
@@ -182,19 +193,33 @@ impl TokenizerInfo {
     /// The special token ids. Special tokens include control tokens, reserved tokens,
     /// padded tokens, etc. Now it is automatically detected from the vocabulary.
     pub fn special_token_ids(&self) -> Box<[i32]> {
-        let cxx_vec = self.inner.GetSpecialTokenIds();
+        let cxx_vec = self
+            .inner
+            .as_ref()
+            .expect("FFITokenizerInfo UniquePtr was null")
+            .GetSpecialTokenIds();
         cxx_vec.iter().copied().collect::<Vec<_>>().into_boxed_slice()
     }
 
     /// Dump the metadata of the tokenizer to a json string. It can be used to construct the
     /// tokenizer info from the vocabulary and the metadata string.
     pub fn dump_metadata(&self) -> String {
-        self.inner.DumpMetadata().to_string()
+        self
+            .inner
+            .as_ref()
+            .expect("FFITokenizerInfo UniquePtr was null")
+            .DumpMetadata()
+            .to_string()
     }
 
     /// Serialize the tokenizer info to a JSON string.
     pub fn serialize_json(&self) -> String {
-        self.inner.SerializeJSON().to_string()
+        self
+            .inner
+            .as_ref()
+            .expect("FFITokenizerInfo UniquePtr was null")
+            .SerializeJSON()
+            .to_string()
     }
 
     /// Deserialize a `TokenizerInfo` from a JSON string.
@@ -218,22 +243,24 @@ impl TokenizerInfo {
         if uptr.is_null() {
             return Err(error_out_cxx.to_string());
         }
-        let raw = uptr.into_raw();
-        let ffi_box = unsafe { Box::from_raw(raw) };
-        let ffi_pin = unsafe { Pin::new_unchecked(ffi_box) };
-        Ok(Self {
-            inner: ffi_pin,
-        })
+        Ok(Self { inner: uptr })
     }
 
     pub(crate) fn ffi_ref(&self) -> &FFITokenizerInfo {
-        self.inner.as_ref().get_ref()
+        self.inner
+            .as_ref()
+            .expect("FFITokenizerInfo UniquePtr was null")
     }
 
-    pub(crate) fn from_pinned_ffi(inner: Pin<Box<FFITokenizerInfo>>) -> Self {
-        Self {
-            inner,
-        }
+    pub(crate) fn from_unique_ptr(inner: cxx::UniquePtr<FFITokenizerInfo>) -> Self {
+        Self { inner }
+    }
+
+    // No from_pinned_ffi needed with UniquePtr ownership
+}
+
+impl Drop for TokenizerInfo {
+    fn drop(&mut self) {
     }
 }
 

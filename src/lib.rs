@@ -60,7 +60,12 @@ include_cpp! {
     generate!("cxx_utils::compiled_grammar_deserialize_json_or_error")
 
     // cxx_utils/grammar_compiler.hpp
+    generate!("cxx_utils::make_grammar_compiler")
     generate!("cxx_utils::compiler_compile_json_schema")
+    generate!("cxx_utils::compiler_compile_builtin_json")
+    generate!("cxx_utils::compiler_compile_regex")
+    generate!("cxx_utils::compiler_compile_structural_tag")
+    generate!("cxx_utils::compiler_compile_grammar_or_error")
 
     // cxx_utils/matcher.hpp
     generate!("cxx_utils::make_grammar_matcher")
@@ -119,6 +124,13 @@ mod tokenizer_info;
 
 pub mod testing;
 
+pub use autocxx::{
+    c_int as cxx_int,
+    c_longlong as cxx_longlong,
+    c_ulong as cxx_ulong,
+    c_ulonglong as cxx_ulonglong,
+};
+pub use cxx::UniquePtr as CxxUniquePtr;
 pub use compiler::{CompiledGrammar, GrammarCompiler};
 pub use config::{
     get_max_recursion_depth, get_serialization_version, set_max_recursion_depth,

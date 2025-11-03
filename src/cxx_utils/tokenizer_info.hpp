@@ -12,7 +12,7 @@
 
 namespace cxx_utils {
 
-inline xgrammar::TokenizerInfo make_tokenizer_info(
+inline std::unique_ptr<xgrammar::TokenizerInfo> make_tokenizer_info(
     const std::vector<std::string>& encoded_vocab,
     xgrammar::VocabType vocab_type,
     bool has_vocab_size,
@@ -36,7 +36,7 @@ inline xgrammar::TokenizerInfo make_tokenizer_info(
     stops = std::move(tmp);
   }
 
-  return xgrammar::TokenizerInfo(
+  return std::make_unique<xgrammar::TokenizerInfo>(
       encoded_vocab,
       vocab_type,
       vs,

@@ -10,7 +10,7 @@
 
 namespace cxx_utils {
 
-inline xgrammar::GrammarMatcher make_grammar_matcher(
+inline std::unique_ptr<xgrammar::GrammarMatcher> make_grammar_matcher(
     const xgrammar::CompiledGrammar& compiled_grammar,
     bool has_override_stop_tokens,
     const int32_t* override_stop_tokens_ptr,
@@ -19,7 +19,7 @@ inline xgrammar::GrammarMatcher make_grammar_matcher(
     int max_rollback_tokens
 ) {
   if (!has_override_stop_tokens) {
-    return xgrammar::GrammarMatcher(
+    return std::make_unique<xgrammar::GrammarMatcher>(
         compiled_grammar,
         std::nullopt,
         terminate_without_stop_token,
@@ -31,7 +31,7 @@ inline xgrammar::GrammarMatcher make_grammar_matcher(
   for (size_t i = 0; i < override_stop_tokens_len; ++i) {
     tmp.push_back(static_cast<int>(override_stop_tokens_ptr[i]));
   }
-  return xgrammar::GrammarMatcher(
+  return std::make_unique<xgrammar::GrammarMatcher>(
       compiled_grammar,
       std::optional<std::vector<int>>(std::move(tmp)),
       terminate_without_stop_token,
@@ -39,10 +39,10 @@ inline xgrammar::GrammarMatcher make_grammar_matcher(
   );
 }
 
-inline xgrammar::BatchGrammarMatcher make_batch_grammar_matcher(
+inline std::unique_ptr<xgrammar::BatchGrammarMatcher> make_batch_grammar_matcher(
     int32_t max_threads
 ) {
-  return xgrammar::BatchGrammarMatcher(max_threads);
+  return std::make_unique<xgrammar::BatchGrammarMatcher>(max_threads);
 }
 
 inline std::unique_ptr<std::vector<xgrammar::GrammarMatcher>>

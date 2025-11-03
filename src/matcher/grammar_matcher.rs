@@ -3,12 +3,13 @@ use std::pin::Pin;
 use autocxx::prelude::*;
 
 use crate::{
-    DLTensor, FFIGrammarMatcher, compiler::CompiledGrammar, cxx_utils,
+    CxxUniquePtr,
+    DLTensor, FFIGrammarMatcher, compiler::CompiledGrammar, cxx_int, cxx_utils,
 };
 
 /// Match tokens/strings to a compiled grammar and generate next-token masks.
 pub struct GrammarMatcher {
-    inner: Pin<Box<FFIGrammarMatcher>>,
+    inner: CxxUniquePtr<FFIGrammarMatcher>,
     stored_stop_token_ids: Box<[i32]>,
 }
 
@@ -35,19 +36,18 @@ impl GrammarMatcher {
             _ => (false, std::ptr::null(), 0usize),
         };
 
-        let ffi_pin = unsafe {
+        let unique_ptr = unsafe {
             cxx_utils::make_grammar_matcher(
                 compiled_grammar.ffi_ref(),
                 has_override,
                 ptr,
                 len,
                 terminate_without_stop_token,
-                autocxx::c_int(max_rollback_tokens),
+                cxx_int(max_rollback_tokens),
             )
-            .within_box()
         };
         Self {
-            inner: ffi_pin,
+            inner: unique_ptr,
             stored_stop_token_ids,
         }
     }
@@ -72,7 +72,7 @@ impl GrammarMatcher {
         &mut self,
         token_id: i32,
     ) -> bool {
-        self.inner.as_mut().AcceptToken(token_id, false)
+        self.inner.as_mut().expect("GrammarMatcher inner is null").AcceptToken(token_id, false)
     }
 
     /// Accept one token with optional debug printing.
@@ -81,7 +81,7 @@ impl GrammarMatcher {
         token_id: i32,
         debug_print: bool,
     ) -> bool {
-        self.inner.as_mut().AcceptToken(token_id, debug_print)
+        self.inner.as_mut().expect("GrammarMatcher inner is null").AcceptToken(token_id, debug_print)
     }
 
     /// Accept a string and update the state of the matcher.
@@ -101,7 +101,7 @@ impl GrammarMatcher {
         debug_print: bool,
     ) -> bool {
         cxx::let_cxx_string!(input_cxx = input);
-        self.inner.as_mut().AcceptString(&input_cxx, debug_print)
+        self.inner.as_mut().expect("GrammarMatcher inner is null").AcceptString(&input_cxx, debug_print)
     }
 
     /// Fill the bitmask for the next token prediction.
@@ -124,9 +124,9 @@ impl GrammarMatcher {
         debug_print: bool,
     ) -> bool {
         unsafe {
-            self.inner.as_mut().FillNextTokenBitmask(
+            self.inner.as_mut().expect("GrammarMatcher inner is null").FillNextTokenBitmask(
                 bitmask as *mut _,
-                autocxx::c_int(index),
+                cxx_int(index),
                 debug_print,
             )
         }
@@ -143,7 +143,7 @@ impl GrammarMatcher {
     /// # Returns
     /// The jump-forward string.
     pub fn find_jump_forward_string(&mut self) -> String {
-        self.inner.as_mut().FindJumpForwardString().to_string()
+        self.inner.as_mut().expect("GrammarMatcher inner is null").FindJumpForwardString().to_string()
     }
 
     /// Rollback the matcher to a previous state by several tokens.
@@ -155,7 +155,7 @@ impl GrammarMatcher {
         &mut self,
         num_tokens: i32,
     ) {
-        self.inner.as_mut().Rollback(autocxx::c_int(num_tokens));
+        self.inner.as_mut().expect("GrammarMatcher inner is null").Rollback(cxx_int(num_tokens));
     }
 
     /// Check if the matcher has terminated.
@@ -166,12 +166,12 @@ impl GrammarMatcher {
     /// # Returns
     /// Whether the matcher has terminated.
     pub fn is_terminated(&self) -> bool {
-        self.inner.IsTerminated()
+        self.inner.as_ref().expect("GrammarMatcher inner is null").IsTerminated()
     }
 
     /// Reset the matcher to the initial state.
     pub fn reset(&mut self) {
-        self.inner.as_mut().Reset();
+        self.inner.as_mut().expect("GrammarMatcher inner is null").Reset();
     }
 
     /// Get the maximum number of rollback tokens allowed.
@@ -200,10 +200,15 @@ impl GrammarMatcher {
     /// # Returns
     /// The internal state of the matcher.
     pub fn debug_print_internal_state(&self) -> String {
-        self.inner._DebugPrintInternalState().to_string()
+        self.inner.as_ref().expect("GrammarMatcher inner is null")._DebugPrintInternalState().to_string()
     }
 
     pub(crate) fn ffi_ref(&self) -> &FFIGrammarMatcher {
-        self.inner.as_ref().get_ref()
+        self.inner.as_ref().expect("GrammarMatcher inner is null")
+    }
+}
+
+impl Drop for GrammarMatcher {
+    fn drop(&mut self) {
     }
 }

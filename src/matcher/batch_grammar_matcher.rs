@@ -3,13 +3,13 @@ use std::pin::Pin;
 use autocxx::prelude::*;
 
 use super::GrammarMatcher;
-use crate::{DLTensor, cxx_utils};
+use crate::{CxxUniquePtr, DLTensor, cxx_utils};
 
 /// A batch version of GrammarMatcher that can fill the next token bitmask for multiple
 /// matchers in parallel. It utilizes multiple threads to speed up the computation. It is
 /// especially useful when the batch size is large.
 pub struct BatchGrammarMatcher {
-    inner: Pin<Box<crate::FFIBatchGrammarMatcher>>,
+    inner: CxxUniquePtr<crate::FFIBatchGrammarMatcher>,
 }
 
 impl BatchGrammarMatcher {
@@ -19,8 +19,7 @@ impl BatchGrammarMatcher {
     /// - `max_threads`: The maximum number of threads to use for parallel processing.
     ///   Use -1 for automatic thread count (hardware_concurrency / 2).
     pub fn new(max_threads: i32) -> Self {
-        let ffi_pin =
-            cxx_utils::make_batch_grammar_matcher(max_threads).within_box();
+        let ffi_pin = cxx_utils::make_batch_grammar_matcher(max_threads);
         Self {
             inner: ffi_pin,
         }
@@ -73,7 +72,7 @@ impl BatchGrammarMatcher {
 
         unsafe {
             cxx_utils::batch_matcher_batch_fill_next_token_bitmask(
-                self.inner.as_mut(),
+                self.inner.as_mut().expect("BatchGrammarMatcher inner is null"),
                 ffi_matcher_vec.as_mut().unwrap().get_unchecked_mut(),
                 bitmask as *mut _,
                 has_indices,

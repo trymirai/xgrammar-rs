@@ -8,16 +8,184 @@ use std::{
 use cmake::Config as CMakeConfig;
 use walkdir::WalkDir;
 
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
 fn abs_path<P: AsRef<Path>>(p: P) -> PathBuf {
     if p.as_ref().is_absolute() {
         p.as_ref().to_path_buf()
     } else {
-        env::current_dir().expect("current_dir failed").join(p)
+        env::current_dir()
+            .expect("current_dir failed")
+            .join(p)
     }
 }
 
+fn parse_semver_like(name: &str) -> Option<(u64, u64, u64)> {
+    let prefix = "xgrammar-";
+    if !name.starts_with(prefix) {
+        return None;
+    }
+
+    let ver = &name[prefix.len()..];
+    let mut parts = ver.split('.');
+    let major = parts.next()?.parse::<u64>().ok()?;
+    let minor = parts.next()?.parse::<u64>().ok()?;
+    let patch_str = parts.next().unwrap_or("0");
+
+    let mut patch_digits = String::new();
+    for ch in patch_str.chars() {
+        if ch.is_ascii_digit() {
+            patch_digits.push(ch);
+        } else {
+            break;
+        }
+    }
+
+    let patch = patch_digits.parse::<u64>().ok().unwrap_or(0);
+    Some((major, minor, patch))
+}
+
+fn find_latest_xgrammar_src(external_dir: &Path) -> Option<PathBuf> {
+    // 1) If XGRAMMAR_SRC_DIR env is set, use it
+    if let Ok(p) = env::var("XGRAMMAR_SRC_DIR") {
+        let candidate = abs_path(p);
+        if candidate.join("CMakeLists.txt").exists()
+            || candidate.join("include").exists()
+        {
+            return Some(candidate);
+        }
+    }
+
+    // 2) Choose highest xgrammar-<semver> under external/
+    let mut best: Option<(PathBuf, (u64, u64, u64))> = None;
+    if let Ok(rd) = std::fs::read_dir(external_dir) {
+        for e in rd.flatten() {
+            if let Ok(ft) = e.file_type() {
+                if ft.is_dir() {
+                    let name = e.file_name();
+                    let name = name.to_string_lossy();
+                    if let Some(ver) = parse_semver_like(&name) {
+                        let p = e.path();
+                        if best.as_ref().map(|b| ver > b.1).unwrap_or(true) {
+                            best = Some((p, ver));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if let Some((p, _)) = best {
+        return Some(p);
+    }
+
+    // 3) Fallback to external/xgrammar if it looks like a source dir
+    let fallback = external_dir.join("xgrammar");
+    if fallback.join("CMakeLists.txt").exists()
+        || fallback.join("include").exists()
+    {
+        return Some(fallback);
+    }
+
+    None
+}
+
+fn find_xgrammar_lib_dir(root: &Path) -> Option<PathBuf> {
+    let static_candidates = [
+        "libxgrammar.a", // Unix/macOS static
+        "xgrammar.lib",  // Windows static
+    ];
+
+    for entry in WalkDir::new(root)
+        .max_depth(6)
+        .into_iter()
+        .filter_map(Result::ok)
+    {
+        if !entry.file_type().is_file() {
+            continue;
+        }
+
+        let name = entry.file_name().to_string_lossy();
+        if static_candidates.iter().any(|c| name == *c) {
+            return entry.path().parent().map(|p| p.to_path_buf());
+        }
+    }
+
+    None
+}
+
+#[cfg(target_os = "windows")]
+fn find_libclang_windows() -> Option<PathBuf> {
+    let vswhere = PathBuf::from(
+        r"C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe",
+    );
+
+    let mut candidates: Vec<PathBuf> = Vec::new();
+
+    // 1) Try vswhere to locate VS with LLVM Clang component
+    if vswhere.exists() {
+        let args = [
+            "-latest",
+            "-products",
+            "*",
+            "-requires",
+            "Microsoft.VisualStudio.Component.VC.Llvm.Clang",
+            "-property",
+            "installationPath",
+        ];
+
+        if let Ok(out) = Command::new(&vswhere).args(args).output() {
+            if out.status.success() {
+                let stdout = String::from_utf8_lossy(&out.stdout);
+                for line in stdout.lines().filter(|l| !l.trim().is_empty()) {
+                    let base = PathBuf::from(line.trim());
+                    candidates.push(base.join(r"VC\Tools\Llvm\x64\bin"));
+                    candidates.push(base.join(r"VC\Tools\Llvm\bin"));
+                }
+            }
+        }
+    }
+
+    // 2) Common fallback locations (VS 2022 editions)
+    for edition in ["Community", "Professional", "Enterprise"] {
+        candidates.push(PathBuf::from(format!(
+            r"C:\Program Files\Microsoft Visual Studio\2022\{}\VC\Tools\Llvm\x64\bin",
+            edition
+        )));
+        candidates.push(PathBuf::from(format!(
+            r"C:\Program Files\Microsoft Visual Studio\2022\{}\VC\Tools\Llvm\bin",
+            edition
+        )));
+    }
+
+    // 3) Standalone LLVM installation
+    candidates.push(PathBuf::from(r"C:\Program Files\LLVM\bin"));
+
+    // Return the first directory that contains libclang.dll
+    for dir in candidates {
+        if dir.join("libclang.dll").exists() {
+            return Some(dir);
+        }
+    }
+
+    None
+}
+
+#[cfg(not(target_os = "windows"))]
+fn find_libclang_windows() -> Option<PathBuf> {
+    None
+}
+
+// ============================================================================
+// Main Build Script
+// ============================================================================
+
 fn main() {
-    // Best effort: find libclang automatically on Windows so users don't need to set LIBCLANG_PATH
+    // ========================================================================
+    // Step 1: Configure libclang (Windows-specific)
+    // ========================================================================
     if env::var("LIBCLANG_PATH").is_err() {
         if cfg!(target_os = "windows") {
             if let Some(dir) = find_libclang_windows() {
@@ -33,10 +201,17 @@ fn main() {
         }
     }
 
+    // ========================================================================
+    // Step 2: Locate XGrammar source and set up paths
+    // ========================================================================
+
     let manifest_dir = abs_path(
         env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set"),
     );
-    let xgrammar_src_dir = manifest_dir.join("external/xgrammar-0.1.26");
+
+    let external_dir = manifest_dir.join("external");
+    let xgrammar_src_dir = find_latest_xgrammar_src(&external_dir)
+        .unwrap_or_else(|| manifest_dir.join("external/xgrammar-0.1.26"));
     let xgrammar_include_dir = xgrammar_src_dir.join("include");
     let dlpack_include_dir = xgrammar_src_dir.join("3rdparty/dlpack/include");
     let picojson_include_dir = xgrammar_src_dir.join("3rdparty/picojson");
@@ -47,8 +222,9 @@ fn main() {
     println!("cargo:rerun-if-changed={}/cpp", xgrammar_src_dir.display());
     println!("cargo:rerun-if-changed={}/3rdparty", xgrammar_src_dir.display());
 
-    // Create a config.cmake in the build directory to override defaults
-    // This will be found first by CMake and prevent Python bindings from being built
+    // ========================================================================
+    // Step 3: Configure and build XGrammar C++ library with CMake
+    // ========================================================================
     let cmake_build_dir = out_dir.join("build");
     create_dir_all(&cmake_build_dir).ok();
     let config_cmake_path = cmake_build_dir.join("config.cmake");
@@ -66,42 +242,28 @@ fn main() {
     cmake_config.define("XGRAMMAR_BUILD_PYTHON_BINDINGS", "OFF");
     cmake_config.define("XGRAMMAR_BUILD_CXX_TESTS", "OFF");
     cmake_config.define("XGRAMMAR_ENABLE_CPPTRACE", "OFF");
-    // Prefer a newer C++ standard on Windows to improve STL feature detection
-    cmake_config.define("CMAKE_CXX_STANDARD", "20");
+    cmake_config.define("CMAKE_CXX_STANDARD", "17");
     cmake_config.define("CMAKE_CXX_STANDARD_REQUIRED", "ON");
     cmake_config.define("CMAKE_CXX_EXTENSIONS", "OFF");
 
     // Disable LTO to avoid linking issues with Rust on some platforms
     cmake_config.define("CMAKE_INTERPROCEDURAL_OPTIMIZATION", "OFF");
 
-    // Apply LTO flags only for non-MSVC compilers (GCC/Clang)
-    // MSVC doesn't recognize the -fno-lto flag
+    // Platform-specific compiler flags
     let target = env::var("TARGET").unwrap_or_default();
     let is_msvc = target.contains("msvc");
     if !is_msvc {
         cmake_config.cflag("-fno-lto");
         cmake_config.cxxflag("-fno-lto");
     } else {
-        // On MSVC, force dynamic CRT consistently to avoid allocator/iterator mismatches
-        // Use DLL runtime for all configs; combined with RelWithDebInfo this avoids MDd
-        cmake_config.define(
-            "CMAKE_MSVC_RUNTIME_LIBRARY",
-            "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL",
-        );
+        // Ensure correct exception semantics for C++ code generated/used via autocxx/cxx
+        cmake_config.cxxflag("/EHsc");
     }
 
     let build_profile =
         match env::var("PROFILE").unwrap_or_else(|_| "release".into()).as_str()
         {
-            "debug" => {
-                // On Windows MSVC, use RelWithDebInfo instead of Debug to avoid
-                // runtime library mismatch (_ITERATOR_DEBUG_LEVEL and CRT linking issues)
-                if is_msvc {
-                    "RelWithDebInfo"
-                } else {
-                    "Debug"
-                }
-            },
+            "debug" => "Debug",
             "release" => "Release",
             other => {
                 eprintln!(
@@ -113,6 +275,7 @@ fn main() {
         };
     cmake_config.profile(build_profile);
 
+    // Apple platform-specific configuration
     if let Ok(target) = env::var("TARGET") {
         if target.contains("apple-darwin") {
             let arch = if target.contains("aarch64") {
@@ -146,6 +309,10 @@ fn main() {
 
     let destination_path = cmake_config.build_target("xgrammar").build();
 
+    // ========================================================================
+    // Step 4: Link the built XGrammar library
+    // ========================================================================
+
     let cmake_build_dir = out_dir.join("build");
     let lib_search_dir = find_xgrammar_lib_dir(&cmake_build_dir)
         .or_else(|| find_xgrammar_lib_dir(&destination_path))
@@ -153,11 +320,14 @@ fn main() {
     println!("cargo:rustc-link-search=native={}", lib_search_dir.display());
     println!("cargo:rustc-link-lib=static=xgrammar");
 
-    // Generate and compile C++ bindings with autocxx.
+    // ========================================================================
+    // Step 5: Generate and compile Rust/C++ bindings with autocxx
+    // ========================================================================
+
     println!("cargo:rerun-if-changed=src/lib.rs");
 
     // Prepare extra clang args for autocxx
-    let mut extra_clang_args = vec!["-std=c++20".to_string()];
+    let mut extra_clang_args = vec!["-std=c++17".to_string()];
 
     // On Windows, explicitly set the target and disable problematic intrinsics
     // to avoid ARM NEON header issues from Swift toolchain or other clang installations
@@ -175,6 +345,7 @@ fn main() {
     let extra_clang_args_refs: Vec<&str> =
         extra_clang_args.iter().map(|s| s.as_str()).collect();
 
+    // Build the autocxx bridge
     let mut autocxx_builder = autocxx_build::Builder::new(
         "src/lib.rs",
         &[&src_include_dir, &xgrammar_include_dir, &dlpack_include_dir, &picojson_include_dir],
@@ -184,18 +355,22 @@ fn main() {
     .expect("autocxx build failed");
 
     autocxx_builder
-        .flag_if_supported("-std=c++20")
-        .flag_if_supported("/std:c++20")
+        .flag_if_supported("-std=c++17")
+        .flag_if_supported("/std:c++17")
+        .flag_if_supported("/EHsc")
         .include(&src_include_dir)
         .include(&xgrammar_include_dir)
         .include(&dlpack_include_dir)
         .include(&picojson_include_dir)
-        .include(&manifest_dir)
-        .compile("xgrammar_rs_bridge");
+        .include(&manifest_dir);
+
+    autocxx_builder.compile("xgrammar_rs_bridge");
+
+    // ========================================================================
+    // Step 6: Copy headers for generated Rust code
+    // ========================================================================
 
     let rs_dir = out_dir.join("autocxx-build-dir/rs");
-
-    // Provide headers expected by generated RS `include!(...)` paths
     // 1) autocxxgen_ffi.h
     let gen_include_dir = out_dir.join("autocxx-build-dir/include");
     let _ = copy(
@@ -217,7 +392,9 @@ fn main() {
         rs_dlpack_dir.join("dlpack.h"),
     );
 
-    // Best-effort: format generated Rust bindings for easier debugging
+    // ========================================================================
+    // Step 7: Format generated bindings (optional)
+    // ========================================================================
     let gen_rs =
         out_dir.join("autocxx-build-dir/rs/autocxx-ffi-default-gen.rs");
     if gen_rs.exists() {
@@ -236,83 +413,3 @@ fn main() {
         }
     }
 }
-
-fn find_xgrammar_lib_dir(root: &Path) -> Option<PathBuf> {
-    let static_candidates = [
-        "libxgrammar.a", // Unix/macOS static
-        "xgrammar.lib",  // Windows static
-    ];
-
-    // Scan a few levels deep
-    let mut found: Option<PathBuf> = None;
-    for entry in
-        WalkDir::new(root).max_depth(6).into_iter().filter_map(Result::ok)
-    {
-        if !entry.file_type().is_file() {
-            continue;
-        }
-        let name = entry.file_name().to_string_lossy();
-        if static_candidates.iter().any(|c| name == *c) {
-            if let Some(parent) = entry.path().parent() {
-                found = Some(parent.to_path_buf());
-            }
-            break;
-        }
-    }
-    found
-}
-
-#[cfg(target_os = "windows")]
-fn find_libclang_windows() -> Option<PathBuf> {
-    // 1) Try vswhere to locate VS with LLVM Clang component
-    let vswhere = PathBuf::from(
-        r"C:\\Program Files (x86)\\Microsoft Visual Studio\\Installer\\vswhere.exe",
-    );
-    let mut candidates: Vec<PathBuf> = Vec::new();
-    if vswhere.exists() {
-        let args = [
-            "-latest",
-            "-products",
-            "*",
-            "-requires",
-            "Microsoft.VisualStudio.Component.VC.Llvm.Clang",
-            "-property",
-            "installationPath",
-        ];
-        if let Ok(out) = Command::new(&vswhere).args(args).output() {
-            if out.status.success() {
-                let stdout = String::from_utf8_lossy(&out.stdout);
-                for line in stdout.lines().filter(|l| !l.trim().is_empty()) {
-                    let base = PathBuf::from(line.trim());
-                    candidates.push(base.join(r"VC\\Tools\\Llvm\\x64\\bin"));
-                    candidates.push(base.join(r"VC\\Tools\\Llvm\\bin"));
-                }
-            }
-        }
-    }
-    // 2) Common fallback locations (VS 2022 editions)
-    for edition in ["Community", "Professional", "Enterprise"] {
-        candidates.push(PathBuf::from(format!(
-            r"C:\\Program Files\\Microsoft Visual Studio\\2022\\{}\\VC\\Tools\\Llvm\\x64\\bin",
-            edition
-        )));
-        candidates.push(PathBuf::from(format!(
-            r"C:\\Program Files\\Microsoft Visual Studio\\2022\\{}\\VC\\Tools\\Llvm\\bin",
-            edition
-        )));
-    }
-    // 3) Standalone LLVM installation
-    candidates.push(PathBuf::from(r"C:\\Program Files\\LLVM\\bin"));
-
-    // Return the first directory that contains libclang.dll
-    for dir in candidates {
-        let dll = dir.join("libclang.dll");
-        if dll.exists() {
-            return Some(dir);
-        }
-    }
-    None
-}
-
-#[cfg(not(target_os = "windows"))]
-fn find_libclang_windows() -> Option<PathBuf> { None }

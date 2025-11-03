@@ -13,7 +13,7 @@ namespace cxx_utils {
 
 // JSON schema constructor with explicit option flags to avoid std::optional
 // across FFI
-inline xgrammar::Grammar grammar_from_json_schema(
+inline std::unique_ptr<xgrammar::Grammar> grammar_from_json_schema(
     const std::string& schema,
     bool any_whitespace,
     bool has_indent,
@@ -33,14 +33,14 @@ inline xgrammar::Grammar grammar_from_json_schema(
   if (has_separators)
     separators_opt = std::make_pair(separator_comma, separator_colon);
 
-  return xgrammar::Grammar::FromJSONSchema(
+  return std::make_unique<xgrammar::Grammar>(xgrammar::Grammar::FromJSONSchema(
       schema,
       any_whitespace,
       indent_opt,
       separators_opt,
       strict_mode,
       print_converted_ebnf
-  );
+  ));
 }
 
 inline std::unique_ptr<std::vector<xgrammar::Grammar>> new_grammar_vector() {

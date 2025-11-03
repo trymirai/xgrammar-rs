@@ -1,7 +1,6 @@
-use std::pin::Pin;
-
 use autocxx::prelude::*;
 
+use crate::CxxUniquePtr;
 use crate::ffi::{cxx_utils, xgrammar::Grammar as FFIGrammar};
 
 /// This class represents a grammar object in XGrammar, and can be used later in the
@@ -14,7 +13,7 @@ use crate::ffi::{cxx_utils, xgrammar::Grammar as FFIGrammar};
 ///
 /// When formatted with Display, the grammar will be converted to GBNF format.
 pub struct Grammar {
-    inner: Pin<Box<FFIGrammar>>,
+    inner: CxxUniquePtr<FFIGrammar>,
 }
 
 impl core::fmt::Display for Grammar {
@@ -50,11 +49,9 @@ impl Grammar {
     ) -> Self {
         cxx::let_cxx_string!(ebnf_cxx = ebnf_string);
         cxx::let_cxx_string!(root_rule_name_cxx = root_rule_name);
-        let ffi_pin =
-            FFIGrammar::FromEBNF(&ebnf_cxx, &root_rule_name_cxx).within_box();
-        Self {
-            inner: ffi_pin,
-        }
+        let ffi_ptr =
+            FFIGrammar::FromEBNF(&ebnf_cxx, &root_rule_name_cxx).within_unique_ptr();
+        Self { inner: ffi_ptr }
     }
 
     /// Construct a grammar from JSON schema.
@@ -121,7 +118,7 @@ impl Grammar {
         };
         cxx::let_cxx_string!(separator_comma_cxx = separator_comma.as_str());
         cxx::let_cxx_string!(separator_colon_cxx = separator_colon.as_str());
-        let ffi_pin = cxx_utils::grammar_from_json_schema(
+        let ffi_ptr = cxx_utils::grammar_from_json_schema(
             &schema_cxx,
             any_whitespace,
             has_indent,
@@ -131,11 +128,8 @@ impl Grammar {
             &separator_colon_cxx,
             strict_mode,
             print_converted_ebnf,
-        )
-        .within_box();
-        Self {
-            inner: ffi_pin,
-        }
+        );
+        Self { inner: ffi_ptr }
     }
 
     /// Create a grammar from a regular expression string.
@@ -156,11 +150,9 @@ impl Grammar {
         print_converted_ebnf: bool,
     ) -> Self {
         cxx::let_cxx_string!(regex_cxx = regex_string);
-        let ffi_pin = FFIGrammar::FromRegex(&regex_cxx, print_converted_ebnf)
-            .within_box();
-        Self {
-            inner: ffi_pin,
-        }
+        let ffi_ptr = FFIGrammar::FromRegex(&regex_cxx, print_converted_ebnf)
+            .within_unique_ptr();
+        Self { inner: ffi_ptr }
     }
 
     /// Create a grammar from a structural tag JSON string.
@@ -214,12 +206,7 @@ impl Grammar {
         if unique_ptr.is_null() {
             return Err(error_out_cxx.to_string());
         }
-        let raw_ptr = unique_ptr.into_raw();
-        let ffi_box = unsafe { Box::from_raw(raw_ptr) };
-        let ffi_pin = unsafe { Pin::new_unchecked(ffi_box) };
-        Ok(Self {
-            inner: ffi_pin,
-        })
+        Ok(Self { inner: unique_ptr })
     }
     /// Get the grammar of standard JSON. This is compatible with the official JSON grammar
     /// specification in <https://www.json.org/json-en.html>.
@@ -227,10 +214,8 @@ impl Grammar {
     /// # Returns
     /// The constructed grammar for JSON.
     pub fn builtin_json_grammar() -> Self {
-        let ffi_pin = FFIGrammar::BuiltinJSONGrammar().within_box();
-        Self {
-            inner: ffi_pin,
-        }
+        let ffi_ptr = FFIGrammar::BuiltinJSONGrammar().within_unique_ptr();
+        Self { inner: ffi_ptr }
     }
 
     /// Create a grammar that matches the concatenation of the grammars in the slice.
@@ -255,10 +240,8 @@ impl Grammar {
                 );
             }
         }
-        let ffi_pin = FFIGrammar::Concat(vec.as_ref().unwrap()).within_box();
-        Self {
-            inner: ffi_pin,
-        }
+        let ffi_ptr = FFIGrammar::Concat(vec.as_ref().unwrap()).within_unique_ptr();
+        Self { inner: ffi_ptr }
     }
 
     /// Create a grammar that matches any of the grammars in the slice.
@@ -280,15 +263,17 @@ impl Grammar {
                 cxx_utils::grammar_vec_push(vec_pin.as_mut(), g.ffi_ref());
             }
         }
-        let ffi_pin = FFIGrammar::Union(vec.as_ref().unwrap()).within_box();
-        Self {
-            inner: ffi_pin,
-        }
+        let ffi_ptr = FFIGrammar::Union(vec.as_ref().unwrap()).within_unique_ptr();
+        Self { inner: ffi_ptr }
     }
 
     /// Serialize the grammar to a JSON string.
     pub fn serialize_json(&self) -> String {
-        self.inner.SerializeJSON().to_string()
+        self.inner
+            .as_ref()
+            .expect("FFIGrammar UniquePtr was null")
+            .SerializeJSON()
+            .to_string()
     }
 
     /// Deserialize a grammar from a JSON string.
@@ -310,21 +295,23 @@ impl Grammar {
         if unique_ptr.is_null() {
             return Err(error_out_cxx.to_string());
         }
-        let raw_ptr = unique_ptr.into_raw();
-        let ffi_box = unsafe { Box::from_raw(raw_ptr) };
-        let ffi_pin = unsafe { Pin::new_unchecked(ffi_box) };
-        Ok(Self {
-            inner: ffi_pin,
-        })
+        Ok(Self { inner: unique_ptr })
     }
 
     pub(crate) fn ffi_ref(&self) -> &FFIGrammar {
-        self.inner.as_ref().get_ref()
+        self.inner
+            .as_ref()
+            .expect("FFIGrammar UniquePtr was null")
     }
 
-    pub(crate) fn from_pinned_ffi(inner: Pin<Box<FFIGrammar>>) -> Self {
-        Self {
-            inner,
-        }
+    pub(crate) fn from_unique_ptr(inner: cxx::UniquePtr<FFIGrammar>) -> Self {
+        Self { inner }
+    }
+
+    // No from_pinned_ffi needed with UniquePtr ownership
+}
+
+impl Drop for Grammar {
+    fn drop(&mut self) {
     }
 }

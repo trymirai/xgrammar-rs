@@ -1,10 +1,11 @@
-use std::pin::Pin;
-
-use autocxx::WithinBox;
+use autocxx::prelude::*;
 
 use crate::{
+    CxxUniquePtr,
     FFIGrammarCompiler,
     compiler::CompiledGrammar,
+    cxx_int,
+    cxx_longlong,
     cxx_utils,
     grammar::{self, StructuralTagItem},
     tokenizer_info::TokenizerInfo,
@@ -15,7 +16,7 @@ use crate::{
 /// multiple threads, and has a cache to store the compilation result, avoiding compiling the
 /// same grammar multiple times.
 pub struct GrammarCompiler {
-    inner: Pin<Box<FFIGrammarCompiler>>,
+    inner: CxxUniquePtr<FFIGrammarCompiler>,
 }
 
 impl GrammarCompiler {
@@ -33,15 +34,13 @@ impl GrammarCompiler {
         cache_enabled: bool,
         cache_limit_bytes: isize,
     ) -> Self {
-        Self {
-            inner: FFIGrammarCompiler::new(
-                tokenizer_info.ffi_ref(),
-                autocxx::c_int(max_threads),
-                cache_enabled,
-                cache_limit_bytes as i64,
-            )
-            .within_box(),
-        }
+        let inner = cxx_utils::make_grammar_compiler(
+            tokenizer_info.ffi_ref(),
+            cxx_int(max_threads),
+            cache_enabled,
+            cxx_longlong(cache_limit_bytes as i64),
+        );
+        Self { inner }
     }
 
     /// Get `CompiledGrammar` from the specified JSON schema and format. The indent
@@ -78,26 +77,26 @@ impl GrammarCompiler {
         cxx::let_cxx_string!(sep_comma_cxx = sep_comma.as_str());
         cxx::let_cxx_string!(sep_colon_cxx = sep_colon.as_str());
 
-        let ffi_pin = cxx_utils::compiler_compile_json_schema(
-            self.inner.as_mut(),
+        let unique_ptr = cxx_utils::compiler_compile_json_schema(
+            self.inner.as_mut().expect("GrammarCompiler inner is null"),
             &schema_cxx,
             any_whitespace,
             has_indent,
-            autocxx::c_int(indent_i32),
+            cxx_int(indent_i32),
             has_separators,
             &sep_comma_cxx,
             &sep_colon_cxx,
             strict_mode,
-        )
-        .within_box();
-
-        CompiledGrammar::from_pinned_ffi(ffi_pin)
+        );
+        CompiledGrammar::from_unique_ptr(unique_ptr)
     }
 
     /// Get `CompiledGrammar` from the standard JSON.
     pub fn compile_builtin_json_grammar(&mut self) -> CompiledGrammar {
-        let ffi = self.inner.as_mut().CompileBuiltinJSONGrammar();
-        CompiledGrammar::from_pinned_ffi(ffi.within_box())
+        let unique_ptr = cxx_utils::compiler_compile_builtin_json(
+            self.inner.as_mut().expect("GrammarCompiler inner is null"),
+        );
+        CompiledGrammar::from_unique_ptr(unique_ptr)
     }
 
     /// Get `CompiledGrammar` from the specified regex.
@@ -106,8 +105,11 @@ impl GrammarCompiler {
         regex: &str,
     ) -> CompiledGrammar {
         cxx::let_cxx_string!(regex_cxx = regex);
-        let ffi_pin = self.inner.as_mut().CompileRegex(&regex_cxx).within_box();
-        CompiledGrammar::from_pinned_ffi(ffi_pin)
+        let unique_ptr = cxx_utils::compiler_compile_regex(
+            self.inner.as_mut().expect("GrammarCompiler inner is null"),
+            &regex_cxx,
+        );
+        CompiledGrammar::from_unique_ptr(unique_ptr)
     }
 
     /// Compile a grammar from structural tags.
@@ -152,12 +154,11 @@ impl GrammarCompiler {
         .to_string();
 
         cxx::let_cxx_string!(structural_tag_str = structural_tag_json);
-        let ffi_pin = self
-            .inner
-            .as_mut()
-            .CompileStructuralTag(&structural_tag_str)
-            .within_box();
-        CompiledGrammar::from_pinned_ffi(ffi_pin)
+        let unique_ptr = cxx_utils::compiler_compile_structural_tag(
+            self.inner.as_mut().expect("GrammarCompiler inner is null"),
+            &structural_tag_str,
+        );
+        CompiledGrammar::from_unique_ptr(unique_ptr)
     }
 
     /// Compile a grammar object to a `CompiledGrammar`.
@@ -165,9 +166,19 @@ impl GrammarCompiler {
         &mut self,
         grammar: &grammar::Grammar,
     ) -> CompiledGrammar {
-        let ffi_pin =
-            self.inner.as_mut().CompileGrammar(grammar.ffi_ref()).within_box();
-        CompiledGrammar::from_pinned_ffi(ffi_pin)
+        cxx::let_cxx_string!(error_out_cxx = "");
+        let unique_ptr = unsafe {
+            cxx_utils::compiler_compile_grammar_or_error(
+                self.inner.as_mut().expect("GrammarCompiler inner is null"),
+                grammar.ffi_ref(),
+                error_out_cxx.as_mut().get_unchecked_mut(),
+            )
+        };
+        if unique_ptr.is_null() {
+            let msg = error_out_cxx.to_string();
+            panic!("CompileGrammar threw: {}", msg);
+        }
+        CompiledGrammar::from_unique_ptr(unique_ptr)
     }
 
     /// Compile a grammar from an EBNF string. The string should follow the format described in
@@ -187,16 +198,21 @@ impl GrammarCompiler {
 
     /// Clear all cached compiled grammars.
     pub fn clear_cache(&mut self) {
-        self.inner.as_mut().ClearCache();
+        self.inner.as_mut().expect("GrammarCompiler inner is null").ClearCache();
     }
 
     /// The approximate memory usage of the cache in bytes.
     pub fn get_cache_size_bytes(&self) -> i64 {
-        self.inner.GetCacheSizeBytes().into()
+        self.inner.as_ref().expect("GrammarCompiler inner is null").GetCacheSizeBytes().into()
     }
 
     /// The maximum memory usage for the cache in bytes. Returns -1 if unlimited.
     pub fn cache_limit_bytes(&self) -> i64 {
-        self.inner.CacheLimitBytes().into()
+        self.inner.as_ref().expect("GrammarCompiler inner is null").CacheLimitBytes().into()
+    }
+}
+
+impl Drop for GrammarCompiler {
+    fn drop(&mut self) {
     }
 }

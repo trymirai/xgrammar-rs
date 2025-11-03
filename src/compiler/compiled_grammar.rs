@@ -30,16 +30,21 @@ impl CompiledGrammar {
 
     /// The approximate memory usage of the compiled grammar in bytes.
     pub fn memory_size_bytes(&self) -> usize {
-        // MemorySizeBytes() returns C size_t, which autocxx may represent as either:
-        // - primitive usize on some builds (can cast directly to u64)
-        // - autocxx::c_ulong newtype on other builds (implements Into<u64>)
-        // This approach works for both:
-        // - If usize: try_into fails, fallback to `as u64` cast
-        // - If c_ulong: try_into succeeds via Into<u64> impl, converts to u64
-        let size = self.inner.MemorySizeBytes();
-        #[allow(clippy::useless_conversion)]
-        let size_u64: u64 = size.try_into().unwrap_or_else(|_| size as u64);
-        size_u64 as usize
+        // MemorySizeBytes() returns C size_t, which autocxx represents differently per architecture:
+        // - ARM64 (aarch64): primitive usize - can cast directly
+        // - x86_64: autocxx::c_ulong newtype - needs conversion via Into<u64>
+        #[cfg(target_arch = "aarch64")]
+        {
+            // On ARM64, MemorySizeBytes() returns primitive usize
+            self.inner.MemorySizeBytes() as usize
+        }
+        #[cfg(not(target_arch = "aarch64"))]
+        {
+            // On x86_64 and other architectures, use Into<u64> trait
+            let size = self.inner.MemorySizeBytes();
+            let size_u64: u64 = size.into();
+            size_u64 as usize
+        }
     }
     /// Serialize the compiled grammar to a JSON string.
     /// It will serialize the compiled grammar without the tokenizer info,

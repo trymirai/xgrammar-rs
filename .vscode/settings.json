@@ -105,5 +105,6 @@
         "unordered_map": "cpp",
         "unordered_set": "cpp",
         "algorithm": "cpp"
-    }
+    },
+    "cmake.ignoreCMakeListsMissing": true
 }

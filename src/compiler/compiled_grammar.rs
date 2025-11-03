@@ -31,8 +31,17 @@ impl CompiledGrammar {
     /// The approximate memory usage of the compiled grammar in bytes.
     pub fn memory_size_bytes(&self) -> usize {
         // MemorySizeBytes comes from C++ and maps to Rust's usize via cxx.
-        // Avoid usize -> u64 -> usize conversions which are not universally infallible.
-        self.inner.MemorySizeBytes() as usize
+        // On some platforms, autocxx wraps c_ulong; on others, it's already usize.
+        let size = self.inner.MemorySizeBytes();
+        // Try to extract the inner value if it's a wrapper type, otherwise use it directly
+        #[cfg(target_pointer_width = "64")]
+        {
+            size as u64 as usize
+        }
+        #[cfg(not(target_pointer_width = "64"))]
+        {
+            size as u32 as usize
+        }
     }
 
     /// Serialize the compiled grammar to a JSON string.

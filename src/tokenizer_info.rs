@@ -277,14 +277,14 @@ impl Drop for TokenizerInfo {
 #[cfg(feature = "tokenizers")]
 impl TokenizerInfo {
     #[inline]
-    fn extract_ordered_vocab(tokenizer: &tokenizers::Tokenizer) -> Vec<String> {
+    fn extract_ordered_vocab(tokenizer: &tokenizers::Tokenizer) -> Box<[String]> {
         let mut pairs: Vec<(usize, String)> = tokenizer
             .get_vocab(true)
             .into_iter()
             .map(|(tok, id)| (id as usize, tok))
             .collect();
         pairs.sort_by_key(|(id, _)| *id);
-        pairs.into_iter().map(|(_, tok)| tok).collect()
+        pairs.into_iter().map(|(_, tok)| tok).collect::<Vec<_>>().into_boxed_slice()
     }
 
     /// Heuristically detect whether a tokenizer resembles a tiktoken-style tokenizer.

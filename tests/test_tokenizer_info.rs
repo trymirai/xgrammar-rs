@@ -4,7 +4,7 @@ mod test_utils;
 use serial_test::serial;
 use test_utils::*;
 
-fn extract_ordered_vocab(tk: &tokenizers::Tokenizer) -> Vec<String> {
+fn extract_ordered_vocab(tk: &tokenizers::Tokenizer) -> Box<[String]> {
     let mut pairs: Vec<(usize, String)> = tk
         .get_vocab(true)
         .into_iter()
@@ -15,12 +15,12 @@ fn extract_ordered_vocab(tk: &tokenizers::Tokenizer) -> Vec<String> {
     for (_, tok) in pairs {
         out.push(tok);
     }
-    out
+    out.into_boxed_slice()
 }
 
 // Subset of Python's tokenizer_path__vocab_type__prepend_space
 // Using models accessible with current HF token
-fn cases_model_vocab() -> Vec<(&'static str, xgrammar::VocabType, bool)> {
+fn cases_model_vocab() -> Box<[(&'static str, xgrammar::VocabType, bool)]> {
     vec![
         (
             "meta-llama/Llama-2-7b-chat-hf",
@@ -28,7 +28,7 @@ fn cases_model_vocab() -> Vec<(&'static str, xgrammar::VocabType, bool)> {
             true,
         ),
         // Note: Python has 30+ models, but limiting to publicly accessible models
-    ]
+    ].into_boxed_slice()
 }
 
 #[test]

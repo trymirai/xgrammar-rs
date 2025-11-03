@@ -30,20 +30,16 @@ impl CompiledGrammar {
 
     /// The approximate memory usage of the compiled grammar in bytes.
     pub fn memory_size_bytes(&self) -> usize {
-        // MemorySizeBytes() returns different types on different platforms:
-        // - On some platforms: primitive usize (can cast directly)
-        // - On other platforms: autocxx::c_ulong (needs conversion via From trait)
-        // We handle both cases by converting to u64 first, then to usize.
+        // MemorySizeBytes() returns C size_t, which autocxx may represent as either:
+        // - primitive usize on some builds (cast works)
+        // - autocxx::c_ulong newtype on other builds (needs conversion via Into<u64>)
+        // We try to convert to u64 first, which works for both via From/Into trait,
+        // then cast the u64 to usize.
         let size = self.inner.MemorySizeBytes();
-
-        #[allow(clippy::useless_conversion)]
-        {
-            let size_as_u64 =
-                u64::try_from(size as u64).unwrap_or_else(|_| size as u64);
-            size_as_u64 as usize
-        }
+        // For primitive usize: cast to u64, then to usize
+        // For c_ulong: use Into<u64> trait, then cast to usize
+        TryInto::<u64>::try_into(size).unwrap_or_else(|_| size as u64) as usize
     }
-
     /// Serialize the compiled grammar to a JSON string.
     /// It will serialize the compiled grammar without the tokenizer info,
     /// since the tokenizer info is shared by multiple compiled grammars.

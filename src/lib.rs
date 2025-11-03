@@ -1,4 +1,6 @@
 #![allow(unsafe_op_in_unsafe_fn)]
+// Suppress warnings from auto-generated FFI code
+#![allow(unused_imports)]
 
 use autocxx::prelude::*;
 
@@ -124,7 +126,7 @@ pub use config::{
 pub use ffi::xgrammar::VocabType;
 pub use grammar::{Grammar, StructuralTagItem};
 pub use matcher::{
-    BatchGrammarMatcher, GrammarMatcher, allocate_token_bitmask, get_bitmask_shape,
-    reset_token_bitmask,
+    BatchGrammarMatcher, GrammarMatcher, allocate_token_bitmask,
+    get_bitmask_shape, reset_token_bitmask,
 };
 pub use tokenizer_info::TokenizerInfo;

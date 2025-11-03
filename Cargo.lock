@@ -3007,7 +3007,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9edde0db4769d2dc68579893f2306b26c6ecfbe0ef499b013d731b7b9247e0b9"
 
 [[package]]
-name = "xgrammar"
+name = "xgrammar-rs"
 version = "0.1.26"
 dependencies = [
  "autocxx",

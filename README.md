@@ -75,10 +75,16 @@ let grammar = Grammar::from_json_schema(
 
 // Create tokenizer info (example with empty vocab)
 let vocab: Vec<&str> = vec![];
-let tokenizer_info = TokenizerInfo::new(&vocab, VocabType::RAW, &None, false);
+let tokenizer_info = TokenizerInfo::new(
+    &vocab,
+    VocabType::RAW,
+    None,
+    &None,
+    false,
+);
 
 // Compile grammar
-let mut compiler = GrammarCompiler::new(&tokenizer_info, 8, false, -1);
+let mut compiler = GrammarCompiler::new(&tokenizer_info, 8, true, -1);
 let compiled_grammar = compiler.compile_grammar(&grammar);
 
 // Create matcher
@@ -119,22 +125,26 @@ let grammar = Grammar::from_regex(regex, false);
 ```rust
 use xgrammar::{Grammar, GrammarCompiler, GrammarMatcher, TokenizerInfo};
 
-// Load tokenizer
-let tokenizer = tokenizers::Tokenizer::from_file("tokenizer.json")?;
+// Load tokenizer from HuggingFace
+let tokenizer = tokenizers::Tokenizer::from_file("tokenizer.json")
+    .expect("Failed to load tokenizer");
 let tokenizer_info = TokenizerInfo::from_huggingface(&tokenizer, None, None);
 
 // Create and compile grammar
 let grammar = Grammar::builtin_json_grammar();
-let mut compiler = GrammarCompiler::new(&tokenizer_info, 8, false, -1);
+let mut compiler = GrammarCompiler::new(&tokenizer_info, 8, true, -1);
 let compiled_grammar = compiler.compile_grammar(&grammar);
 
 // Create matcher and use for token-level generation
 let mut matcher = GrammarMatcher::new(&compiled_grammar, None, true, -1);
 
-// Fill next token bitmask
-use xgrammar::{allocate_token_bitmask, create_bitmask_dltensor};
+// Allocate token bitmask for batch generation
+use xgrammar::allocate_token_bitmask;
 let mut bitmask_data = allocate_token_bitmask(1, tokenizer_info.vocab_size());
-// ... use with LLM generation
+
+// For string-based generation (simpler approach)
+assert!(matcher.accept_string(r#"{"key":"value"}"#, false));
+assert!(matcher.is_terminated());
 ```
 
 ## API Documentation

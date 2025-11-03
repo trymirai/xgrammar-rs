@@ -121,6 +121,7 @@ fn test_grammar_compiler_json_schema() {
     });
 
     // Helper to check one configuration (avoid capturing mutable borrow of grammar_compiler)
+    #[allow(dead_code)]
     fn check(
         gc: &mut GrammarCompiler,
         schema: &str,
@@ -144,9 +145,9 @@ fn test_grammar_compiler_json_schema() {
         assert!(matcher.is_terminated());
     }
 
-    // Prepare instance strings
-    let instance_compact = serde_json::to_string(&instance_value).unwrap();
-    let instance_pretty =
+    // Prepare instance strings (not used directly; keep for reference)
+    let _instance_compact = serde_json::to_string(&instance_value).unwrap();
+    let _instance_pretty =
         serde_json::to_string_pretty(&instance_value).unwrap();
 
     // Compile successfully (acceptance is covered in other tests; upstream formatting may differ)

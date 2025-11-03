@@ -13,10 +13,7 @@ pub fn download_tokenizer_json(
     model_id: &str
 ) -> Result<std::path::PathBuf, String> {
     // Pass HF token explicitly from env to ensure access to gated models in CI/WSL
-    let token = std::env::var("HUGGING_FACE_HUB_TOKEN")
-        .or_else(|_| std::env::var("HF_HUB_TOKEN"))
-        .or_else(|_| std::env::var("HF_TOKEN"))
-        .ok();
+    let token = std::env::var("HF_TOKEN").ok();
     let api = ApiBuilder::new()
         .with_token(token)
         .build()
@@ -146,12 +143,12 @@ pub fn is_token_accepted_helper(
 pub fn get_accepted_tokens_helper(
     bitmask: &[i32],
     vocab_size: usize,
-) -> Vec<usize> {
+) -> Box<[usize]> {
     let mut accepted = Vec::new();
     for i in 0..vocab_size {
         if is_token_accepted_helper(i as i32, bitmask) {
             accepted.push(i);
         }
     }
-    accepted
+    accepted.into_boxed_slice()
 }

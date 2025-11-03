@@ -2,7 +2,9 @@ use std::pin::Pin;
 
 use autocxx::prelude::*;
 
-use crate::{DLTensor, FFIGrammarMatcher, compiler::CompiledGrammar, cxx_utils};
+use crate::{
+    DLTensor, FFIGrammarMatcher, compiler::CompiledGrammar, cxx_utils,
+};
 
 /// Match tokens/strings to a compiled grammar and generate next-token masks.
 pub struct GrammarMatcher {
@@ -104,7 +106,7 @@ impl GrammarMatcher {
 
     /// Fill the bitmask for the next token prediction.
     ///
-    /// The input bitmask must be on CPU. bitmask[index] will be filled with the next token bitmask.
+    /// The input bitmask must be on CPU. bitmask\[index\] will be filled with the next token bitmask.
     /// This method does not change the matcher state.
     ///
     /// # Parameters

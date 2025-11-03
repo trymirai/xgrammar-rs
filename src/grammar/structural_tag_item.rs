@@ -1,4 +1,4 @@
-/// A structural tag item. See [`Grammar::from_structural_tag`] for more details.
+/// A structural tag item. See [`crate::Grammar::from_structural_tag`] for more details.
 ///
 /// The structural tag handles the dispatching of different grammars based on the
 /// tags and triggers: it initially allows any output, until a trigger is encountered,

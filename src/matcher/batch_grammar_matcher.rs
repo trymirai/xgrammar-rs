@@ -2,9 +2,8 @@ use std::pin::Pin;
 
 use autocxx::prelude::*;
 
-use crate::{DLTensor, cxx_utils};
-
 use super::GrammarMatcher;
+use crate::{DLTensor, cxx_utils};
 
 /// A batch version of GrammarMatcher that can fill the next token bitmask for multiple
 /// matchers in parallel. It utilizes multiple threads to speed up the computation. It is
@@ -20,8 +19,11 @@ impl BatchGrammarMatcher {
     /// - `max_threads`: The maximum number of threads to use for parallel processing.
     ///   Use -1 for automatic thread count (hardware_concurrency / 2).
     pub fn new(max_threads: i32) -> Self {
-        let ffi_pin = cxx_utils::make_batch_grammar_matcher(max_threads).within_box();
-        Self { inner: ffi_pin }
+        let ffi_pin =
+            cxx_utils::make_batch_grammar_matcher(max_threads).within_box();
+        Self {
+            inner: ffi_pin,
+        }
     }
 
     /// Create a batch grammar matcher with automatic thread count.
@@ -50,7 +52,10 @@ impl BatchGrammarMatcher {
         let mut ffi_matcher_vec = cxx_utils::new_grammar_matcher_vector();
         {
             let mut vec_pin = ffi_matcher_vec.pin_mut();
-            cxx_utils::grammar_matcher_vec_reserve(vec_pin.as_mut(), matchers.len());
+            cxx_utils::grammar_matcher_vec_reserve(
+                vec_pin.as_mut(),
+                matchers.len(),
+            );
             for matcher in matchers {
                 cxx_utils::grammar_matcher_vec_push(
                     vec_pin.as_mut(),
@@ -60,7 +65,9 @@ impl BatchGrammarMatcher {
         }
 
         let (has_indices, indices_ptr, indices_len) = match indices {
-            Some(slice) if !slice.is_empty() => (true, slice.as_ptr(), slice.len()),
+            Some(slice) if !slice.is_empty() => {
+                (true, slice.as_ptr(), slice.len())
+            },
             _ => (false, std::ptr::null(), 0usize),
         };
 
@@ -85,12 +92,12 @@ impl BatchGrammarMatcher {
     /// - `debug_print`: Whether to print information about generated bitmask (default: false).
     ///
     /// # Returns
-    /// A vector of booleans indicating whether each token was accepted by its corresponding matcher.
+    /// A boxed slice of booleans indicating whether each token was accepted by its corresponding matcher.
     pub fn batch_accept_token(
         matchers: &[GrammarMatcher],
         tokens: &[i32],
         debug_print: bool,
-    ) -> Vec<bool> {
+    ) -> Box<[bool]> {
         assert_eq!(
             matchers.len(),
             tokens.len(),
@@ -100,7 +107,10 @@ impl BatchGrammarMatcher {
         let mut ffi_matcher_vec = cxx_utils::new_grammar_matcher_vector();
         {
             let mut vec_pin = ffi_matcher_vec.pin_mut();
-            cxx_utils::grammar_matcher_vec_reserve(vec_pin.as_mut(), matchers.len());
+            cxx_utils::grammar_matcher_vec_reserve(
+                vec_pin.as_mut(),
+                matchers.len(),
+            );
             for matcher in matchers {
                 cxx_utils::grammar_matcher_vec_push(
                     vec_pin.as_mut(),
@@ -118,7 +128,7 @@ impl BatchGrammarMatcher {
             )
         };
 
-        result.iter().map(|&b| b != 0).collect()
+        result.iter().map(|&b| b != 0).collect::<Vec<_>>().into_boxed_slice()
     }
 
     /// Accept a batch of strings for multiple matchers.
@@ -129,12 +139,12 @@ impl BatchGrammarMatcher {
     /// - `debug_print`: Whether to print information about generated bitmask (default: false).
     ///
     /// # Returns
-    /// A vector of booleans indicating whether each string was accepted by its corresponding matcher.
+    /// A boxed slice of booleans indicating whether each string was accepted by its corresponding matcher.
     pub fn batch_accept_string(
         matchers: &[GrammarMatcher],
         strings: &[impl AsRef<str>],
         debug_print: bool,
-    ) -> Vec<bool> {
+    ) -> Box<[bool]> {
         assert_eq!(
             matchers.len(),
             strings.len(),
@@ -144,7 +154,10 @@ impl BatchGrammarMatcher {
         let mut ffi_matcher_vec = cxx_utils::new_grammar_matcher_vector();
         {
             let mut vec_pin = ffi_matcher_vec.pin_mut();
-            cxx_utils::grammar_matcher_vec_reserve(vec_pin.as_mut(), matchers.len());
+            cxx_utils::grammar_matcher_vec_reserve(
+                vec_pin.as_mut(),
+                matchers.len(),
+            );
             for matcher in matchers {
                 cxx_utils::grammar_matcher_vec_push(
                     vec_pin.as_mut(),
@@ -177,6 +190,6 @@ impl BatchGrammarMatcher {
             )
         };
 
-        result.iter().map(|&b| b != 0).collect()
+        result.iter().map(|&b| b != 0).collect::<Vec<_>>().into_boxed_slice()
     }
 }

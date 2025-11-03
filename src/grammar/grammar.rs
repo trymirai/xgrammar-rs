@@ -10,7 +10,7 @@ use crate::ffi::{cxx_utils, xgrammar::Grammar as FFIGrammar};
 /// The Grammar object supports context-free grammar (CFG). EBNF (extended Backus-Naur Form) is
 /// used as the format of the grammar. There are many specifications for EBNF in the literature,
 /// and we follow the specification of GBNF (GGML BNF) in
-/// https://github.com/ggerganov/llama.cpp/blob/master/grammars/README.md.
+/// <https://github.com/ggerganov/llama.cpp/blob/master/grammars/README.md>
 ///
 /// When formatted with Display, the grammar will be converted to GBNF format.
 pub struct Grammar {
@@ -200,7 +200,9 @@ impl Grammar {
     /// }).to_string();
     /// let grammar = Grammar::from_structural_tag(&structural_tag_json)?;
     /// ```
-    pub fn from_structural_tag(structural_tag_json: &str) -> Result<Self, String> {
+    pub fn from_structural_tag(
+        structural_tag_json: &str
+    ) -> Result<Self, String> {
         cxx::let_cxx_string!(json_cxx = structural_tag_json);
         cxx::let_cxx_string!(error_out_cxx = "");
         let unique_ptr = unsafe {
@@ -215,7 +217,9 @@ impl Grammar {
         let raw_ptr = unique_ptr.into_raw();
         let ffi_box = unsafe { Box::from_raw(raw_ptr) };
         let ffi_pin = unsafe { Pin::new_unchecked(ffi_box) };
-        Ok(Self { inner: ffi_pin })
+        Ok(Self {
+            inner: ffi_pin,
+        })
     }
     /// Get the grammar of standard JSON. This is compatible with the official JSON grammar
     /// specification in <https://www.json.org/json-en.html>.

@@ -124,8 +124,9 @@ impl GrammarCompiler {
         use serde_json::json;
         let mut tag_entries = Vec::new();
         for tag in tags {
-            let schema_value: serde_json::Value = serde_json::from_str(&tag.schema)
-                .expect("Invalid JSON schema in StructuralTagItem");
+            let schema_value: serde_json::Value =
+                serde_json::from_str(&tag.schema)
+                    .expect("Invalid JSON schema in StructuralTagItem");
             let content = json!({
                 "type": "json_schema",
                 "json_schema": schema_value
@@ -137,7 +138,8 @@ impl GrammarCompiler {
                 "end": tag.end,
             }));
         }
-        let triggers_vec: Vec<String> = triggers.iter().map(|t| t.as_ref().to_string()).collect();
+        let triggers_vec: Vec<String> =
+            triggers.iter().map(|t| t.as_ref().to_string()).collect();
         let format_obj = json!({
             "type": "triggered_tags",
             "triggers": triggers_vec,
@@ -146,8 +148,9 @@ impl GrammarCompiler {
         let structural_tag_json = json!({
             "type": "structural_tag",
             "format": format_obj,
-        }).to_string();
-        
+        })
+        .to_string();
+
         cxx::let_cxx_string!(structural_tag_str = structural_tag_json);
         let ffi_pin = self
             .inner
@@ -168,7 +171,7 @@ impl GrammarCompiler {
     }
 
     /// Compile a grammar from an EBNF string. The string should follow the format described in
-    /// https://github.com/ggerganov/llama.cpp/blob/master/grammars/README.md.
+    /// <https://github.com/ggerganov/llama.cpp/blob/master/grammars/README.md>
     ///
     /// Parameters
     /// - `ebnf_string`: The grammar string in EBNF format.

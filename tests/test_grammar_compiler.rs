@@ -1,14 +1,14 @@
 mod test_utils;
+use serial_test::serial;
 #[cfg(feature = "hf")]
 use test_utils::*;
-use serial_test::serial;
 #[cfg(feature = "hf")]
 use xgrammar::{Grammar, GrammarMatcher};
 use xgrammar::{GrammarCompiler, TokenizerInfo, VocabType};
 
 fn get_allow_empty_rule_ids_via_json(
     compiled: &xgrammar::CompiledGrammar
-) -> Vec<i32> {
+) -> Box<[i32]> {
     let s = compiled.serialize_json();
     let v: serde_json::Value =
         serde_json::from_str(&s).expect("valid JSON from SerializeJSON");
@@ -17,7 +17,8 @@ fn get_allow_empty_rule_ids_via_json(
         .expect("allow_empty_rule_ids is array")
         .iter()
         .map(|x| x.as_i64().expect("int").try_into().unwrap())
-        .collect()
+        .collect::<Vec<_>>()
+        .into_boxed_slice()
 }
 
 #[test]
@@ -130,7 +131,8 @@ fn test_grammar_compiler_json_schema() {
         instance_preferred: &str,
         instance_alternative: &str,
     ) {
-        let compiled = gc.compile_json_schema(schema, any_ws, indent, seps, true);
+        let compiled =
+            gc.compile_json_schema(schema, any_ws, indent, seps, true);
         let mut matcher = GrammarMatcher::new(&compiled, None, true, -1);
         assert!(!matcher.is_terminated());
         if !matcher.accept_string(instance_preferred, false) {
@@ -144,10 +146,17 @@ fn test_grammar_compiler_json_schema() {
 
     // Prepare instance strings
     let instance_compact = serde_json::to_string(&instance_value).unwrap();
-    let instance_pretty = serde_json::to_string_pretty(&instance_value).unwrap();
+    let instance_pretty =
+        serde_json::to_string_pretty(&instance_value).unwrap();
 
     // Compile successfully (acceptance is covered in other tests; upstream formatting may differ)
-    let compiled = grammar_compiler.compile_json_schema(schema, true, None, Some((",", ":")), true);
+    let compiled = grammar_compiler.compile_json_schema(
+        schema,
+        true,
+        None,
+        Some((",", ":")),
+        true,
+    );
     assert!(compiled.memory_size_bytes() > 0);
 }
 
@@ -192,7 +201,7 @@ rule1 ::= [abc]* [def]*
     for (ebnf, expected) in cases.iter() {
         let cg = compiler.compile_grammar_from_ebnf(ebnf, "root");
         let ids = get_allow_empty_rule_ids_via_json(&cg);
-        assert_eq!(&ids, expected);
+        assert_eq!(&*ids, *expected);
     }
 }
 

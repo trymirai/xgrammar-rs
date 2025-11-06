@@ -1,3 +1,10 @@
+mod test_utils;
+
+use serial_test::serial;
+#[cfg(feature = "hf")]
+use test_utils::{create_bitmask_dltensor, make_hf_tokenizer_info};
+#[cfg(feature = "hf")]
+use xgrammar::allocate_token_bitmask;
 use xgrammar::{
     Grammar, GrammarCompiler, GrammarMatcher, TokenizerInfo, VocabType,
 };
@@ -414,4 +421,51 @@ rule3 ::= [a-n] [b-c] "x" | ""
     assert!(is_grammar_accept_string(&grammar, "ccx"));
     assert!(!is_grammar_accept_string(&grammar, "abb"));
     assert!(!is_grammar_accept_string(&grammar, "ad"));
+}
+
+#[test]
+#[serial]
+#[cfg(feature = "hf")]
+fn test_fill_next_token_bitmask() {
+    let tk = make_hf_tokenizer_info("meta-llama/Llama-2-7b-chat-hf");
+    let json_grammar_ebnf = r#"root ::= object
+value ::= object | array | string | number | "true" | "false" | "null"
+object ::= "{" "" (string ":" value ("," string ":" value)*)? "}"
+array ::= "[" "" (value ("," value)*)? "]"
+string ::= "\"" character* "\""
+character ::= [^"\\\r\n] | "\\" escape
+escape ::= ["\\/bfnrt] | "u" [0-9A-Fa-f]{4}
+number ::= "-"? [0-9]+ ("." [0-9]+)? ([eE] [+-]? [0-9]+)?
+"#;
+    let grammar = Grammar::from_ebnf(json_grammar_ebnf, "root");
+    let mut compiler = GrammarCompiler::new(&tk, 1, false, -1);
+    let compiled = compiler.compile_grammar(&grammar);
+    let mut matcher = GrammarMatcher::new(&compiled, None, true, -1);
+
+    let input_str = r#"{"id": 1,"name": "Example"}"#;
+    let mut bitmask_data = allocate_token_bitmask(1, tk.vocab_size());
+    let (mut tensor, _shape, _strides) =
+        create_bitmask_dltensor(&mut bitmask_data, 1, tk.vocab_size());
+
+    for c in input_str.bytes() {
+        matcher.fill_next_token_bitmask(&mut tensor, 0, false);
+        matcher.accept_string(&String::from_utf8(vec![c]).unwrap(), false);
+    }
+}
+
+#[test]
+#[serial]
+#[cfg(feature = "hf")]
+fn test_not_neighbour_character_class() {
+    let raw_grammar = r#"root ::= [a-cx-z]*"#;
+    let tk = make_hf_tokenizer_info("meta-llama/Llama-2-7b-chat-hf");
+    let grammar = Grammar::from_ebnf(raw_grammar, "root");
+    let mut compiler = GrammarCompiler::new(&tk, 1, false, -1);
+    let compiled = compiler.compile_grammar(&grammar);
+    let mut matcher = GrammarMatcher::new(&compiled, None, true, -1);
+
+    let mut bitmask_data = allocate_token_bitmask(1, tk.vocab_size());
+    let (mut tensor, _shape, _strides) =
+        create_bitmask_dltensor(&mut bitmask_data, 1, tk.vocab_size());
+    matcher.fill_next_token_bitmask(&mut tensor, 0, false);
 }

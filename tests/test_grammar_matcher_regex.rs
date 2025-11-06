@@ -3,6 +3,8 @@ mod test_utils;
 use serial_test::serial;
 use test_utils::*;
 use xgrammar::Grammar;
+#[cfg(feature = "hf")]
+use xgrammar::{GrammarCompiler, GrammarMatcher};
 
 #[test]
 #[serial]
@@ -209,7 +211,17 @@ fn test_regex_with_large_range_compilation() {
     // Test passes if compilation succeeds without panic
 }
 
-// Note: test_regression_lookahead_already_completed from Python is not ported
-// because it requires specific tokenizers (Qwen/Qwen2.5-0.5B) that may not be
-// publicly available with the current HF token, and the test logic is highly
-// specific to the tokenization behavior of that model.
+
+#[test]
+#[serial]
+#[cfg(feature = "hf")]
+fn test_regression_lookahead_already_completed() {
+    let tk = make_hf_tokenizer_info("Qwen/Qwen2.5-0.5B");
+    let regex = r"[0-9]+";
+    let mut compiler = GrammarCompiler::new(&tk, 1, false, -1);
+    let grammar = Grammar::from_regex(regex, false);
+    let compiled = compiler.compile_grammar(&grammar);
+    let mut matcher = GrammarMatcher::new(&compiled, None, true, -1);
+    assert!(matcher.accept_string("123", false));
+    assert!(matcher.is_terminated());
+}

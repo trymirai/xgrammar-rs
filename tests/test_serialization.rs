@@ -1,9 +1,12 @@
 mod test_utils;
 
 use serial_test::serial;
+use test_utils::is_grammar_accept_string;
 use xgrammar::{
     CompiledGrammar, Grammar, GrammarCompiler, TokenizerInfo, VocabType,
 };
+#[cfg(feature = "hf")]
+use test_utils::make_hf_tokenizer_info;
 
 fn construct_grammar() -> Grammar {
     Grammar::from_ebnf(
@@ -146,4 +149,84 @@ fn test_compiled_grammar_deserialize_errors() {
         obj.remove("vocab_size");
     }
     assert!(CompiledGrammar::deserialize_json(&v.to_string(), &tok).is_err());
+}
+
+#[test]
+#[serial]
+fn test_serialize_grammar() {
+    let ebnf = r#"rule1 ::= ([^0-9] rule1) | ""
+root_rule ::= rule1 "a"
+"#;
+    let grammar = Grammar::from_ebnf(ebnf, "root_rule");
+    let serialized = grammar.serialize_json();
+    let parsed: serde_json::Value = serde_json::from_str(&serialized).unwrap();
+    
+    assert!(parsed["__VERSION__"].is_string());
+    assert!(parsed["rules"].is_array());
+    assert!(parsed["grammar_expr_data"].is_array());
+}
+
+#[test]
+#[serial]
+fn test_serialize_tokenizer_info() {
+    let vocab: Vec<&str> = vec!["1", "212", "a", "A", "b", "一", "-", "aBc", "abc"];
+    let stop_ids: Box<[i32]> = vec![0, 1].into_boxed_slice();
+    let tok = TokenizerInfo::new(&vocab, VocabType::BYTE_FALLBACK, &Some(stop_ids), true);
+    
+    let serialized = tok.serialize_json();
+    let parsed: serde_json::Value = serde_json::from_str(&serialized).unwrap();
+    
+    assert!(parsed["__VERSION__"].is_string());
+    assert!(!serialized.is_empty());
+}
+
+#[test]
+#[serial]
+fn test_serialize_tokenizer_info_functional() {
+    let vocab: Vec<&str> = vec!["1", "212", "a", "A", "b", "一", "-", "aBc", "abc"];
+    let stop_ids: Box<[i32]> = vec![0, 1].into_boxed_slice();
+    let tok = TokenizerInfo::new(&vocab, VocabType::BYTE_FALLBACK, &Some(stop_ids), true);
+    
+    let serialized = tok.serialize_json();
+    let deserialized = TokenizerInfo::deserialize_json(&serialized).unwrap();
+    
+    assert_eq!(tok.vocab_size(), deserialized.vocab_size());
+}
+
+#[test]
+#[serial]
+#[cfg(feature = "hf")]
+fn test_serialize_compiled_grammar() {
+    let tok = make_hf_tokenizer_info("meta-llama/Llama-2-7b-chat-hf");
+    let grammar = Grammar::builtin_json_grammar();
+    let mut compiler = GrammarCompiler::new(&tok, 1, false, -1);
+    let compiled = compiler.compile_grammar(&grammar);
+    
+    let serialized = compiled.serialize_json();
+    let parsed: serde_json::Value = serde_json::from_str(&serialized).unwrap();
+    
+    assert!(parsed["__VERSION__"].is_string());
+    assert!(parsed["grammar"].is_object());
+}
+
+#[test]
+#[serial]
+fn test_serialize_grammar_utf8() {
+    let schema = r##"{"type": "string", "enum": ["こんにちは", "世界"]}"##;
+    let grammar = Grammar::from_json_schema(
+        schema,
+        true,
+        None,
+        None::<(&str, &str)>,
+        true,
+        None,
+        false,
+    );
+    
+    let serialized = grammar.serialize_json();
+    let deserialized = Grammar::deserialize_json(&serialized).unwrap();
+    
+    let test_str = r#""こんにちは""#;
+    assert!(is_grammar_accept_string(&grammar, test_str));
+    assert!(is_grammar_accept_string(&deserialized, test_str));
 }

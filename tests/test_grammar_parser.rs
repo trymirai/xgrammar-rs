@@ -1,7 +1,457 @@
 mod test_utils;
 
 use serial_test::serial;
-use xgrammar::Grammar;
+use xgrammar::{Grammar, testing::ebnf_to_grammar_no_normalization};
+
+#[test]
+#[serial]
+fn test_basic_string_literal() {
+    let before = r#"root ::= "hello"
+"#;
+    let expected = r#"root ::= (("hello"))
+"#;
+    let grammar = ebnf_to_grammar_no_normalization(before, "root");
+    let after = grammar.to_string();
+    assert_eq!(after, expected);
+}
+
+#[test]
+#[serial]
+fn test_empty_string() {
+    let before = r#"root ::= ""
+"#;
+    let expected = r#"root ::= ((""))
+"#;
+    let grammar = ebnf_to_grammar_no_normalization(before, "root");
+    let after = grammar.to_string();
+    assert_eq!(after, expected);
+}
+
+#[test]
+#[serial]
+fn test_character_class() {
+    let before = r#"root ::= [a-z]
+"#;
+    let expected = r#"root ::= (([a-z]))
+"#;
+    let grammar = ebnf_to_grammar_no_normalization(before, "root");
+    let after = grammar.to_string();
+    assert_eq!(after, expected);
+}
+
+#[test]
+#[serial]
+fn test_negated_character_class() {
+    let before = r#"root ::= [^a-z]
+"#;
+    let expected = r#"root ::= (([^a-z]))
+"#;
+    let grammar = ebnf_to_grammar_no_normalization(before, "root");
+    let after = grammar.to_string();
+    assert_eq!(after, expected);
+}
+
+#[test]
+#[serial]
+fn test_complex_character_class() {
+    let before = r#"root ::= [a-zA-Z0-9_-] [\r\n$\x10-o\]\--]
+"#;
+    let expected = r#"root ::= (([a-zA-Z0-9_\-] [\r\n$\x10-o\]\-\-]))
+"#;
+    let grammar = ebnf_to_grammar_no_normalization(before, "root");
+    let after = grammar.to_string();
+    assert_eq!(after, expected);
+}
+
+#[test]
+#[serial]
+fn test_sequence() {
+    let before = r#"root ::= "a" "b" "c"
+"#;
+    let expected = r#"root ::= (("a" "b" "c"))
+"#;
+    let grammar = ebnf_to_grammar_no_normalization(before, "root");
+    let after = grammar.to_string();
+    assert_eq!(after, expected);
+}
+
+#[test]
+#[serial]
+fn test_choice() {
+    let before = r#"root ::= "a" | "b" | "c"
+"#;
+    let expected = r#"root ::= (("a") | ("b") | ("c"))
+"#;
+    let grammar = ebnf_to_grammar_no_normalization(before, "root");
+    let after = grammar.to_string();
+    assert_eq!(after, expected);
+}
+
+#[test]
+#[serial]
+fn test_grouping() {
+    let before = r#"root ::= ("a" "b") | ("c" "d")
+"#;
+    let expected = r#"root ::= (((("a" "b"))) | ((("c" "d"))))
+"#;
+    let grammar = ebnf_to_grammar_no_normalization(before, "root");
+    let after = grammar.to_string();
+    assert_eq!(after, expected);
+}
+
+#[test]
+#[serial]
+fn test_star_quantifier_simple() {
+    let before = r#"root ::= "a"*
+"#;
+    let expected = r#"root ::= ((root_1))
+root_1 ::= ("" | ("a" root_1))
+"#;
+    let grammar = ebnf_to_grammar_no_normalization(before, "root");
+    let after = grammar.to_string();
+    assert_eq!(after, expected);
+}
+
+#[test]
+#[serial]
+fn test_plus_quantifier() {
+    let before = r#"root ::= "a"+
+"#;
+    let expected = r#"root ::= ((root_1))
+root_1 ::= (("a" root_1) | "a")
+"#;
+    let grammar = ebnf_to_grammar_no_normalization(before, "root");
+    let after = grammar.to_string();
+    assert_eq!(after, expected);
+}
+
+#[test]
+#[serial]
+fn test_question_quantifier() {
+    let before = r#"root ::= "a"?
+"#;
+    let expected = r#"root ::= ((root_1))
+root_1 ::= ("" | "a")
+"#;
+    let grammar = ebnf_to_grammar_no_normalization(before, "root");
+    let after = grammar.to_string();
+    assert_eq!(after, expected);
+}
+
+#[test]
+#[serial]
+fn test_character_class_star() {
+    let before = r#"root ::= [a-z]*
+"#;
+    let expected = r#"root ::= (([a-z]*))
+"#;
+    let grammar = ebnf_to_grammar_no_normalization(before, "root");
+    let after = grammar.to_string();
+    assert_eq!(after, expected);
+}
+
+#[test]
+#[serial]
+fn test_repetition_range_exact() {
+    let before = r#"root ::= "a"{3}
+"#;
+    let expected = r#"root ::= (((("a" "a" "a"))))
+"#;
+    let grammar = ebnf_to_grammar_no_normalization(before, "root");
+    let after = grammar.to_string();
+    assert_eq!(after, expected);
+}
+
+#[test]
+#[serial]
+fn test_repetition_range_min_max() {
+    let before = r#"root ::= "a"{2,4}
+"#;
+    let expected = r#"root ::= (((("a" "a") | ("a" "a" "a") | ("a" "a" "a" "a"))))
+"#;
+    let grammar = ebnf_to_grammar_no_normalization(before, "root");
+    let after = grammar.to_string();
+    assert_eq!(after, expected);
+}
+
+#[test]
+#[serial]
+fn test_repetition_range_min_only() {
+    let before = r#"root ::= "a"{2,}
+"#;
+    let expected = r#"root ::= ((("a" "a" root_repeat_inf)))
+root_repeat_inf ::= ("" | ("a" root_repeat_inf))
+"#;
+    let grammar = ebnf_to_grammar_no_normalization(before, "root");
+    let after = grammar.to_string();
+    assert_eq!(after, expected);
+}
+
+#[test]
+#[serial]
+fn test_lookahead_assertion_simple() {
+    let before = r#"root ::= "a" (="b")
+"#;
+    let expected = r#"root ::= (("a")) (=(("b")))
+"#;
+    let grammar = ebnf_to_grammar_no_normalization(before, "root");
+    let after = grammar.to_string();
+    assert_eq!(after, expected);
+}
+
+#[test]
+#[serial]
+fn test_complex_lookahead() {
+    let before = r#"root ::= "a" (="b" "c" [0-9])
+"#;
+    let expected = r#"root ::= (("a")) (=(("b" "c" [0-9])))
+"#;
+    let grammar = ebnf_to_grammar_no_normalization(before, "root");
+    let after = grammar.to_string();
+    assert_eq!(after, expected);
+}
+
+#[test]
+#[serial]
+fn test_escape_sequences() {
+    let before = r#"root ::= "\n" "\r" "\t" "\\" "\""
+"#;
+    let expected = r#"root ::= (("\n" "\r" "\t" "\\" "\""))
+"#;
+    let grammar = ebnf_to_grammar_no_normalization(before, "root");
+    let after = grammar.to_string();
+    assert_eq!(after, expected);
+}
+
+#[test]
+#[serial]
+fn test_unicode_escape() {
+    let before = r#"root ::= "\u0041" "\u00E9" "\u4E2D"
+"#;
+    let expected = r#"root ::= (("A" "\xe9" "\u4e2d"))
+"#;
+    let grammar = ebnf_to_grammar_no_normalization(before, "root");
+    let after = grammar.to_string();
+    assert_eq!(after, expected);
+}
+
+#[test]
+#[serial]
+fn test_complex_grammar() {
+    let before = r#"root ::= item+ ";"
+item ::= "a" | "b" | "c"
+"#;
+    let expected = r#"root ::= ((root_1 ";"))
+item ::= (("a") | ("b") | ("c"))
+root_1 ::= ((item root_1) | item)
+"#;
+    let grammar = ebnf_to_grammar_no_normalization(before, "root");
+    let after = grammar.to_string();
+    assert_eq!(after, expected);
+}
+
+#[test]
+#[serial]
+fn test_nested_quantifiers() {
+    let before = r#"root ::= ("a" "b")+
+"#;
+    let expected = r#"root ::= ((root_1))
+root_1 ::= (((("a" "b")) root_1) | (("a" "b")))
+"#;
+    let grammar = ebnf_to_grammar_no_normalization(before, "root");
+    let after = grammar.to_string();
+    assert_eq!(after, expected);
+}
+
+#[test]
+#[serial]
+fn test_combined_features() {
+    let before = r#"root ::= [a-z]+ "-" [0-9]{3}
+"#;
+    let expected = r#"root ::= ((root_1 "-" (([0-9] [0-9] [0-9]))))
+root_1 ::= (([a-z] root_1) | [a-z])
+"#;
+    let grammar = ebnf_to_grammar_no_normalization(before, "root");
+    let after = grammar.to_string();
+    assert_eq!(after, expected);
+}
+
+#[test]
+#[serial]
+fn test_bnf_comment() {
+    let before = r#"root ::= "a" # this is a comment
+"#;
+    let expected = r#"root ::= (("a"))
+"#;
+    let grammar = ebnf_to_grammar_no_normalization(before, "root");
+    let after = grammar.to_string();
+    assert_eq!(after, expected);
+}
+
+#[test]
+#[serial]
+fn test_star_quantifier() {
+    let before = r#"root ::= a b*
+a ::= "a"
+b ::= "b"
+"#;
+    let expected = r#"root ::= ((a root_1))
+a ::= (("a"))
+b ::= (("b"))
+root_1 ::= ("" | (b root_1))
+"#;
+    let grammar = ebnf_to_grammar_no_normalization(before, "root");
+    let after = grammar.to_string();
+    assert_eq!(after, expected);
+}
+
+#[test]
+#[serial]
+fn test_repetition_range() {
+    let before = r#"root ::= a{1,3}
+a ::= "a"
+"#;
+    let expected = r#"root ::= ((((a) | (a a) | (a a a))))
+a ::= (("a"))
+"#;
+    let grammar = ebnf_to_grammar_no_normalization(before, "root");
+    let after = grammar.to_string();
+    assert_eq!(after, expected);
+}
+
+#[test]
+#[serial]
+fn test_lookahead_assertion_with_normalizer() {
+    let before = r#"root ::= "a" (=b)
+b ::= "b"
+"#;
+    let expected = r#"root ::= (("a")) (=((b)))
+b ::= (("b"))
+"#;
+    let grammar = ebnf_to_grammar_no_normalization(before, "root");
+    let after = grammar.to_string();
+    assert_eq!(after, expected);
+}
+
+#[test]
+#[serial]
+fn test_char() {
+    let before = r#"root ::= [a]
+"#;
+    let expected = r#"root ::= (([a]))
+"#;
+    let grammar = ebnf_to_grammar_no_normalization(before, "root");
+    let after = grammar.to_string();
+    assert_eq!(after, expected);
+}
+
+#[test]
+#[serial]
+fn test_space() {
+    let before = r#"root ::= " "
+"#;
+    let expected = r#"root ::= ((" "))
+"#;
+    let grammar = ebnf_to_grammar_no_normalization(before, "root");
+    let after = grammar.to_string();
+    assert_eq!(after, expected);
+}
+
+#[test]
+#[serial]
+fn test_nest() {
+    let before = r#"root ::= (a)
+a ::= "a"
+"#;
+    let expected = r#"root ::= ((((a))))
+a ::= (("a"))
+"#;
+    let grammar = ebnf_to_grammar_no_normalization(before, "root");
+    let after = grammar.to_string();
+    assert_eq!(after, expected);
+}
+
+#[test]
+#[serial]
+fn test_empty_parentheses() {
+    let before = r#"root ::= ()
+"#;
+    let expected = r#"root ::= ((""))
+"#;
+    let grammar = ebnf_to_grammar_no_normalization(before, "root");
+    let after = grammar.to_string();
+    assert_eq!(after, expected);
+}
+
+#[test]
+#[serial]
+fn test_lookahead_assertion_analyzer() {
+    let before = r#"root ::= a (=b)
+a ::= "a"
+b ::= "b"
+"#;
+    let expected = r#"root ::= ((a)) (=((b)))
+a ::= (("a"))
+b ::= (("b"))
+"#;
+    let grammar = ebnf_to_grammar_no_normalization(before, "root");
+    let after = grammar.to_string();
+    assert_eq!(after, expected);
+}
+
+#[test]
+#[serial]
+fn test_flatten() {
+    let before = r#"root ::= a
+a ::= b
+b ::= "c"
+"#;
+    let expected = r#"root ::= ((a))
+a ::= ((b))
+b ::= (("c"))
+"#;
+    let grammar = ebnf_to_grammar_no_normalization(before, "root");
+    let after = grammar.to_string();
+    assert_eq!(after, expected);
+}
+
+#[test]
+#[serial]
+fn test_rule_inliner_basic() {
+    let before = r#"root ::= a
+a ::= "a"
+"#;
+    let expected = r#"root ::= ((a))
+a ::= (("a"))
+"#;
+    let grammar = ebnf_to_grammar_no_normalization(before, "root");
+    let after = grammar.to_string();
+    assert_eq!(after, expected);
+}
+
+#[test]
+#[serial]
+fn test_dead_code_eliminator_basic() {
+    let before = r#"root ::= "a"
+unused ::= "b"
+"#;
+    let expected = r#"root ::= (("a"))
+unused ::= (("b"))
+"#;
+    let grammar = ebnf_to_grammar_no_normalization(before, "root");
+    let after = grammar.to_string();
+    assert_eq!(after, expected);
+}
+
+#[test]
+#[serial]
+fn test_e2e_json_grammar() {
+    let json_grammar = Grammar::builtin_json_grammar();
+    let json_str = json_grammar.to_string();
+    let reparsed = Grammar::from_ebnf(&json_str, "root");
+    let json_str2 = reparsed.to_string();
+    assert_eq!(json_str, json_str2);
+}
 
 #[test]
 #[serial]
@@ -20,55 +470,3 @@ d_1 ::= ("" | ("d"))
     let s2 = g2.to_string();
     assert_eq!(s1, s2);
 }
-
-// Note: Most tests from Python test_grammar_parser.py are not ported because:
-// 1. They require _ebnf_to_grammar_no_normalization which is a testing-only function
-//    for testing the parser without normalization functors
-// 2. They require GrammarFunctor class methods (structure_normalizer, byte_string_fuser,
-//    lookahead_assertion_analyzer, rule_inliner, dead_code_eliminator) which are
-//    testing-only utilities not exposed in the Rust bindings yet
-// 3. Error tests use pytest.raises(RuntimeError) which can't be caught in Rust when
-//    C++ uses XGRAMMAR_LOG(FATAL)
-//
-// The main end-to-end functionality is tested via test_e2e_to_string_roundtrip which
-// verifies that parsing and printing is idempotent.
-//
-// Python tests not ported:
-// - test_basic_string_literal
-// - test_empty_string
-// - test_character_class
-// - test_negated_character_class
-// - test_complex_character_class
-// - test_sequence
-// - test_choice
-// - test_grouping
-// - test_star_quantifier_simple
-// - test_plus_quantifier
-// - test_question_quantifier
-// - test_character_class_star
-// - test_repetition_range_exact
-// - test_repetition_range_min_max
-// - test_repetition_range_min_only
-// - test_lookahead_assertion_simple
-// - test_complex_lookahead
-// - test_escape_sequences
-// - test_unicode_escape
-// - test_complex_grammar
-// - test_nested_quantifiers
-// - test_combined_features
-// - test_bnf_comment
-// - test_star_quantifier
-// - test_repetition_range
-// - test_lookahead_assertion_with_normalizer
-// - test_char
-// - test_space
-// - test_nest
-// - test_empty_parentheses
-// - test_lookahead_assertion_analyzer
-// - test_flatten
-// - test_rule_inliner (parametrized)
-// - test_dead_code_eliminator (parametrized)
-// - test_e2e_json_grammar
-// - test_lexer_parser_errors (parametrized)
-// - test_end_to_end_errors (parametrized)
-// - test_error_consecutive_quantifiers

@@ -78,6 +78,8 @@ include_cpp! {
     generate!("cxx_utils::batch_accept_string")
 
     // cxx_utils/testing.hpp
+    generate!("cxx_utils::ebnf_to_grammar_no_normalization")
+    generate!("cxx_utils::json_schema_to_ebnf")
     generate!("cxx_utils::qwen_xml_tool_calling_to_ebnf")
     generate!("cxx_utils::get_masked_tokens_from_bitmask")
     generate!("cxx_utils::SingleTokenResult")
@@ -125,16 +127,14 @@ mod tokenizer_info;
 pub mod testing;
 
 pub use autocxx::{
-    c_int as cxx_int,
-    c_longlong as cxx_longlong,
-    c_ulong as cxx_ulong,
+    c_int as cxx_int, c_longlong as cxx_longlong, c_ulong as cxx_ulong,
     c_ulonglong as cxx_ulonglong,
 };
-pub use cxx::UniquePtr as CxxUniquePtr;
 pub use compiler::{CompiledGrammar, GrammarCompiler};
 pub use config::{
     get_max_recursion_depth, get_serialization_version, set_max_recursion_depth,
 };
+pub use cxx::UniquePtr as CxxUniquePtr;
 pub use ffi::xgrammar::VocabType;
 pub use grammar::{Grammar, StructuralTagItem};
 pub use matcher::{

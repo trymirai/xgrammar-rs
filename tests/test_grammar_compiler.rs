@@ -133,7 +133,7 @@ fn test_grammar_compiler_json_schema() {
         instance_alternative: &str,
     ) {
         let compiled =
-            gc.compile_json_schema(schema, any_ws, indent, seps, true);
+            gc.compile_json_schema(schema, any_ws, indent, seps, true, None);
         let mut matcher = GrammarMatcher::new(&compiled, None, true, -1);
         assert!(!matcher.is_terminated());
         if !matcher.accept_string(instance_preferred, false) {
@@ -157,6 +157,7 @@ fn test_grammar_compiler_json_schema() {
         None,
         Some((",", ":")),
         true,
+        None,
     );
     assert!(compiled.memory_size_bytes() > 0);
 }
@@ -274,6 +275,7 @@ fn test_grammar_compiler_json_schema_concurrent() {
             None,
             Some((",", ":")),
             true,
+            None,
         );
         let mut matcher = GrammarMatcher::new(&compiled, None, true, -1);
         check(&mut matcher, inst);
@@ -306,6 +308,7 @@ fn test_grammar_compiler_cache_unlimited() {
             None,
             Some((",", ":")),
             true,
+            None,
         );
         sum_single += compiled.memory_size_bytes() as i64;
         let usage = grammar_compiler.get_cache_size_bytes();
@@ -318,6 +321,7 @@ fn test_grammar_compiler_cache_unlimited() {
         None,
         Some((",", ":")),
         true,
+        None,
     );
     assert_eq!(grammar_compiler.get_cache_size_bytes(), old_size);
 }
@@ -350,6 +354,7 @@ fn test_grammar_compiler_cache_limited() {
             None,
             Some((",", ":")),
             true,
+            None,
         );
         sum_single += compiled.memory_size_bytes() as i64;
         let usage = grammar_compiler.get_cache_size_bytes();

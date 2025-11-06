@@ -1,6 +1,64 @@
 use autocxx::prelude::*;
 
-use crate::{DLTensor, cxx_utils, ffi};
+use crate::{DLTensor, cxx_int, cxx_utils, ffi, grammar::Grammar};
+
+/// Convert EBNF to Grammar without normalization (testing utility).
+pub fn ebnf_to_grammar_no_normalization(ebnf_string: &str, root_rule_name: &str) -> Grammar {
+    let ebnf_cxx = ffi::make_string(ebnf_string);
+    let root_cxx = ffi::make_string(root_rule_name);
+    Grammar::from_unique_ptr(cxx_utils::ebnf_to_grammar_no_normalization(&ebnf_cxx, &root_cxx))
+}
+
+/// Convert a JSON schema to EBNF grammar string.
+///
+/// This is a testing/debugging utility that converts a JSON schema to its EBNF representation.
+///
+/// # Parameters
+/// - `schema`: The JSON schema string.
+/// - `any_whitespace`: Whether to allow any whitespace (default: true).
+/// - `indent`: The number of spaces for indentation. If None, output will be in one line.
+/// - `separators`: Two separators used in the schema: (comma, colon). Examples: (",", ":"), (", ", ": ").
+/// - `strict_mode`: Whether to use strict mode (default: true).
+/// - `max_whitespace_cnt`: The maximum number of whitespace characters. If None, unlimited.
+///
+/// # Returns
+/// The EBNF grammar string.
+pub fn json_schema_to_ebnf(
+    schema: &str,
+    any_whitespace: bool,
+    indent: Option<i32>,
+    separators: Option<(impl AsRef<str>, impl AsRef<str>)>,
+    strict_mode: bool,
+    max_whitespace_cnt: Option<i32>,
+) -> String {
+    let schema_cxx = ffi::make_string(schema);
+    let has_indent = indent.is_some();
+    let indent_i32 = indent.unwrap_or(0);
+    let has_separators = separators.is_some();
+    let (sep_comma, sep_colon) = if let Some((comma, colon)) = separators {
+        (comma.as_ref().to_string(), colon.as_ref().to_string())
+    } else {
+        (String::new(), String::new())
+    };
+    let sep_comma_cxx = ffi::make_string(&sep_comma);
+    let sep_colon_cxx = ffi::make_string(&sep_colon);
+    let has_max_whitespace_cnt = max_whitespace_cnt.is_some();
+    let max_whitespace_cnt_i32 = max_whitespace_cnt.unwrap_or(0);
+
+    cxx_utils::json_schema_to_ebnf(
+        &schema_cxx,
+        any_whitespace,
+        has_indent,
+        indent_i32,
+        has_separators,
+        &sep_comma_cxx,
+        &sep_colon_cxx,
+        strict_mode,
+        has_max_whitespace_cnt,
+        max_whitespace_cnt_i32,
+    )
+    .to_string()
+}
 
 /// Convert a function call schema to EBNF grammar in Qwen XML style.
 pub fn qwen_xml_tool_calling_to_ebnf(schema_json: &str) -> String {

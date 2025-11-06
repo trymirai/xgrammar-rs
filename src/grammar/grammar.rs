@@ -98,6 +98,7 @@ impl Grammar {
         indent: Option<i32>,
         separators: Option<(impl AsRef<str>, impl AsRef<str>)>,
         strict_mode: bool,
+        max_whitespace_cnt: Option<i32>,
         print_converted_ebnf: bool,
     ) -> Self {
         cxx::let_cxx_string!(schema_cxx = schema);
@@ -116,6 +117,8 @@ impl Grammar {
         } else {
             (String::new(), String::new())
         };
+        let has_max_whitespace_cnt = max_whitespace_cnt.is_some();
+        let max_whitespace_cnt_i32: i32 = max_whitespace_cnt.unwrap_or(0);
         cxx::let_cxx_string!(separator_comma_cxx = separator_comma.as_str());
         cxx::let_cxx_string!(separator_colon_cxx = separator_colon.as_str());
         let ffi_ptr = cxx_utils::grammar_from_json_schema(
@@ -127,6 +130,8 @@ impl Grammar {
             &separator_comma_cxx,
             &separator_colon_cxx,
             strict_mode,
+            has_max_whitespace_cnt,
+            max_whitespace_cnt_i32,
             print_converted_ebnf,
         );
         Self { inner: ffi_ptr }

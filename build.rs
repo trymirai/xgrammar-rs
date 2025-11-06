@@ -16,9 +16,7 @@ fn abs_path<P: AsRef<Path>>(p: P) -> PathBuf {
     if p.as_ref().is_absolute() {
         p.as_ref().to_path_buf()
     } else {
-        env::current_dir()
-            .expect("current_dir failed")
-            .join(p)
+        env::current_dir().expect("current_dir failed").join(p)
     }
 }
 
@@ -98,10 +96,8 @@ fn find_xgrammar_lib_dir(root: &Path) -> Option<PathBuf> {
         "xgrammar.lib",  // Windows static
     ];
 
-    for entry in WalkDir::new(root)
-        .max_depth(6)
-        .into_iter()
-        .filter_map(Result::ok)
+    for entry in
+        WalkDir::new(root).max_depth(6).into_iter().filter_map(Result::ok)
     {
         if !entry.file_type().is_file() {
             continue;
@@ -193,10 +189,7 @@ fn main() {
                 unsafe {
                     env::set_var("LIBCLANG_PATH", &dir);
                 }
-                println!(
-                    "cargo:rustc-env=LIBCLANG_PATH={}",
-                    dir.display()
-                );
+                println!("cargo:rustc-env=LIBCLANG_PATH={}", dir.display());
             }
         }
     }
@@ -211,7 +204,7 @@ fn main() {
 
     let external_dir = manifest_dir.join("external");
     let xgrammar_src_dir = find_latest_xgrammar_src(&external_dir)
-        .unwrap_or_else(|| manifest_dir.join("external/xgrammar-0.1.26"));
+        .unwrap_or_else(|| manifest_dir.join("external/xgrammar-0.1.27"));
     let xgrammar_include_dir = xgrammar_src_dir.join("include");
     let dlpack_include_dir = xgrammar_src_dir.join("3rdparty/dlpack/include");
     let picojson_include_dir = xgrammar_src_dir.join("3rdparty/picojson");
@@ -348,7 +341,12 @@ fn main() {
     // Build the autocxx bridge
     let mut autocxx_builder = autocxx_build::Builder::new(
         "src/lib.rs",
-        &[&src_include_dir, &xgrammar_include_dir, &dlpack_include_dir, &picojson_include_dir],
+        &[
+            &src_include_dir,
+            &xgrammar_include_dir,
+            &dlpack_include_dir,
+            &picojson_include_dir,
+        ],
     )
     .extra_clang_args(&extra_clang_args_refs) // for libclang parsing
     .build()

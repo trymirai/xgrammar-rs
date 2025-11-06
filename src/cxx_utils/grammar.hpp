@@ -22,6 +22,8 @@ inline std::unique_ptr<xgrammar::Grammar> grammar_from_json_schema(
     const std::string& separator_comma,
     const std::string& separator_colon,
     bool strict_mode,
+    bool has_max_whitespace_cnt,
+    int32_t max_whitespace_cnt,
     bool print_converted_ebnf
 ) {
   std::optional<int> indent_opt = std::nullopt;
@@ -33,12 +35,17 @@ inline std::unique_ptr<xgrammar::Grammar> grammar_from_json_schema(
   if (has_separators)
     separators_opt = std::make_pair(separator_comma, separator_colon);
 
+  std::optional<int> max_whitespace_cnt_opt = std::nullopt;
+  if (has_max_whitespace_cnt)
+    max_whitespace_cnt_opt = static_cast<int>(max_whitespace_cnt);
+
   return std::make_unique<xgrammar::Grammar>(xgrammar::Grammar::FromJSONSchema(
       schema,
       any_whitespace,
       indent_opt,
       separators_opt,
       strict_mode,
+      /* max_whitespace_cnt */ max_whitespace_cnt_opt,
       print_converted_ebnf
   ));
 }

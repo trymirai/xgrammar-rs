@@ -64,6 +64,7 @@ impl GrammarCompiler {
         indent: Option<i32>,
         separators: Option<(impl AsRef<str>, impl AsRef<str>)>,
         strict_mode: bool,
+        max_whitespace_cnt: Option<i32>,
     ) -> CompiledGrammar {
         cxx::let_cxx_string!(schema_cxx = schema);
         let has_indent = indent.is_some();
@@ -87,6 +88,8 @@ impl GrammarCompiler {
             &sep_comma_cxx,
             &sep_colon_cxx,
             strict_mode,
+            max_whitespace_cnt.is_some(),
+            cxx_int(max_whitespace_cnt.unwrap_or(0)),
         );
         CompiledGrammar::from_unique_ptr(unique_ptr)
     }

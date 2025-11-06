@@ -36,7 +36,9 @@ inline std::unique_ptr<xgrammar::CompiledGrammar> compiler_compile_json_schema(
     bool has_separators,
     const std::string& separator_comma,
     const std::string& separator_colon,
-    bool strict_mode
+    bool strict_mode,
+    bool has_max_whitespace_cnt,
+    int max_whitespace_cnt
 ) {
   std::optional<int> indent_opt =
       has_indent ? std::optional<int>(indent) : std::nullopt;
@@ -45,12 +47,16 @@ inline std::unique_ptr<xgrammar::CompiledGrammar> compiler_compile_json_schema(
                            std::make_pair(separator_comma, separator_colon)
                        )
                      : std::nullopt;
+  std::optional<int> max_whitespace_cnt_opt =
+      has_max_whitespace_cnt ? std::optional<int>(max_whitespace_cnt)
+                             : std::nullopt;
   auto result = compiler.CompileJSONSchema(
       schema,
       any_whitespace,
       indent_opt,
       sep_opt,
-      strict_mode
+      strict_mode,
+      max_whitespace_cnt_opt
   );
   return std::make_unique<xgrammar::CompiledGrammar>(std::move(result));
 }

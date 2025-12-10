@@ -204,7 +204,7 @@ fn main() {
 
     let external_dir = manifest_dir.join("external");
     let xgrammar_src_dir = find_latest_xgrammar_src(&external_dir)
-        .unwrap_or_else(|| manifest_dir.join("external/xgrammar-0.1.27"));
+        .unwrap_or_else(|| manifest_dir.join("external/xgrammar-0.1.28"));
     let xgrammar_include_dir = xgrammar_src_dir.join("include");
     let dlpack_include_dir = xgrammar_src_dir.join("3rdparty/dlpack/include");
     let picojson_include_dir = xgrammar_src_dir.join("3rdparty/picojson");
@@ -322,9 +322,10 @@ fn main() {
     // Prepare extra clang args for autocxx
     let mut extra_clang_args = vec!["-std=c++17".to_string()];
 
-    // On Windows, explicitly set the target and disable problematic intrinsics
-    // to avoid ARM NEON header issues from Swift toolchain or other clang installations
+    // Platform-specific clang args for autocxx
     let target = env::var("TARGET").unwrap_or_default();
+
+    // Windows: explicitly set the target to avoid ARM NEON header issues
     if target.contains("windows") {
         if target.contains("aarch64") {
             extra_clang_args
@@ -332,6 +333,22 @@ fn main() {
         } else if target.contains("x86_64") {
             extra_clang_args
                 .push("--target=x86_64-pc-windows-msvc".to_string());
+        }
+    }
+
+    // iOS Simulator: set correct target triple and sysroot for C++ headers
+    if target.contains("apple-ios-sim") || target.contains("x86_64-apple-ios") {
+        let arch = if target.contains("aarch64") {
+            "arm64"
+        } else {
+            "x86_64"
+        };
+        let version = env::var("IPHONEOS_DEPLOYMENT_TARGET")
+            .unwrap_or_else(|_| "17.0".into());
+        extra_clang_args
+            .push(format!("--target={}-apple-ios{}-simulator", arch, version));
+        if let Ok(sdkroot) = env::var("SDKROOT") {
+            extra_clang_args.push(format!("-isysroot{}", sdkroot));
         }
     }
 

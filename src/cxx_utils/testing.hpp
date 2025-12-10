@@ -2,8 +2,8 @@
 
 #include <string>
 #include <vector>
-#include "../../external/xgrammar-0.1.27/cpp/testing.h"
-#include "../../external/xgrammar-0.1.27/cpp/json_schema_converter.h"
+#include "../../external/xgrammar-0.1.28/cpp/testing.h"
+#include "../../external/xgrammar-0.1.28/cpp/json_schema_converter.h"
 
 namespace cxx_utils {
 

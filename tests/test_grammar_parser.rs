@@ -155,7 +155,7 @@ fn test_character_class_star() {
 fn test_repetition_range_exact() {
     let before = r#"root ::= "a"{3}
 "#;
-    let expected = r#"root ::= (((("a" "a" "a"))))
+    let expected = r#"root ::= ((("a" "a" "a")))
 "#;
     let grammar = ebnf_to_grammar_no_normalization(before, "root");
     let after = grammar.to_string();
@@ -167,7 +167,9 @@ fn test_repetition_range_exact() {
 fn test_repetition_range_min_max() {
     let before = r#"root ::= "a"{2,4}
 "#;
-    let expected = r#"root ::= (((("a" "a") | ("a" "a" "a") | ("a" "a" "a" "a"))))
+    let expected = r#"root ::= ((("a" "a" root_1)))
+root_1 ::= ("" | ("a" root_2))
+root_2 ::= ("" | "a")
 "#;
     let grammar = ebnf_to_grammar_no_normalization(before, "root");
     let after = grammar.to_string();
@@ -179,8 +181,8 @@ fn test_repetition_range_min_max() {
 fn test_repetition_range_min_only() {
     let before = r#"root ::= "a"{2,}
 "#;
-    let expected = r#"root ::= ((("a" "a" root_repeat_inf)))
-root_repeat_inf ::= ("" | ("a" root_repeat_inf))
+    let expected = r#"root ::= ((("a" "a" root_1)))
+root_1 ::= ("" | ("a" root_1))
 "#;
     let grammar = ebnf_to_grammar_no_normalization(before, "root");
     let after = grammar.to_string();
@@ -268,7 +270,7 @@ root_1 ::= (((("a" "b")) root_1) | (("a" "b")))
 fn test_combined_features() {
     let before = r#"root ::= [a-z]+ "-" [0-9]{3}
 "#;
-    let expected = r#"root ::= ((root_1 "-" (([0-9] [0-9] [0-9]))))
+    let expected = r#"root ::= ((root_1 "-" ([0-9] [0-9] [0-9])))
 root_1 ::= (([a-z] root_1) | [a-z])
 "#;
     let grammar = ebnf_to_grammar_no_normalization(before, "root");
@@ -311,8 +313,10 @@ fn test_repetition_range() {
     let before = r#"root ::= a{1,3}
 a ::= "a"
 "#;
-    let expected = r#"root ::= ((((a) | (a a) | (a a a))))
+    let expected = r#"root ::= (((a root_1)))
 a ::= (("a"))
+root_1 ::= ("" | (a root_2))
+root_2 ::= ("" | a)
 "#;
     let grammar = ebnf_to_grammar_no_normalization(before, "root");
     let after = grammar.to_string();

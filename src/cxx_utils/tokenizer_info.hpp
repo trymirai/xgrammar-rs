@@ -2,6 +2,7 @@
 #define XGRAMMAR_RS_CXX_UTILS_TOKENIZER_INFO_H_
 
 #include <cstdint>
+#include <exception>
 #include <memory>
 #include <optional>
 #include <string>
@@ -20,29 +21,47 @@ inline std::unique_ptr<xgrammar::TokenizerInfo> make_tokenizer_info(
     bool has_stop_ids,
     const int32_t* stop_token_ids_ptr,
     size_t stop_token_ids_len,
-    bool add_prefix_space
+    bool add_prefix_space,
+    std::string* error_out
 ) {
-  std::optional<int> vs = std::nullopt;
-  if (has_vocab_size)
-    vs = vocab_size;
-
-  std::optional<std::vector<int32_t>> stops = std::nullopt;
-  if (has_stop_ids) {
-    std::vector<int32_t> tmp;
-    tmp.reserve(stop_token_ids_len);
-    for (size_t i = 0; i < stop_token_ids_len; ++i) {
-      tmp.push_back(stop_token_ids_ptr[i]);
+  try {
+    if (error_out) {
+      error_out->clear();
     }
-    stops = std::move(tmp);
-  }
 
-  return std::make_unique<xgrammar::TokenizerInfo>(
-      encoded_vocab,
-      vocab_type,
-      vs,
-      stops,
-      add_prefix_space
-  );
+    std::optional<int> vs = std::nullopt;
+    if (has_vocab_size) {
+      vs = vocab_size;
+    }
+
+    std::optional<std::vector<int32_t>> stops = std::nullopt;
+    if (has_stop_ids) {
+      std::vector<int32_t> tmp;
+      tmp.reserve(stop_token_ids_len);
+      for (size_t i = 0; i < stop_token_ids_len; ++i) {
+        tmp.push_back(stop_token_ids_ptr[i]);
+      }
+      stops = std::move(tmp);
+    }
+
+    return std::make_unique<xgrammar::TokenizerInfo>(
+        encoded_vocab,
+        vocab_type,
+        vs,
+        stops,
+        add_prefix_space
+    );
+  } catch (const std::exception& e) {
+    if (error_out) {
+      *error_out = e.what();
+    }
+    return nullptr;
+  } catch (...) {
+    if (error_out) {
+      *error_out = "unknown C++ exception";
+    }
+    return nullptr;
+  }
 }
 
 inline std::unique_ptr<xgrammar::TokenizerInfo>
@@ -50,17 +69,29 @@ tokenizer_info_deserialize_json_or_error(
     const std::string& json_string,
     std::string* error_out
 ) {
-  auto result = xgrammar::TokenizerInfo::DeserializeJSON(json_string);
-  if (std::holds_alternative<xgrammar::SerializationError>(result)) {
+  try {
+    auto result = xgrammar::TokenizerInfo::DeserializeJSON(json_string);
+    if (std::holds_alternative<xgrammar::SerializationError>(result)) {
+      if (error_out) {
+        const auto& err = std::get<xgrammar::SerializationError>(result);
+        std::visit([&](const auto& e) { *error_out = e.what(); }, err);
+      }
+      return nullptr;
+    }
+    return std::make_unique<xgrammar::TokenizerInfo>(
+        std::get<xgrammar::TokenizerInfo>(std::move(result))
+    );
+  } catch (const std::exception& e) {
     if (error_out) {
-      const auto& err = std::get<xgrammar::SerializationError>(result);
-      std::visit([&](const auto& e) { *error_out = e.what(); }, err);
+      *error_out = e.what();
+    }
+    return nullptr;
+  } catch (...) {
+    if (error_out) {
+      *error_out = "unknown C++ exception";
     }
     return nullptr;
   }
-  return std::make_unique<xgrammar::TokenizerInfo>(
-      std::get<xgrammar::TokenizerInfo>(std::move(result))
-  );
 }
 
 } // namespace cxx_utils

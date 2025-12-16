@@ -9,10 +9,10 @@ fn matcher_from_grammar(grammar: &Grammar) -> GrammarMatcher {
     let empty_vocab: Vec<&str> = vec![];
     let stop_ids: Option<Box<[i32]>> = None;
     let tokenizer_info =
-        TokenizerInfo::new(&empty_vocab, VocabType::RAW, &stop_ids, false);
-    let mut compiler = GrammarCompiler::new(&tokenizer_info, 1, false, -1);
-    let compiled = compiler.compile_grammar(grammar);
-    GrammarMatcher::new(&compiled, None, true, -1)
+        TokenizerInfo::new(&empty_vocab, VocabType::RAW, &stop_ids, false).unwrap();
+    let mut compiler = GrammarCompiler::new(&tokenizer_info, 1, false, -1).unwrap();
+    let compiled = compiler.compile_grammar(grammar).unwrap();
+    GrammarMatcher::new(&compiled, None, true, -1).unwrap()
 }
 
 fn is_grammar_accept_string(
@@ -83,7 +83,7 @@ root ::=  [ \n\t]* (("<parameter=name>" [ \n\t]* xml_string_0 [ \n\t]* "</parame
     let ebnf_grammar = qwen_xml_tool_calling_to_ebnf(schema);
     assert_eq!(&ebnf_grammar[..ebnf_grammar.len() - 2], expected_grammar);
 
-    let grammar = Grammar::from_ebnf(&ebnf_grammar, "root");
+    let grammar = Grammar::from_ebnf(&ebnf_grammar, "root").unwrap();
     for (input_str, accepted) in test_cases {
         assert_eq!(
             is_grammar_accept_string(&grammar, input_str),
@@ -134,7 +134,7 @@ root ::=  [ \n\t]* (("<parameter=name>" [ \n\t]* xml_string_0 [ \n\t]* "</parame
     let ebnf_grammar = qwen_xml_tool_calling_to_ebnf(schema);
     assert_eq!(&ebnf_grammar[..ebnf_grammar.len() - 2], expected_grammar);
 
-    let grammar = Grammar::from_ebnf(&ebnf_grammar, "root");
+    let grammar = Grammar::from_ebnf(&ebnf_grammar, "root").unwrap();
     for (input_str, accepted) in test_cases {
         assert_eq!(
             is_grammar_accept_string(&grammar, input_str),
@@ -185,7 +185,7 @@ root ::= "" |  [ \n\t]* (("<parameter=name>" [ \n\t]* xml_string_0 [ \n\t]* "</p
     let ebnf_grammar = qwen_xml_tool_calling_to_ebnf(schema);
     assert_eq!(&ebnf_grammar[..ebnf_grammar.len() - 2], expected_grammar);
 
-    let grammar = Grammar::from_ebnf(&ebnf_grammar, "root");
+    let grammar = Grammar::from_ebnf(&ebnf_grammar, "root").unwrap();
     for (input_str, accepted) in test_cases {
         assert_eq!(
             is_grammar_accept_string(&grammar, input_str),
@@ -220,7 +220,7 @@ fn test_part_required_properties_schema() {
     let schema = r#"{"type":"object","properties":{"name":{"type":"string"},"age":{"type":"integer"}},"required":["name"],"additionalProperties":true}"#;
 
     let ebnf_grammar = qwen_xml_tool_calling_to_ebnf(schema);
-    let grammar = Grammar::from_ebnf(&ebnf_grammar, "root");
+    let grammar = Grammar::from_ebnf(&ebnf_grammar, "root").unwrap();
     for (input_str, accepted) in test_cases {
         assert_eq!(
             is_grammar_accept_string(&grammar, input_str),
@@ -280,7 +280,7 @@ root ::=  [ \n\t]* (("<parameter=address>" [ \n\t]* root_prop_0 [ \n\t]* "</para
     let ebnf_grammar = qwen_xml_tool_calling_to_ebnf(schema);
     assert_eq!(&ebnf_grammar[..ebnf_grammar.len() - 2], expected_grammar);
 
-    let grammar = Grammar::from_ebnf(&ebnf_grammar, "root");
+    let grammar = Grammar::from_ebnf(&ebnf_grammar, "root").unwrap();
     for (input_str, accepted) in test_cases {
         assert_eq!(
             is_grammar_accept_string(&grammar, input_str),
@@ -342,7 +342,7 @@ root ::=  [ \n\t]* (("<parameter=name>" [ \n\t]* xml_string_0 [ \n\t]* "</parame
     let ebnf_grammar = qwen_xml_tool_calling_to_ebnf(schema);
     assert_eq!(&ebnf_grammar[..ebnf_grammar.len() - 2], expected_grammar);
 
-    let grammar = Grammar::from_ebnf(&ebnf_grammar, "root");
+    let grammar = Grammar::from_ebnf(&ebnf_grammar, "root").unwrap();
     for (input_str, accepted) in test_cases {
         assert_eq!(
             is_grammar_accept_string(&grammar, input_str),
@@ -395,7 +395,7 @@ fn test_string_format_length_schema() {
     let schema = r#"{"type":"object","properties":{"name":{"type":"string","minLength":1},"contact_info":{"type":"object","properties":{"phone":{"type":"string","pattern":"[0-9]{5}$"},"email":{"type":"string","format":"email"}},"required":["phone","email"]}},"required":["name","contact_info"]}"#;
 
     let ebnf_grammar = qwen_xml_tool_calling_to_ebnf(schema);
-    let grammar = Grammar::from_ebnf(&ebnf_grammar, "root");
+    let grammar = Grammar::from_ebnf(&ebnf_grammar, "root").unwrap();
     for (input_str, accepted) in test_cases {
         assert_eq!(
             is_grammar_accept_string(&grammar, input_str),

@@ -3,8 +3,10 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <exception>
 #include <optional>
 #include <vector>
+#include <string>
 
 #include "xgrammar/xgrammar.h"
 
@@ -16,33 +18,66 @@ inline std::unique_ptr<xgrammar::GrammarMatcher> make_grammar_matcher(
     const int32_t* override_stop_tokens_ptr,
     size_t override_stop_tokens_len,
     bool terminate_without_stop_token,
-    int max_rollback_tokens
+    int max_rollback_tokens,
+    std::string* error_out
 ) {
-  if (!has_override_stop_tokens) {
+  try {
+    if (error_out) {
+      error_out->clear();
+    }
+
+    if (!has_override_stop_tokens) {
+      return std::make_unique<xgrammar::GrammarMatcher>(
+          compiled_grammar,
+          std::nullopt,
+          terminate_without_stop_token,
+          max_rollback_tokens
+      );
+    }
+    std::vector<int> tmp;
+    tmp.reserve(override_stop_tokens_len);
+    for (size_t i = 0; i < override_stop_tokens_len; ++i) {
+      tmp.push_back(static_cast<int>(override_stop_tokens_ptr[i]));
+    }
     return std::make_unique<xgrammar::GrammarMatcher>(
         compiled_grammar,
-        std::nullopt,
+        std::optional<std::vector<int>>(std::move(tmp)),
         terminate_without_stop_token,
         max_rollback_tokens
     );
+  } catch (const std::exception& e) {
+    if (error_out) {
+      *error_out = e.what();
+    }
+    return nullptr;
+  } catch (...) {
+    if (error_out) {
+      *error_out = "unknown C++ exception";
+    }
+    return nullptr;
   }
-  std::vector<int> tmp;
-  tmp.reserve(override_stop_tokens_len);
-  for (size_t i = 0; i < override_stop_tokens_len; ++i) {
-    tmp.push_back(static_cast<int>(override_stop_tokens_ptr[i]));
-  }
-  return std::make_unique<xgrammar::GrammarMatcher>(
-      compiled_grammar,
-      std::optional<std::vector<int>>(std::move(tmp)),
-      terminate_without_stop_token,
-      max_rollback_tokens
-  );
 }
 
 inline std::unique_ptr<xgrammar::BatchGrammarMatcher> make_batch_grammar_matcher(
-    int32_t max_threads
+    int32_t max_threads,
+    std::string* error_out
 ) {
-  return std::make_unique<xgrammar::BatchGrammarMatcher>(max_threads);
+  try {
+    if (error_out) {
+      error_out->clear();
+    }
+    return std::make_unique<xgrammar::BatchGrammarMatcher>(max_threads);
+  } catch (const std::exception& e) {
+    if (error_out) {
+      *error_out = e.what();
+    }
+    return nullptr;
+  } catch (...) {
+    if (error_out) {
+      *error_out = "unknown C++ exception";
+    }
+    return nullptr;
+  }
 }
 
 inline std::unique_ptr<std::vector<xgrammar::GrammarMatcher>>
@@ -73,13 +108,16 @@ inline void batch_matcher_batch_fill_next_token_bitmask(
     size_t indices_len,
     bool debug_print
 ) {
-  std::optional<std::vector<int32_t>> indices_opt;
-  if (has_indices) {
-    std::vector<int32_t> tmp(indices_ptr, indices_ptr + indices_len);
-    indices_opt = std::move(tmp);
+  try {
+    std::optional<std::vector<int32_t>> indices_opt;
+    if (has_indices) {
+      std::vector<int32_t> tmp(indices_ptr, indices_ptr + indices_len);
+      indices_opt = std::move(tmp);
+    }
+    batch_matcher
+        .BatchFillNextTokenBitmask(matchers, bitmask, indices_opt, debug_print);
+  } catch (...) {
   }
-  batch_matcher
-      .BatchFillNextTokenBitmask(matchers, bitmask, indices_opt, debug_print);
 }
 
 inline std::vector<uint8_t> batch_accept_token(
@@ -88,12 +126,16 @@ inline std::vector<uint8_t> batch_accept_token(
     size_t token_ids_len,
     bool debug_print
 ) {
-  std::vector<int32_t> token_ids(token_ids_ptr, token_ids_ptr + token_ids_len);
-  return xgrammar::BatchGrammarMatcher::BatchAcceptToken(
-      matchers,
-      token_ids,
-      debug_print
-  );
+  try {
+    std::vector<int32_t> token_ids(token_ids_ptr, token_ids_ptr + token_ids_len);
+    return xgrammar::BatchGrammarMatcher::BatchAcceptToken(
+        matchers,
+        token_ids,
+        debug_print
+    );
+  } catch (...) {
+    return std::vector<uint8_t>(token_ids_len, 0);
+  }
 }
 
 inline std::vector<uint8_t> batch_accept_string(
@@ -101,11 +143,15 @@ inline std::vector<uint8_t> batch_accept_string(
     const std::vector<std::string>& strings,
     bool debug_print
 ) {
-  return xgrammar::BatchGrammarMatcher::BatchAcceptString(
-      matchers,
-      strings,
-      debug_print
-  );
+  try {
+    return xgrammar::BatchGrammarMatcher::BatchAcceptString(
+        matchers,
+        strings,
+        debug_print
+    );
+  } catch (...) {
+    return std::vector<uint8_t>(strings.size(), 0);
+  }
 }
 
 } // namespace cxx_utils

@@ -10,7 +10,7 @@ use xgrammar::{GrammarCompiler, GrammarMatcher};
 #[serial]
 fn test_simple() {
     let regex_str = "abc";
-    let grammar = Grammar::from_regex(regex_str, false);
+    let grammar = Grammar::from_regex(regex_str, false).unwrap();
     assert!(is_grammar_accept_string(&grammar, "abc"));
     assert!(!is_grammar_accept_string(&grammar, "ab"));
     assert!(!is_grammar_accept_string(&grammar, "abcd"));
@@ -20,7 +20,7 @@ fn test_simple() {
 #[serial]
 fn test_repetition() {
     let regex_str = "(a|[bc]{4,}){2,3}";
-    let grammar = Grammar::from_regex(regex_str, false);
+    let grammar = Grammar::from_regex(regex_str, false).unwrap();
     let cases = [
         ("aaa", true),
         ("abcbc", true),
@@ -57,7 +57,7 @@ fn test_regex_accept() {
         r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}",
     ];
     for p in patterns {
-        let grammar = Grammar::from_regex(p, false);
+        let grammar = Grammar::from_regex(p, false).unwrap();
         assert!(grammar.to_string_ebnf().len() > 0, "Pattern: {}", p);
     }
 }
@@ -124,7 +124,7 @@ fn test_advanced() {
         ),
     ];
     for (regex, instance, expected) in cases {
-        let g = Grammar::from_regex(regex, false);
+        let g = Grammar::from_regex(regex, false).unwrap();
         assert_eq!(
             is_grammar_accept_string(&g, instance),
             expected,
@@ -152,11 +152,11 @@ fn test_fill_next_token_bitmask() {
         // Note: Using Llama-2 instead of Llama-3 due to authentication requirements
         let tokenizer_info =
             make_hf_tokenizer_info("meta-llama/Llama-2-7b-chat-hf");
-        let mut compiler = GrammarCompiler::new(&tokenizer_info, 8, false, -1);
+        let mut compiler = GrammarCompiler::new(&tokenizer_info, 8, false, -1).unwrap();
 
-        let compiled_grammar = compiler.compile_regex(regex);
+        let compiled_grammar = compiler.compile_regex(regex).unwrap();
         let mut matcher =
-            GrammarMatcher::new(&compiled_grammar, None, false, -1);
+            GrammarMatcher::new(&compiled_grammar, None, false, -1).unwrap();
 
         let vocab_size = tokenizer_info.vocab_size();
         let mut bitmask_data = allocate_token_bitmask(1, vocab_size);
@@ -205,7 +205,7 @@ fn test_regex_with_large_range_compilation() {
     // Note: Using Llama-2 instead of Llama-3 due to authentication requirements
     let tokenizer_info =
         make_hf_tokenizer_info("meta-llama/Llama-2-7b-chat-hf");
-    let mut compiler = GrammarCompiler::new(&tokenizer_info, 8, false, -1);
+    let mut compiler = GrammarCompiler::new(&tokenizer_info, 8, false, -1).unwrap();
 
     let _ = compiler.compile_regex(regex_with_large_range);
     // Test passes if compilation succeeds without panic
@@ -218,10 +218,10 @@ fn test_regex_with_large_range_compilation() {
 fn test_regression_lookahead_already_completed() {
     let tk = make_hf_tokenizer_info("Qwen/Qwen2.5-0.5B");
     let regex = r"[0-9]+";
-    let mut compiler = GrammarCompiler::new(&tk, 1, false, -1);
-    let grammar = Grammar::from_regex(regex, false);
-    let compiled = compiler.compile_grammar(&grammar);
-    let mut matcher = GrammarMatcher::new(&compiled, None, true, -1);
+    let mut compiler = GrammarCompiler::new(&tk, 1, false, -1).unwrap();
+    let grammar = Grammar::from_regex(regex, false).unwrap();
+    let compiled = compiler.compile_grammar(&grammar).unwrap();
+    let mut matcher = GrammarMatcher::new(&compiled, None, true, -1).unwrap();
     assert!(matcher.accept_string("123", false));
     assert!(matcher.is_terminated());
 }

@@ -1,4 +1,4 @@
-//! Grammar module: safe Rust wrappers around xgrammar::Grammar.
+//! This module provides classes representing grammars.
 
 pub mod grammar;
 pub mod structural_tag_item;

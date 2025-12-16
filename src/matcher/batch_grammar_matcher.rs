@@ -5,7 +5,7 @@ use autocxx::prelude::*;
 use super::GrammarMatcher;
 use crate::{CxxUniquePtr, DLTensor, cxx_utils};
 
-/// A batch version of GrammarMatcher that can fill the next token bitmask for multiple
+/// A batch version of `GrammarMatcher` that can fill the next token bitmask for multiple
 /// matchers in parallel. It utilizes multiple threads to speed up the computation. It is
 /// especially useful when the batch size is large.
 pub struct BatchGrammarMatcher {
@@ -16,30 +16,55 @@ impl BatchGrammarMatcher {
     /// Construct the batch grammar matcher.
     ///
     /// # Parameters
-    /// - `max_threads`: The maximum number of threads to use for parallel processing.
-    ///   Use -1 for automatic thread count (hardware_concurrency / 2).
-    pub fn new(max_threads: i32) -> Self {
-        let ffi_pin = cxx_utils::make_batch_grammar_matcher(max_threads);
-        Self {
-            inner: ffi_pin,
+    ///
+    /// - `max_threads`: The maximum number of threads to use for parallel processing. If set
+    ///   to -1, the max_threads will be set to `std::thread::hardware_concurrency() / 2`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the batch grammar matcher cannot be constructed.
+    pub fn new(max_threads: i32) -> Result<Self, String> {
+        cxx::let_cxx_string!(error_out_cxx = "");
+        let ffi_pin = unsafe {
+            cxx_utils::make_batch_grammar_matcher(
+                max_threads,
+                error_out_cxx.as_mut().get_unchecked_mut(),
+            )
+        };
+        if ffi_pin.is_null() {
+            return Err(error_out_cxx.to_string());
         }
+        Ok(Self {
+            inner: ffi_pin,
+        })
     }
 
     /// Create a batch grammar matcher with automatic thread count.
-    pub fn new_auto() -> Self {
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the batch grammar matcher cannot be constructed.
+    pub fn new_auto() -> Result<Self, String> {
         Self::new(-1)
     }
 
     /// Fill the next token bitmask for multiple matchers.
     ///
     /// # Parameters
+    ///
     /// - `matchers`: The list of matchers to fill the bitmask for.
-    /// - `bitmask`: Must be a 2-dimensional int32 tensor with shape (bitmask_batch_size, bitmask_size).
-    ///   Bitmask_batch_size could be larger than the actual batch size to allow padding.
-    ///   Bitmask_size equals to ceil(vocab_size/32).
-    /// - `indices`: A list of indices to specify which rows in the bitmask to fill.
-    ///   If None, fill the bitmask [0..matchers.len()).
-    /// - `debug_print`: Whether to print information about generated bitmask (default: false).
+    /// - `bitmask`: Must be a 2-dimensional int32 tensor with shape
+    ///   `(bitmask_batch_size, bitmask_size)`. `bitmask_batch_size` could be larger than the
+    ///   actual batch size to allow padding. `bitmask_size` equals to `ceil(vocab_size/32)`,
+    ///   and could be computed through `allocate_token_bitmask`.
+    /// - `indices`: A list of indices to specify which rows in the bitmask to fill. If `None`,
+    ///   fill the bitmask `[0..matchers.len())`.
+    /// - `debug_print`: Whether to print information about generated bitmask.
+    ///   Helpful for debugging.
+    ///
+    /// # Panics
+    ///
+    /// If the bitmask is invalid (not on CPU, not int32, shape mismatch).
     pub fn batch_fill_next_token_bitmask(
         &mut self,
         matchers: &[GrammarMatcher],
@@ -47,7 +72,6 @@ impl BatchGrammarMatcher {
         indices: Option<&[i32]>,
         debug_print: bool,
     ) {
-        // Create a C++ vector of GrammarMatcher objects
         let mut ffi_matcher_vec = cxx_utils::new_grammar_matcher_vector();
         {
             let mut vec_pin = ffi_matcher_vec.pin_mut();
@@ -86,12 +110,20 @@ impl BatchGrammarMatcher {
     /// Accept a batch of tokens for multiple matchers.
     ///
     /// # Parameters
+    ///
     /// - `matchers`: The list of matchers to accept tokens for.
     /// - `tokens`: The list of tokens to accept.
-    /// - `debug_print`: Whether to print information about generated bitmask (default: false).
+    /// - `debug_print`: Whether to print information about generated bitmask.
+    ///   Helpful for debugging.
     ///
     /// # Returns
-    /// A boxed slice of booleans indicating whether each token was accepted by its corresponding matcher.
+    ///
+    /// A list of booleans indicating whether each token was accepted by its corresponding
+    /// matcher.
+    ///
+    /// # Panics
+    ///
+    /// If the sizes of `matchers` and `tokens` do not match.
     pub fn batch_accept_token(
         matchers: &[GrammarMatcher],
         tokens: &[i32],
@@ -133,12 +165,20 @@ impl BatchGrammarMatcher {
     /// Accept a batch of strings for multiple matchers.
     ///
     /// # Parameters
+    ///
     /// - `matchers`: The list of matchers to accept tokens for.
     /// - `strings`: The list of strings to accept.
-    /// - `debug_print`: Whether to print information about generated bitmask (default: false).
+    /// - `debug_print`: Whether to print information about generated bitmask.
+    ///   Helpful for debugging.
     ///
     /// # Returns
-    /// A boxed slice of booleans indicating whether each string was accepted by its corresponding matcher.
+    ///
+    /// A list of booleans indicating whether each string was accepted by its corresponding
+    /// matcher.
+    ///
+    /// # Panics
+    ///
+    /// If the sizes of `matchers` and `strings` do not match.
     pub fn batch_accept_string(
         matchers: &[GrammarMatcher],
         strings: &[impl AsRef<str>],

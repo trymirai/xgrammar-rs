@@ -50,6 +50,8 @@ include_cpp! {
 
     // cxx_utils/grammar.hpp
     generate!("cxx_utils::grammar_from_json_schema")
+    generate!("cxx_utils::grammar_from_ebnf")
+    generate!("cxx_utils::grammar_from_regex")
     generate!("cxx_utils::grammar_from_structural_tag")
     generate!("cxx_utils::new_grammar_vector")
     generate!("cxx_utils::grammar_vec_reserve")
@@ -95,11 +97,23 @@ include_cpp! {
 
 }
 
-// Re-export DLPack types for public use
-pub use ffi::{
-    DLDataType, DLDataTypeCode, DLDevice, DLDeviceType, DLManagedTensor,
-    DLTensor,
-};
+// Re-export DLPack types for public use.
+//
+// Note: these are generated from `dlpack/dlpack.h` via autocxx/bindgen. We
+// provide Rust-side docs here to avoid leaking Doxygen markup (e.g. `\brief`)
+// into docs.rs.
+/// DLPack data type descriptor (`DLDataType`).
+pub use ffi::DLDataType;
+/// DLPack data type code enum (`DLDataTypeCode`).
+pub use ffi::DLDataTypeCode;
+/// DLPack device descriptor (`DLDevice`) (ABI-compatible with `dlpack/dlpack.h`).
+pub use ffi::DLDevice;
+/// DLPack device type enum (`DLDeviceType`).
+pub use ffi::DLDeviceType;
+/// DLPack managed tensor (`DLManagedTensor`) (owns tensor + deleter).
+pub use ffi::DLManagedTensor;
+/// DLPack tensor view (`DLTensor`) (does not own memory).
+pub use ffi::DLTensor;
 #[allow(unused_imports)]
 use ffi::{
     cxx_utils,

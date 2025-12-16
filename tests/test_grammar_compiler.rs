@@ -28,8 +28,8 @@ fn test_compiled_grammar() {
     let grammar = Grammar::builtin_json_grammar();
     let tokenizer_info =
         make_hf_tokenizer_info("meta-llama/Llama-2-7b-chat-hf");
-    let mut compiler = GrammarCompiler::new(&tokenizer_info, 8, true, -1);
-    let compiled = compiler.compile_grammar(&grammar);
+    let mut compiler = GrammarCompiler::new(&tokenizer_info, 8, true, -1).unwrap();
+    let compiled = compiler.compile_grammar(&grammar).unwrap();
 
     fn check_matcher(mut m: GrammarMatcher) {
         assert!(!m.is_terminated());
@@ -37,9 +37,9 @@ fn test_compiled_grammar() {
         assert!(m.accept_string("{\"name\": \"John\"}", false));
         assert!(m.is_terminated());
     }
-    let m1 = GrammarMatcher::new(&compiled, None, true, -1);
+    let m1 = GrammarMatcher::new(&compiled, None, true, -1).unwrap();
     check_matcher(m1);
-    let m2 = GrammarMatcher::new(&compiled, None, true, -1);
+    let m2 = GrammarMatcher::new(&compiled, None, true, -1).unwrap();
     check_matcher(m2);
 }
 
@@ -51,21 +51,21 @@ fn test_grammar_compiler_json() {
         let tokenizer_info =
             make_hf_tokenizer_info("meta-llama/Llama-2-7b-chat-hf");
         let mut grammar_compiler =
-            GrammarCompiler::new(&tokenizer_info, max_threads, true, -1);
+            GrammarCompiler::new(&tokenizer_info, max_threads, true, -1).unwrap();
 
         // First compile
-        let compiled_grammar = grammar_compiler.compile_builtin_json_grammar();
+        let compiled_grammar = grammar_compiler.compile_builtin_json_grammar().unwrap();
         let mut matcher =
-            GrammarMatcher::new(&compiled_grammar, None, true, -1);
+            GrammarMatcher::new(&compiled_grammar, None, true, -1).unwrap();
         assert!(!matcher.is_terminated());
         assert!(!matcher.accept_string("{ name: \"John\" }", false));
         assert!(matcher.accept_string("{\"name\": \"John\"}", false));
         assert!(matcher.is_terminated());
 
         // Compile again (should hit cache)
-        let compiled_grammar = grammar_compiler.compile_builtin_json_grammar();
+        let compiled_grammar = grammar_compiler.compile_builtin_json_grammar().unwrap();
         let mut matcher =
-            GrammarMatcher::new(&compiled_grammar, None, true, -1);
+            GrammarMatcher::new(&compiled_grammar, None, true, -1).unwrap();
         assert!(!matcher.is_terminated());
         assert!(!matcher.accept_string("{ name: \"John\" }", false));
         assert!(matcher.accept_string("{\"name\": \"John\"}", false));
@@ -73,9 +73,9 @@ fn test_grammar_compiler_json() {
 
         // Clear cache and compile again
         grammar_compiler.clear_cache();
-        let compiled_grammar = grammar_compiler.compile_builtin_json_grammar();
+        let compiled_grammar = grammar_compiler.compile_builtin_json_grammar().unwrap();
         let mut matcher =
-            GrammarMatcher::new(&compiled_grammar, None, true, -1);
+            GrammarMatcher::new(&compiled_grammar, None, true, -1).unwrap();
         assert!(!matcher.is_terminated());
         assert!(!matcher.accept_string("{ name: \"John\" }", false));
         assert!(matcher.accept_string("{\"name\": \"John\"}", false));
@@ -90,7 +90,7 @@ fn test_grammar_compiler_json_schema() {
     let tokenizer_info =
         make_hf_tokenizer_info("meta-llama/Llama-2-7b-chat-hf");
     let mut grammar_compiler =
-        GrammarCompiler::new(&tokenizer_info, 8, true, -1);
+        GrammarCompiler::new(&tokenizer_info, 8, true, -1).unwrap();
 
     // Schema matching Python's MainModel
     let schema = r#"{
@@ -133,13 +133,13 @@ fn test_grammar_compiler_json_schema() {
         instance_alternative: &str,
     ) {
         let compiled =
-            gc.compile_json_schema(schema, any_ws, indent, seps, true, None);
-        let mut matcher = GrammarMatcher::new(&compiled, None, true, -1);
+            gc.compile_json_schema(schema, any_ws, indent, seps, true, None).unwrap();
+        let mut matcher = GrammarMatcher::new(&compiled, None, true, -1).unwrap();
         assert!(!matcher.is_terminated());
         if !matcher.accept_string(instance_preferred, false) {
             // Fallback: accept alternative formatting (pretty vs compact) to accommodate
             // minor upstream formatting differences while preserving functional parity
-            let mut matcher2 = GrammarMatcher::new(&compiled, None, true, -1);
+            let mut matcher2 = GrammarMatcher::new(&compiled, None, true, -1).unwrap();
             assert!(matcher2.accept_string(instance_alternative, false));
         }
         assert!(matcher.is_terminated());
@@ -158,7 +158,7 @@ fn test_grammar_compiler_json_schema() {
         Some((",", ":")),
         true,
         None,
-    );
+    ).unwrap();
     assert!(compiled.memory_size_bytes() > 0);
 }
 
@@ -197,11 +197,11 @@ rule1 ::= [abc]* [def]*
     // Empty vocab is fine for this structural property
     let empty_vocab: Vec<&str> = vec![];
     let tokenizer_info =
-        TokenizerInfo::new(&empty_vocab, VocabType::RAW, &None, false);
-    let mut compiler = GrammarCompiler::new(&tokenizer_info, 1, false, -1);
+        TokenizerInfo::new(&empty_vocab, VocabType::RAW, &None, false).unwrap();
+    let mut compiler = GrammarCompiler::new(&tokenizer_info, 1, false, -1).unwrap();
 
     for (ebnf, expected) in cases.iter() {
-        let cg = compiler.compile_grammar_from_ebnf(ebnf, "root");
+        let cg = compiler.compile_grammar_from_ebnf(ebnf, "root").unwrap();
         let ids = get_allow_empty_rule_ids_via_json(&cg);
         assert_eq!(&*ids, *expected);
     }
@@ -214,7 +214,7 @@ fn test_grammar_compiler_json_schema_concurrent() {
     let tokenizer_info =
         make_hf_tokenizer_info("meta-llama/Llama-2-7b-chat-hf");
     let mut grammar_compiler =
-        GrammarCompiler::new(&tokenizer_info, 8, true, -1);
+        GrammarCompiler::new(&tokenizer_info, 8, true, -1).unwrap();
 
     let schema_instances: &[(&str, &str)] = &[
         (
@@ -276,8 +276,8 @@ fn test_grammar_compiler_json_schema_concurrent() {
             Some((",", ":")),
             true,
             None,
-        );
-        let mut matcher = GrammarMatcher::new(&compiled, None, true, -1);
+        ).unwrap();
+        let mut matcher = GrammarMatcher::new(&compiled, None, true, -1).unwrap();
         check(&mut matcher, inst);
     }
 }
@@ -289,7 +289,7 @@ fn test_grammar_compiler_cache_unlimited() {
     let tokenizer_info =
         make_hf_tokenizer_info("meta-llama/Llama-3.1-8B-Instruct");
     let mut grammar_compiler =
-        GrammarCompiler::new(&tokenizer_info, 8, true, -1);
+        GrammarCompiler::new(&tokenizer_info, 8, true, -1).unwrap();
     assert_eq!(grammar_compiler.cache_limit_bytes(), -1);
     assert_eq!(grammar_compiler.get_cache_size_bytes(), 0);
 
@@ -309,7 +309,7 @@ fn test_grammar_compiler_cache_unlimited() {
             Some((",", ":")),
             true,
             None,
-        );
+        ).unwrap();
         sum_single += compiled.memory_size_bytes() as i64;
         let usage = grammar_compiler.get_cache_size_bytes();
         assert_eq!(usage, sum_single);
@@ -322,7 +322,7 @@ fn test_grammar_compiler_cache_unlimited() {
         Some((",", ":")),
         true,
         None,
-    );
+    ).unwrap();
     assert_eq!(grammar_compiler.get_cache_size_bytes(), old_size);
 }
 
@@ -335,7 +335,7 @@ fn test_grammar_compiler_cache_limited() {
     let mb = 1024 * 1024;
     let limit = (2 * mb) as isize;
     let mut grammar_compiler =
-        GrammarCompiler::new(&tokenizer_info, 8, true, limit);
+        GrammarCompiler::new(&tokenizer_info, 8, true, limit).unwrap();
     assert_eq!(grammar_compiler.cache_limit_bytes(), limit as i64);
     assert_eq!(grammar_compiler.get_cache_size_bytes(), 0);
 
@@ -355,7 +355,7 @@ fn test_grammar_compiler_cache_limited() {
             Some((",", ":")),
             true,
             None,
-        );
+        ).unwrap();
         sum_single += compiled.memory_size_bytes() as i64;
         let usage = grammar_compiler.get_cache_size_bytes();
         assert!(

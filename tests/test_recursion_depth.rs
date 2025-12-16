@@ -24,7 +24,7 @@ fn test_recursion_exceed_does_not_crash() {
     basic_string ::= "" | [^"\\\r\n] basic_string | "\\" escape basic_string
     escape ::= ["\\/bfnrt] | "u" [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9]
     "#;
-    let g = xgrammar::Grammar::from_ebnf(ebnf, "root");
+    let g = xgrammar::Grammar::from_ebnf(ebnf, "root").unwrap();
     let mut m = test_utils::matcher_from_grammar(&g);
     let input = format!("\"{}\"", " ".repeat(10_000));
     assert!(m.accept_string(&input, false));

@@ -1,17 +1,13 @@
+//! Match the output of the LLM to the specified grammar, then generate the mask for the next
+//! token.
+
 mod batch_grammar_matcher;
 mod grammar_matcher;
 
 pub use batch_grammar_matcher::BatchGrammarMatcher;
 pub use grammar_matcher::GrammarMatcher;
 
-/// Get the shape of the bitmask for next token prediction.
-///
-/// # Parameters
-/// - `batch_size`: The batch size of the bitmask.
-/// - `vocab_size`: The size of the vocabulary.
-///
-/// # Returns
-/// A tuple of (batch_size, ceil(vocab_size / 32)).
+/// Return the shape of the bitmask: (batch_size, ceil(vocab_size / 32)).
 pub fn get_bitmask_shape(
     batch_size: usize,
     vocab_size: usize,
@@ -20,16 +16,25 @@ pub fn get_bitmask_shape(
 }
 
 /// Allocate the bitmask for the next token prediction. The bitmask is an int32 tensor on
-/// CPU with shape (batch_size, ceil(vocab_size / 32)).
+/// CPU with shape (batch_size, ceil(vocab_size / 32)). Users who have their own needs to
+/// manage CUDA memory can construct the tensor with get_bitmask_shape and bitmask_dtype
+/// themselves.
 ///
-/// The reason why we use int32 instead of uint32 is compatibility with various tensor libraries.
+/// The reason why we use int32 instead of uint32 is that old versions of PyTorch do not support
+/// uint32.
 ///
-/// # Parameters
-/// - `batch_size`: The batch size of the bitmask.
-/// - `vocab_size`: The size of the vocabulary.
+/// Parameters
+/// ----------
+/// batch_size : int
+///     The batch size of the bitmask.
 ///
-/// # Returns
-/// A boxed slice containing the bitmask data, initialized to all bits set (no masking).
+/// vocab_size : int
+///     The size of the vocabulary.
+///
+/// Returns
+/// -------
+/// bitmask : torch.Tensor
+///     The shape of the bitmask.
 pub fn allocate_token_bitmask(
     batch_size: usize,
     vocab_size: usize,
@@ -39,10 +44,7 @@ pub fn allocate_token_bitmask(
     vec![-1i32; total_size].into_boxed_slice()
 }
 
-/// Reset the bitmask to the full mask (all bits set to 1, meaning no tokens are masked).
-///
-/// # Parameters
-/// - `bitmask`: The bitmask to reset. Must be a mutable slice of i32.
+/// Reset the bitmask to the full mask.
 pub fn reset_token_bitmask(bitmask: &mut [i32]) {
     bitmask.fill(-1i32);
 }

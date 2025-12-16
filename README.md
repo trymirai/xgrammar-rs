@@ -50,46 +50,45 @@ xgrammar-rs = { version = "0.1", features = ["hf"] }
 ```rust
 use xgrammar::{Grammar, GrammarCompiler, GrammarMatcher, TokenizerInfo, VocabType};
 
-// Define your JSON schema
-let schema = r#"{
-    "type": "object",
-    "properties": {
-        "name": {"type": "string"},
-        "age": {"type": "integer"}
-    },
-    "required": ["name", "age"]
-}"#;
+fn main() -> Result<(), String> {
+    // Define your JSON schema
+    let schema = r#"{
+        "type": "object",
+        "properties": {
+            "name": {"type": "string"},
+            "age": {"type": "integer"}
+        },
+        "required": ["name", "age"]
+    }"#;
 
-// Create grammar from JSON schema
-let grammar = Grammar::from_json_schema(
-    schema,
-    true,  // any_whitespace
-    None,  // indent
-    Some((",", ":")),  // separators
-    true,  // strict_mode
-    false, // print_converted_ebnf
-);
+    // Create grammar from JSON schema
+    let grammar = Grammar::from_json_schema(
+        schema,
+        true,  // any_whitespace
+        None,  // indent
+        Some((",", ":")),  // separators
+        true,  // strict_mode
+        None,  // max_whitespace_cnt
+        false, // print_converted_ebnf
+    )?;
 
-// Create tokenizer info (example with empty vocab)
-let vocab: Vec<&str> = vec![];
-let tokenizer_info = TokenizerInfo::new(
-    &vocab,
-    VocabType::RAW,
-    None,
-    &None,
-    false,
-);
+    // Create tokenizer info (example with empty vocab)
+    let vocab: Vec<&str> = vec![];
+    let tokenizer_info = TokenizerInfo::new(&vocab, VocabType::RAW, &None, false)?;
 
-// Compile grammar
-let mut compiler = GrammarCompiler::new(&tokenizer_info, 8, true, -1);
-let compiled_grammar = compiler.compile_grammar(&grammar);
+    // Compile grammar
+    let mut compiler = GrammarCompiler::new(&tokenizer_info, 8, true, -1)?;
+    let compiled_grammar = compiler.compile_grammar(&grammar)?;
 
-// Create matcher
-let mut matcher = GrammarMatcher::new(&compiled_grammar, None, true, -1);
+    // Create matcher
+    let mut matcher = GrammarMatcher::new(&compiled_grammar, None, true, -1)?;
 
-// Use the matcher to validate strings
-assert!(matcher.accept_string(r#"{"name":"John","age":30}"#, false));
-assert!(matcher.is_terminated());
+    // Use the matcher to validate strings
+    assert!(matcher.accept_string(r#"{"name":"John","age":30}"#, false));
+    assert!(matcher.is_terminated());
+    
+    Ok(())
+}
 ```
 
 ### EBNF Grammar
@@ -105,7 +104,7 @@ factor ::= number | "(" expression ")"
 number ::= [0-9]+
 "#;
 
-let grammar = Grammar::from_ebnf(ebnf, "root");
+let grammar = Grammar::from_ebnf(ebnf, "root")?;
 ```
 
 ### Regular Expression
@@ -114,29 +113,27 @@ let grammar = Grammar::from_ebnf(ebnf, "root");
 use xgrammar::Grammar;
 
 let regex = r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}";
-let grammar = Grammar::from_regex(regex, false);
+let grammar = Grammar::from_regex(regex, false)?;
 ```
 
 ### With HuggingFace Tokenizers (requires `hf` feature)
 
 ```rust
-use xgrammar::{Grammar, GrammarCompiler, GrammarMatcher, TokenizerInfo};
+use xgrammar::{Grammar, GrammarCompiler, GrammarMatcher, TokenizerInfo, allocate_token_bitmask};
 
 // Load tokenizer from HuggingFace
-let tokenizer = tokenizers::Tokenizer::from_file("tokenizer.json")
-    .expect("Failed to load tokenizer");
-let tokenizer_info = TokenizerInfo::from_huggingface(&tokenizer, None, None);
+let tokenizer = tokenizers::Tokenizer::from_file("tokenizer.json")?;
+let tokenizer_info = TokenizerInfo::from_huggingface(&tokenizer, None, None)?;
 
 // Create and compile grammar
 let grammar = Grammar::builtin_json_grammar();
-let mut compiler = GrammarCompiler::new(&tokenizer_info, 8, true, -1);
-let compiled_grammar = compiler.compile_grammar(&grammar);
+let mut compiler = GrammarCompiler::new(&tokenizer_info, 8, true, -1)?;
+let compiled_grammar = compiler.compile_grammar(&grammar)?;
 
 // Create matcher and use for token-level generation
-let mut matcher = GrammarMatcher::new(&compiled_grammar, None, true, -1);
+let mut matcher = GrammarMatcher::new(&compiled_grammar, None, true, -1)?;
 
 // Allocate token bitmask for batch generation
-use xgrammar::allocate_token_bitmask;
 let mut bitmask_data = allocate_token_bitmask(1, tokenizer_info.vocab_size());
 
 // For string-based generation (simpler approach)

@@ -452,7 +452,7 @@ unused ::= (("b"))
 fn test_e2e_json_grammar() {
     let json_grammar = Grammar::builtin_json_grammar();
     let json_str = json_grammar.to_string();
-    let reparsed = Grammar::from_ebnf(&json_str, "root");
+    let reparsed = Grammar::from_ebnf(&json_str, "root").unwrap();
     let json_str2 = reparsed.to_string();
     assert_eq!(json_str, json_str2);
 }
@@ -468,9 +468,9 @@ b_1 ::= ("" | ("b" b_1)) (=(d))
 c_1 ::= (([acep-z] c_1) | ([acep-z])) (=("d"))
 d_1 ::= ("" | ("d"))
 "#;
-    let g1 = Grammar::from_ebnf(before, "root");
+    let g1 = Grammar::from_ebnf(before, "root").unwrap();
     let s1 = g1.to_string();
-    let g2 = Grammar::from_ebnf(&s1, "root");
+    let g2 = Grammar::from_ebnf(&s1, "root").unwrap();
     let s2 = g2.to_string();
     assert_eq!(s1, s2);
 }

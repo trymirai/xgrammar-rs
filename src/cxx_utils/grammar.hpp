@@ -3,16 +3,16 @@
 
 #include <memory>
 #include <cstdint>
+#include <exception>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
 
-#include "xgrammar/xgrammar.h"
+#include "xgrammar/grammar.h"
 
 namespace cxx_utils {
 
-// JSON schema constructor with explicit option flags to avoid std::optional
-// across FFI
 inline std::unique_ptr<xgrammar::Grammar> grammar_from_json_schema(
     const std::string& schema,
     bool any_whitespace,
@@ -24,30 +24,117 @@ inline std::unique_ptr<xgrammar::Grammar> grammar_from_json_schema(
     bool strict_mode,
     bool has_max_whitespace_cnt,
     int32_t max_whitespace_cnt,
-    bool print_converted_ebnf
+    bool print_converted_ebnf,
+    std::string* error_out
 ) {
-  std::optional<int> indent_opt = std::nullopt;
-  if (has_indent)
-    indent_opt = indent;
+  try {
+    if (error_out) {
+      error_out->clear();
+    }
 
-  std::optional<std::pair<std::string, std::string>> separators_opt =
-      std::nullopt;
-  if (has_separators)
-    separators_opt = std::make_pair(separator_comma, separator_colon);
+    std::optional<int> indent_opt = std::nullopt;
+    if (has_indent) {
+      indent_opt = indent;
+    }
 
-  std::optional<int> max_whitespace_cnt_opt = std::nullopt;
-  if (has_max_whitespace_cnt)
-    max_whitespace_cnt_opt = static_cast<int>(max_whitespace_cnt);
+    std::optional<std::pair<std::string, std::string>> separators_opt =
+        std::nullopt;
+    if (has_separators) {
+      separators_opt = std::make_pair(separator_comma, separator_colon);
+    }
 
-  return std::make_unique<xgrammar::Grammar>(xgrammar::Grammar::FromJSONSchema(
-      schema,
-      any_whitespace,
-      indent_opt,
-      separators_opt,
-      strict_mode,
-      /* max_whitespace_cnt */ max_whitespace_cnt_opt,
-      print_converted_ebnf
-  ));
+    std::optional<int> max_whitespace_cnt_opt = std::nullopt;
+    if (has_max_whitespace_cnt) {
+      max_whitespace_cnt_opt = static_cast<int>(max_whitespace_cnt);
+    }
+
+    xgrammar::Grammar g = xgrammar::Grammar::FromJSONSchema(
+        schema,
+        any_whitespace,
+        indent_opt,
+        separators_opt,
+        strict_mode,
+        max_whitespace_cnt_opt,
+        print_converted_ebnf
+    );
+    if (g.IsNull()) {
+      if (error_out) {
+        *error_out = g.ToString();
+      }
+      return nullptr;
+    }
+    return std::make_unique<xgrammar::Grammar>(std::move(g));
+  } catch (const std::exception& e) {
+    if (error_out) {
+      *error_out = e.what();
+    }
+    return nullptr;
+  } catch (...) {
+    if (error_out) {
+      *error_out = "unknown C++ exception";
+    }
+    return nullptr;
+  }
+}
+
+inline std::unique_ptr<xgrammar::Grammar> grammar_from_ebnf(
+    const std::string& ebnf_string,
+    const std::string& root_rule_name,
+    std::string* error_out
+) {
+  try {
+    if (error_out) {
+      error_out->clear();
+    }
+    xgrammar::Grammar g = xgrammar::Grammar::FromEBNF(ebnf_string, root_rule_name);
+    if (g.IsNull()) {
+      if (error_out) {
+        *error_out = g.ToString();
+      }
+      return nullptr;
+    }
+    return std::make_unique<xgrammar::Grammar>(std::move(g));
+  } catch (const std::exception& e) {
+    if (error_out) {
+      *error_out = e.what();
+    }
+    return nullptr;
+  } catch (...) {
+    if (error_out) {
+      *error_out = "unknown C++ exception";
+    }
+    return nullptr;
+  }
+}
+
+inline std::unique_ptr<xgrammar::Grammar> grammar_from_regex(
+    const std::string& regex_string,
+    bool print_converted_ebnf,
+    std::string* error_out
+) {
+  try {
+    if (error_out) {
+      error_out->clear();
+    }
+    xgrammar::Grammar g = xgrammar::Grammar::FromRegex(regex_string, print_converted_ebnf);
+    if (g.IsNull()) {
+      if (error_out) {
+        *error_out = g.ToString();
+      }
+      return nullptr;
+    }
+    return std::make_unique<xgrammar::Grammar>(std::move(g));
+  } catch (const std::exception& e) {
+    if (error_out) {
+      *error_out = e.what();
+    }
+    return nullptr;
+  } catch (...) {
+    if (error_out) {
+      *error_out = "unknown C++ exception";
+    }
+    return nullptr;
+  }
 }
 
 inline std::unique_ptr<std::vector<xgrammar::Grammar>> new_grammar_vector() {

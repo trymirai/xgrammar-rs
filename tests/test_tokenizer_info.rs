@@ -28,7 +28,8 @@ fn cases_model_vocab() -> Box<[(&'static str, xgrammar::VocabType, bool)]> {
             true,
         ),
         // Note: Python has 30+ models, but limiting to publicly accessible models
-    ].into_boxed_slice()
+    ]
+    .into_boxed_slice()
 }
 
 #[test]
@@ -39,7 +40,8 @@ fn test_build_tokenizer_info() {
             download_tokenizer_json(model_id).expect("download tokenizer.json");
         let tk =
             tokenizers::Tokenizer::from_file(&path).expect("load tokenizer");
-        let ti = xgrammar::TokenizerInfo::from_huggingface(&tk, None, None);
+        let ti =
+            xgrammar::TokenizerInfo::from_huggingface(&tk, None, None).unwrap();
         assert!(ti.vocab_size() > 0, "{}", model_id);
     }
 }
@@ -52,7 +54,8 @@ fn test_properties() {
             download_tokenizer_json(model_id).expect("download tokenizer.json");
         let tk =
             tokenizers::Tokenizer::from_file(&path).expect("load tokenizer");
-        let ti = xgrammar::TokenizerInfo::from_huggingface(&tk, None, None);
+        let ti =
+            xgrammar::TokenizerInfo::from_huggingface(&tk, None, None).unwrap();
         let vocab = tk.get_vocab(true);
         let max_id = vocab.values().copied().max().unwrap_or(0) as usize;
         assert_eq!(ti.vocab_size(), std::cmp::max(vocab.len(), max_id + 1));
@@ -68,7 +71,8 @@ fn test_decoded_vocab() {
             download_tokenizer_json(model_id).expect("download tokenizer.json");
         let tk =
             tokenizers::Tokenizer::from_file(&path).expect("load tokenizer");
-        let ti = xgrammar::TokenizerInfo::from_huggingface(&tk, None, None);
+        let ti =
+            xgrammar::TokenizerInfo::from_huggingface(&tk, None, None).unwrap();
         let decoded = ti.decoded_vocab();
         let vocab = tk.get_vocab(true);
         let max_id = vocab.values().copied().max().unwrap_or(0) as usize;
@@ -104,7 +108,8 @@ fn test_model_vocab_size_smaller_than_tokenizer() {
         Some(model_vocab_size),
         None,
         false,
-    );
+    )
+    .unwrap();
 
     // Some tokenizers pad by 1 for special tokens, so allow for that
     assert!(
@@ -128,7 +133,8 @@ fn test_vocab_type_detection() {
     let path =
         download_tokenizer_json(model_id).expect("download tokenizer.json");
     let tk = tokenizers::Tokenizer::from_file(&path).expect("load tokenizer");
-    let ti = xgrammar::TokenizerInfo::from_huggingface(&tk, None, None);
+    let ti =
+        xgrammar::TokenizerInfo::from_huggingface(&tk, None, None).unwrap();
     assert_eq!(
         ti.vocab_type() as i32,
         expected_vocab_type as i32,
@@ -144,7 +150,8 @@ fn test_stop_token_ids_match_eos() {
     let path = download_tokenizer_json("meta-llama/Llama-2-7b-chat-hf")
         .expect("download tokenizer.json");
     let tk = tokenizers::Tokenizer::from_file(&path).expect("load tokenizer");
-    let ti = xgrammar::TokenizerInfo::from_huggingface(&tk, None, None);
+    let ti =
+        xgrammar::TokenizerInfo::from_huggingface(&tk, None, None).unwrap();
     // If the tokenizer exposes an EOS id in added tokens metadata, it should be reflected.
     // We only assert non-empty to avoid tight coupling to specific id values.
     let stops = ti.stop_token_ids();
@@ -157,7 +164,8 @@ fn test_vocab_type_and_prefix_space_llama2() {
     let path = download_tokenizer_json("meta-llama/Llama-2-7b-chat-hf")
         .expect("download tokenizer.json");
     let tk = tokenizers::Tokenizer::from_file(&path).expect("load tokenizer");
-    let ti = xgrammar::TokenizerInfo::from_huggingface(&tk, None, None);
+    let ti =
+        xgrammar::TokenizerInfo::from_huggingface(&tk, None, None).unwrap();
     // Expect BYTE_FALLBACK and add_prefix_space true for LLaMA-2 style tokenizers
     assert!(matches!(ti.vocab_type(), xgrammar::VocabType::BYTE_FALLBACK));
     assert!(ti.add_prefix_space());
@@ -171,7 +179,8 @@ fn test_dump_metadata_load() {
             download_tokenizer_json(model_id).expect("download tokenizer.json");
         let tk =
             tokenizers::Tokenizer::from_file(&path).expect("load tokenizer");
-        let ti = xgrammar::TokenizerInfo::from_huggingface(&tk, None, None);
+        let ti =
+            xgrammar::TokenizerInfo::from_huggingface(&tk, None, None).unwrap();
         let metadata = ti.dump_metadata();
         let ordered = extract_ordered_vocab(&tk);
         let loaded = xgrammar::TokenizerInfo::from_vocab_and_metadata_bytes(
@@ -193,8 +202,12 @@ fn test_customize_stop_token_ids() {
         download_tokenizer_json(model_id).expect("download tokenizer.json");
     let tk = tokenizers::Tokenizer::from_file(&path).expect("load tokenizer");
     let stop_ids = [1i32, 2i32, 3i32];
-    let ti =
-        xgrammar::TokenizerInfo::from_huggingface(&tk, None, Some(&stop_ids));
+    let ti = xgrammar::TokenizerInfo::from_huggingface(
+        &tk,
+        None,
+        Some(&stop_ids[..]),
+    )
+    .unwrap();
     assert_eq!(ti.stop_token_ids().as_ref(), &stop_ids);
 }
 
@@ -219,7 +232,8 @@ fn test_padding_vocab_size() {
         Some(original + pad_by),
         &None,
         add_prefix_space,
-    );
+    )
+    .unwrap();
     assert_eq!(ti.vocab_size(), original + pad_by);
     let specials = ti.special_token_ids();
     for i in 0..pad_by {

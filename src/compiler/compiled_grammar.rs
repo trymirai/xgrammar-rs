@@ -9,11 +9,12 @@ use crate::{
 
 /// This is the primary object to store compiled grammar.
 ///
-/// A CompiledGrammar can be used to construct GrammarMatcher to generate token masks efficiently.
+/// A `CompiledGrammar` can be used to construct `GrammarMatcher` to generate token masks
+/// efficiently.
 ///
-/// Notes
-/// -----
-/// Do not construct this class directly, instead use GrammarCompiler to construct the object.
+/// # Notes
+///
+/// Do not construct this class directly, instead use `GrammarCompiler` to construct the object.
 pub struct CompiledGrammar {
     inner: CxxUniquePtr<FFICompiledGrammar>,
 }
@@ -33,11 +34,6 @@ impl CompiledGrammar {
 
     /// The approximate memory usage of the compiled grammar in bytes.
     pub fn memory_size_bytes(&self) -> usize {
-        // MemorySizeBytes() returns C size_t, which autocxx may represent as either:
-        // - primitive usize (some build environments)
-        // - cxx_ulong newtype (other build environments)
-        //
-        // We define a trait to handle both uniformly
         trait ToUsize {
             fn to_usize(self) -> usize;
         }
@@ -83,13 +79,18 @@ impl CompiledGrammar {
         let sz = inner_ref.MemorySizeBytes().to_usize();
         sz
     }
-    /// Serialize the compiled grammar to a JSON string.
-    /// It will serialize the compiled grammar without the tokenizer info,
-    /// since the tokenizer info is shared by multiple compiled grammars.
+
+    /// Serialize the compiled grammar to a JSON string. It will serialize the compiled grammar
+    /// without the tokenizer info, since the tokenizer info is shared by multiple compiled
+    /// grammars.
     ///
-    /// Notes
-    /// -----
+    /// # Notes
+    ///
     /// The metadata of the tokenizer info is serialized and will be checked when deserializing.
+    ///
+    /// # Returns
+    ///
+    /// The JSON string.
     pub fn serialize_json(&self) -> String {
         let inner_ref = self.inner.as_ref().expect("CompiledGrammar inner is null");
         inner_ref.SerializeJSON().to_string()
@@ -98,10 +99,26 @@ impl CompiledGrammar {
     /// Deserialize the compiled grammar from a JSON string and associate it with the specified
     /// tokenizer info.
     ///
-    /// Returns
-    /// - Ok(CompiledGrammar) on success
-    /// - Err(String) if the JSON is invalid, format mismatch, version mismatch, or tokenizer
-    ///   metadata does not match. The error string mirrors the C++ exception message.
+    /// # Notes
+    ///
+    /// This will check the metadata of the tokenizer info matching the serialized metadata in
+    /// `json`. If the metadata does not match, an error will be returned.
+    ///
+    /// # Parameters
+    ///
+    /// - `json`: The JSON string.
+    /// - `tokenizer_info`: The tokenizer info.
+    ///
+    /// # Returns
+    ///
+    /// The compiled grammar.
+    ///
+    /// # Errors
+    ///
+    /// - When the JSON string is invalid.
+    /// - When the JSON string does not follow the serialization format of the grammar, or the
+    ///   tokenizer info metadata does not match.
+    /// - When the `__VERSION__` field in the JSON string is not the same as the current version.
     pub fn deserialize_json(
         json: &str,
         tokenizer_info: &TokenizerInfo,

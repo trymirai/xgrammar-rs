@@ -25,7 +25,8 @@ fn test_basic() {
         true,
         None,
         false,
-    );
+    )
+    .unwrap();
 
     assert!(is_grammar_accept_string(&grammar, r#"{"integer_field": 42}"#));
     assert!(is_grammar_accept_string(&grammar, r#"{"integer_field": -123}"#));
@@ -52,7 +53,8 @@ fn test_indent() {
         true,
         None,
         false,
-    );
+    )
+    .unwrap();
 
     // Should accept properly indented JSON
     let indented_json = r#"{
@@ -87,7 +89,8 @@ fn test_non_strict() {
         true,
         None,
         false,
-    );
+    )
+    .unwrap();
     assert!(is_grammar_accept_string(&grammar_strict, r#"{"name": "Alice"}"#));
     assert!(!is_grammar_accept_string(
         &grammar_strict,
@@ -103,7 +106,8 @@ fn test_non_strict() {
         false,
         None,
         false,
-    );
+    )
+    .unwrap();
     assert!(is_grammar_accept_string(
         &grammar_non_strict,
         r#"{"name": "Alice"}"#
@@ -129,7 +133,8 @@ fn test_enum_const() {
         true,
         None,
         false,
-    );
+    )
+    .unwrap();
 
     assert!(is_grammar_accept_string(&grammar, r#""red""#));
     assert!(is_grammar_accept_string(&grammar, r#""green""#));
@@ -146,7 +151,8 @@ fn test_enum_const() {
         true,
         None,
         false,
-    );
+    )
+    .unwrap();
 
     assert!(is_grammar_accept_string(&grammar_const, r#""fixed_value""#));
     assert!(!is_grammar_accept_string(&grammar_const, r#""other_value""#));
@@ -174,7 +180,8 @@ fn test_optional() {
         true,
         None,
         false,
-    );
+    )
+    .unwrap();
 
     // Should accept with only required field
     assert!(is_grammar_accept_string(
@@ -206,7 +213,8 @@ fn test_empty() {
         true,
         None,
         false,
-    );
+    )
+    .unwrap();
 
     // Should accept empty object
     assert!(is_grammar_accept_string(&grammar, r#"{}"#));
@@ -220,7 +228,8 @@ fn test_empty() {
         false,
         None,
         false,
-    );
+    )
+    .unwrap();
     assert!(is_grammar_accept_string(
         &grammar_non_strict,
         r#"{"any": "value"}"#
@@ -241,7 +250,8 @@ fn test_union() {
         true,
         None,
         false,
-    );
+    )
+    .unwrap();
 
     // Should accept string
     assert!(is_grammar_accept_string(&grammar, r#""hello""#));
@@ -270,7 +280,8 @@ fn test_any_whitespace() {
         true,
         None,
         false,
-    );
+    )
+    .unwrap();
     assert!(is_grammar_accept_string(&grammar_any, r#"{"key":"value"}"#));
     assert!(is_grammar_accept_string(&grammar_any, r#"{ "key" : "value" }"#));
     assert!(is_grammar_accept_string(
@@ -287,7 +298,8 @@ fn test_any_whitespace() {
         true,
         None,
         false,
-    );
+    )
+    .unwrap();
     assert!(is_grammar_accept_string(&grammar_no_any, r#"{"key": "value"}"#));
     assert!(!is_grammar_accept_string(
         &grammar_no_any,
@@ -310,7 +322,8 @@ fn test_array_schema() {
         true,
         None,
         false,
-    );
+    )
+    .unwrap();
 
     assert!(is_grammar_accept_string(&grammar, r#"[]"#));
     assert!(is_grammar_accept_string(&grammar, r#"["a"]"#));
@@ -332,7 +345,8 @@ fn test_array_schema_min_max() {
         true,
         None,
         false,
-    );
+    )
+    .unwrap();
 
     // Should reject arrays with less than minItems
     assert!(!is_grammar_accept_string(&grammar, r#"[]"#));
@@ -362,7 +376,8 @@ fn test_limited_whitespace_cnt() {
         true,                 // strict_mode
         Some(2),              // max_whitespace_cnt=2
         false,                // print_converted_ebnf
-    );
+    )
+    .unwrap();
 
     // Should accept up to 2 whitespace characters
     assert!(
@@ -396,8 +411,8 @@ fn test_limited_whitespace_compile() {
     let empty_vocab: Vec<&str> = vec![];
     let stop_ids: Option<Box<[i32]>> = None;
     let tokenizer_info =
-        TokenizerInfo::new(&empty_vocab, VocabType::RAW, &stop_ids, false);
-    let mut compiler = GrammarCompiler::new(&tokenizer_info, 8, true, -1);
+        TokenizerInfo::new(&empty_vocab, VocabType::RAW, &stop_ids, false).unwrap();
+    let mut compiler = GrammarCompiler::new(&tokenizer_info, 8, true, -1).unwrap();
 
     let compiled_grammar = compiler.compile_json_schema(
         schema,
@@ -406,7 +421,7 @@ fn test_limited_whitespace_compile() {
         None::<(&str, &str)>, // separators
         true,                 // strict_mode
         Some(2),              // max_whitespace_cnt=2
-    );
+    ).unwrap();
 
     assert!(
         compiled_grammar.memory_size_bytes() > 0,
@@ -414,19 +429,19 @@ fn test_limited_whitespace_compile() {
     );
 
     // Test with GrammarMatcher - should accept up to 2 whitespaces
-    let mut matcher = GrammarMatcher::new(&compiled_grammar, None, true, -1);
+    let mut matcher = GrammarMatcher::new(&compiled_grammar, None, true, -1).unwrap();
     assert!(matcher.accept_string(r#"{  "key"  :  "value"  }"#, false));
     assert!(matcher.is_terminated());
 
-    let mut matcher = GrammarMatcher::new(&compiled_grammar, None, true, -1);
+    let mut matcher = GrammarMatcher::new(&compiled_grammar, None, true, -1).unwrap();
     assert!(matcher.accept_string(r#"{"key":"value"}"#, false));
     assert!(matcher.is_terminated());
 
     // Should reject more than 2 whitespace characters
-    let mut matcher = GrammarMatcher::new(&compiled_grammar, None, true, -1);
+    let mut matcher = GrammarMatcher::new(&compiled_grammar, None, true, -1).unwrap();
     assert!(!matcher.accept_string(r#"{   "key"  :  "value"   }"#, false));
 
-    let mut matcher = GrammarMatcher::new(&compiled_grammar, None, true, -1);
+    let mut matcher = GrammarMatcher::new(&compiled_grammar, None, true, -1).unwrap();
     assert!(!matcher.accept_string(r#"{    "key"  :  "value"    }"#, false));
 }
 
@@ -444,7 +459,8 @@ fn test_utf8_in_enum() {
         true,
         None,
         false,
-    );
+    )
+    .unwrap();
 
     assert!(is_grammar_accept_string(&grammar, r#""こんにちは""#));
     assert!(is_grammar_accept_string(&grammar, r#""😊""#));
@@ -467,7 +483,8 @@ fn test_utf8_string_in_const() {
         true,
         None,
         false,
-    );
+    )
+    .unwrap();
 
     assert!(is_grammar_accept_string(
         &grammar,
@@ -497,7 +514,8 @@ fn test_all_optional() {
         true,
         None,
         false,
-    );
+    )
+    .unwrap();
 
     // All fields are optional
     assert!(is_grammar_accept_string(&grammar, r#"{}"#));
@@ -544,7 +562,8 @@ fn test_reference_schema() {
         true,
         None,
         false,
-    );
+    )
+    .unwrap();
 
     // Should accept valid nested structure
     assert!(is_grammar_accept_string(
@@ -581,7 +600,8 @@ fn test_anyof_oneof() {
         true,
         None,
         false,
-    );
+    )
+    .unwrap();
 
     assert!(is_grammar_accept_string(&grammar, r#""hello""#));
     assert!(is_grammar_accept_string(&grammar, r#"42"#));
@@ -609,7 +629,8 @@ fn test_restricted_string() {
         true,
         None,
         false,
-    );
+    )
+    .unwrap();
 
     // Should reject strings shorter than minLength
     assert!(!is_grammar_accept_string(&grammar, r#"""#));
@@ -644,7 +665,8 @@ fn test_complex_restrictions() {
         true,
         None,
         false,
-    );
+    )
+    .unwrap();
 
     // Should accept numbers within range
     assert!(is_grammar_accept_string(&grammar, r#"0"#));
@@ -673,7 +695,8 @@ fn test_array_with_only_items_keyword() {
         true,
         None,
         false,
-    );
+    )
+    .unwrap();
 
     assert!(is_grammar_accept_string(&grammar, r#"[]"#));
     assert!(is_grammar_accept_string(&grammar, r#"[1]"#));
@@ -702,7 +725,8 @@ fn test_object_with_only_properties_keyword() {
         true,
         None,
         false,
-    );
+    )
+    .unwrap();
 
     // In strict mode, should reject additional properties
     assert!(is_grammar_accept_string(&grammar, r#"{}"#));
@@ -730,7 +754,8 @@ fn test_boolean() {
         true,
         None,
         false,
-    );
+    )
+    .unwrap();
 
     assert!(is_grammar_accept_string(&grammar, r#"true"#));
     assert!(is_grammar_accept_string(&grammar, r#"false"#));
@@ -752,7 +777,8 @@ fn test_null() {
         true,
         None,
         false,
-    );
+    )
+    .unwrap();
 
     assert!(is_grammar_accept_string(&grammar, r#"null"#));
     assert!(!is_grammar_accept_string(&grammar, r#"0"#));
@@ -773,7 +799,8 @@ fn test_number() {
         true,
         None,
         false,
-    );
+    )
+    .unwrap();
 
     assert!(is_grammar_accept_string(&grammar, r#"42"#));
     assert!(is_grammar_accept_string(&grammar, r#"42.5"#));
@@ -804,7 +831,8 @@ fn test_additional_properties() {
         true,
         None,
         false,
-    );
+    )
+    .unwrap();
 
     assert!(is_grammar_accept_string(&grammar_no, r#"{"name": "Alice"}"#));
     assert!(!is_grammar_accept_string(
@@ -829,7 +857,8 @@ fn test_additional_properties() {
         false,
         None,
         false,
-    );
+    )
+    .unwrap();
 
     assert!(is_grammar_accept_string(&grammar_yes, r#"{"name": "Alice"}"#));
     assert!(is_grammar_accept_string(
@@ -859,7 +888,8 @@ fn test_tuple() {
         true,
         None,
         false,
-    );
+    )
+    .unwrap();
 
     // Should accept tuple with correct types
     assert!(is_grammar_accept_string(&grammar, r#"["hello", 42, true]"#));
@@ -899,7 +929,8 @@ fn test_nested_objects() {
         true,
         None,
         false,
-    );
+    )
+    .unwrap();
 
     assert!(is_grammar_accept_string(
         &grammar,
@@ -936,7 +967,8 @@ fn test_array_of_objects() {
         true,
         None,
         false,
-    );
+    )
+    .unwrap();
 
     assert!(is_grammar_accept_string(&grammar, r#"[]"#));
     assert!(is_grammar_accept_string(
@@ -963,7 +995,8 @@ fn test_all_optional_non_strict() {
         false,
         None,
         false,
-    );
+    )
+    .unwrap();
 
     assert!(is_grammar_accept_string(
         &grammar,
@@ -1008,7 +1041,8 @@ fn test_reference() {
         true,
         None,
         false,
-    );
+    )
+    .unwrap();
 
     assert!(is_grammar_accept_string(
         &grammar,
@@ -1029,7 +1063,8 @@ fn test_alias() {
         true,
         None,
         false,
-    );
+    )
+    .unwrap();
 
     assert!(is_grammar_accept_string(&grammar, r#"{"name": "kitty"}"#));
 }
@@ -1047,7 +1082,8 @@ fn test_dynamic_model() {
         true,
         None,
         false,
-    );
+    )
+    .unwrap();
 
     assert!(is_grammar_accept_string(
         &grammar,
@@ -1075,7 +1111,8 @@ fn test_object_with_pattern_properties_and_property_names() {
         true,
         None,
         false,
-    );
+    )
+    .unwrap();
 
     assert!(is_grammar_accept_string(&grammar, r#"{"aBcDe": "aaa"}"#));
     assert!(is_grammar_accept_string(&grammar, r#"{"12345": 12345}"#));
@@ -1106,7 +1143,8 @@ fn test_object_with_pattern_properties_and_property_names() {
         false,
         None,
         false,
-    );
+    )
+    .unwrap();
 
     assert!(is_grammar_accept_string(
         &grammar_prop_names,
@@ -1144,7 +1182,8 @@ fn test_object_with_property_numbers() {
         true,
         None,
         false,
-    );
+    )
+    .unwrap();
 
     assert!(is_grammar_accept_string(&grammar, r#"{"123": "value"}"#));
     assert!(is_grammar_accept_string(
@@ -1166,7 +1205,8 @@ fn test_min_max_length() {
         true,
         None,
         false,
-    );
+    )
+    .unwrap();
 
     assert!(!is_grammar_accept_string(&grammar, r#"""#));
     assert!(!is_grammar_accept_string(&grammar, r#""a""#));
@@ -1189,7 +1229,8 @@ fn test_type_array() {
         true,
         None,
         false,
-    );
+    )
+    .unwrap();
 
     assert!(is_grammar_accept_string(&grammar, r#""hello""#));
     assert!(is_grammar_accept_string(&grammar, r#"42"#));
@@ -1211,7 +1252,8 @@ fn test_type_array_empty() {
         true,
         None,
         false,
-    );
+    )
+    .unwrap();
 
     assert!(is_grammar_accept_string(&grammar, r#""hello""#));
     assert!(is_grammar_accept_string(&grammar, r#"42"#));
@@ -1231,7 +1273,8 @@ fn test_empty_array() {
         true,
         None,
         false,
-    );
+    )
+    .unwrap();
 
     assert!(is_grammar_accept_string(&grammar, r#"[]"#));
     assert!(!is_grammar_accept_string(&grammar, r#"[1]"#));
@@ -1250,7 +1293,8 @@ fn test_empty_object() {
         true,
         None,
         false,
-    );
+    )
+    .unwrap();
 
     assert!(is_grammar_accept_string(&grammar, r#"{}"#));
     assert!(!is_grammar_accept_string(&grammar, r#"{"a": 1}"#));
@@ -1269,7 +1313,8 @@ fn test_primitive_type_string() {
         true,
         None,
         false,
-    );
+    )
+    .unwrap();
 
     assert!(is_grammar_accept_string(&grammar, r#""hello""#));
     assert!(!is_grammar_accept_string(&grammar, r#"42"#));
@@ -1288,7 +1333,8 @@ fn test_primitive_type_object() {
         false,
         None,
         false,
-    );
+    )
+    .unwrap();
 
     assert!(is_grammar_accept_string(&grammar, r#"{}"#));
     assert!(is_grammar_accept_string(&grammar, r#"{"a": 1}"#));
@@ -1318,7 +1364,8 @@ fn test_utf8_object_array_in_enum() {
         true,
         None,
         false,
-    );
+    )
+    .unwrap();
 
     assert!(is_grammar_accept_string(&grammar, r#"{"key":"こんにちは"}"#));
     assert!(is_grammar_accept_string(&grammar, r#"{"key":"😊"}"#));
@@ -1344,7 +1391,8 @@ fn test_utf8_object_const() {
         true,
         None,
         false,
-    );
+    )
+    .unwrap();
 
     assert!(is_grammar_accept_string(
         &grammar,
@@ -1365,7 +1413,8 @@ fn test_utf8_array_const() {
         true,
         None,
         false,
-    );
+    )
+    .unwrap();
 
     assert!(is_grammar_accept_string(
         &grammar,

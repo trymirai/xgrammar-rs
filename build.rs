@@ -112,6 +112,83 @@ fn find_xgrammar_lib_dir(root: &Path) -> Option<PathBuf> {
     None
 }
 
+fn strip_autocxx_generated_doc_comments(out_dir: &Path) {
+    // The autocxx/bindgen generated Rust file may contain doc comments copied from C/C++
+    // headers (e.g. Doxygen `\brief`). These leak into docs.rs and can also trigger
+    // rustdoc warnings (broken intra-doc links, invalid HTML tags). We strip all `#[doc = ...]`
+    // attributes from generated bindings to keep public docs clean; Rust-side wrappers and
+    // re-exports provide their own documentation.
+    let debug = env::var("XGRAMMAR_RS_DEBUG_DOCSTRIP").is_ok();
+    let rs_dir = out_dir.join("autocxx-build-dir/rs");
+    if debug {
+        println!("cargo:warning=docstrip: scanning {}", rs_dir.display());
+    }
+    let Ok(rd) = std::fs::read_dir(&rs_dir) else {
+        if debug {
+            println!("cargo:warning=docstrip: rs dir missing");
+        }
+        return;
+    };
+    let entries: Vec<_> = rd.flatten().collect();
+    if debug {
+        let mut names: Vec<String> = entries
+            .iter()
+            .filter_map(|e| e.file_name().into_string().ok())
+            .collect();
+        names.sort();
+        println!("cargo:warning=docstrip: entries={}", names.join(", "));
+    }
+    for entry in entries {
+        let path = entry.path();
+        if path.extension().and_then(|s| s.to_str()) != Some("rs") {
+            continue;
+        }
+        let file_name = path.file_name().and_then(|s| s.to_str()).unwrap_or("");
+        if !file_name.starts_with("autocxx-") || !file_name.ends_with("-gen.rs")
+        {
+            continue;
+        }
+        let Ok(contents) = std::fs::read_to_string(&path) else {
+            if debug {
+                println!(
+                    "cargo:warning=docstrip: failed to read {}",
+                    path.display()
+                );
+            }
+            continue;
+        };
+        if debug {
+            let count = contents.matches("#[doc =").count();
+            println!(
+                "cargo:warning=docstrip: {} contains {} #[doc =] lines",
+                file_name, count
+            );
+        }
+        let mut changed = false;
+        let mut removed = 0usize;
+        let mut out = String::with_capacity(contents.len());
+        for line in contents.lines() {
+            let trimmed = line.trim_start();
+            if trimmed.starts_with("#[doc =") {
+                changed = true;
+                removed += 1;
+                continue;
+            }
+            out.push_str(line);
+            out.push('\n');
+        }
+        if changed {
+            if debug {
+                println!(
+                    "cargo:warning=docstrip: {} removed {} doc lines",
+                    file_name, removed
+                );
+            }
+            let _ = std::fs::write(&path, out);
+        }
+    }
+}
+
 #[cfg(target_os = "windows")]
 fn find_libclang_windows() -> Option<PathBuf> {
     let vswhere = PathBuf::from(
@@ -427,4 +504,8 @@ fn main() {
             },
         }
     }
+
+    // Clean up doc comments in generated Rust bindings so docs.rs doesn't show Doxygen markup.
+    // Run this at the end to ensure it applies after any generation/formatting steps.
+    strip_autocxx_generated_doc_comments(&out_dir);
 }

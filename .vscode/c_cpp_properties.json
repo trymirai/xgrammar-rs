@@ -1,11 +1,25 @@
 {
     "configurations": [
         {
+            "name": "macOS",
+            "includePath": [
+                "${workspaceFolder}/external/xgrammar-0.1.28/include",
+                "${workspaceFolder}/external/xgrammar-0.1.28/3rdparty/dlpack/include",
+                "${workspaceFolder}/external/xgrammar-0.1.28/3rdparty/picojson",
+                "${workspaceFolder}/src"
+            ],
+            "defines": [],
+            "compilerPath": "/usr/bin/clang++",
+            "cStandard": "c17",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "macos-clang-arm64"
+        },
+        {
             "name": "Linux",
             "includePath": [
-                "${workspaceFolder}/external/xgrammar-0.1.26/include",
-                "${workspaceFolder}/external/xgrammar-0.1.26/3rdparty/dlpack/include",
-                "${workspaceFolder}/external/xgrammar-0.1.26/3rdparty/picojson",
+                "${workspaceFolder}/external/xgrammar-0.1.28/include",
+                "${workspaceFolder}/external/xgrammar-0.1.28/3rdparty/dlpack/include",
+                "${workspaceFolder}/external/xgrammar-0.1.28/3rdparty/picojson",
                 "${workspaceFolder}/src"
             ],
             "defines": [],

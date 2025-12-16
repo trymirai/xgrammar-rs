@@ -29,7 +29,7 @@ pub fn make_hf_tokenizer_info(model_id: &str) -> TokenizerInfo {
     let path =
         download_tokenizer_json(model_id).expect("download tokenizer.json");
     let tk = tokenizers::Tokenizer::from_file(&path).expect("load tokenizer");
-    TokenizerInfo::from_huggingface(&tk, None, None)
+    TokenizerInfo::from_huggingface(&tk, None, None).unwrap()
 }
 
 /// Create a GrammarMatcher from a Grammar with minimal tokenizer info
@@ -37,10 +37,10 @@ pub fn matcher_from_grammar(gram: &Grammar) -> GrammarMatcher {
     let empty_vocab: Vec<&str> = vec![];
     let stop_ids: Option<Box<[i32]>> = None;
     let tokenizer_info =
-        TokenizerInfo::new(&empty_vocab, VocabType::RAW, &stop_ids, false);
-    let mut compiler = GrammarCompiler::new(&tokenizer_info, 1, false, -1);
-    let cg = compiler.compile_grammar(gram);
-    GrammarMatcher::new(&cg, None, true, -1)
+        TokenizerInfo::new(&empty_vocab, VocabType::RAW, &stop_ids, false).unwrap();
+    let mut compiler = GrammarCompiler::new(&tokenizer_info, 1, false, -1).unwrap();
+    let cg = compiler.compile_grammar(gram).unwrap();
+    GrammarMatcher::new(&cg, None, true, -1).unwrap()
 }
 
 /// Create a GrammarMatcher from a Grammar with a specific TokenizerInfo
@@ -49,9 +49,9 @@ pub fn matcher_from_grammar_with_tokenizer(
     gram: &Grammar,
     tokenizer_info: &TokenizerInfo,
 ) -> GrammarMatcher {
-    let mut compiler = GrammarCompiler::new(tokenizer_info, 1, false, -1);
-    let cg = compiler.compile_grammar(gram);
-    GrammarMatcher::new(&cg, None, true, -1)
+    let mut compiler = GrammarCompiler::new(tokenizer_info, 1, false, -1).unwrap();
+    let cg = compiler.compile_grammar(gram).unwrap();
+    GrammarMatcher::new(&cg, None, true, -1).unwrap()
 }
 
 /// Create a GrammarMatcher with rollback support
@@ -61,9 +61,9 @@ pub fn matcher_from_grammar_with_tokenizer_and_rollback(
     tokenizer_info: &TokenizerInfo,
     max_rollback_tokens: i32,
 ) -> GrammarMatcher {
-    let mut compiler = GrammarCompiler::new(tokenizer_info, 1, false, -1);
-    let cg = compiler.compile_grammar(gram);
-    GrammarMatcher::new(&cg, None, false, max_rollback_tokens)
+    let mut compiler = GrammarCompiler::new(tokenizer_info, 1, false, -1).unwrap();
+    let cg = compiler.compile_grammar(gram).unwrap();
+    GrammarMatcher::new(&cg, None, false, max_rollback_tokens).unwrap()
 }
 
 /// Check if a grammar accepts a string

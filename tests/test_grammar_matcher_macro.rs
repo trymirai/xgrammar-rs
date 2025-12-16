@@ -12,7 +12,7 @@ rule1 ::= "abcd"
 rule2 ::= "efg"
 "#;
 
-    let grammar = Grammar::from_ebnf(grammar_str, "root");
+    let grammar = Grammar::from_ebnf(grammar_str, "root").unwrap();
     assert!(is_grammar_accept_string(&grammar, "tag1abcd"));
     assert!(is_grammar_accept_string(&grammar, "tag1abcdtag2efg"));
     assert!(is_grammar_accept_string(&grammar, "tag1abcdqqqqtag2efg"));
@@ -29,7 +29,7 @@ rule1 ::= "abcd" [p]*
 rule2 ::= "efg" [t]*
 "#;
 
-    let grammar = Grammar::from_ebnf(grammar_str, "root");
+    let grammar = Grammar::from_ebnf(grammar_str, "root").unwrap();
     assert!(is_grammar_accept_string(&grammar, "tag1abcd"));
     assert!(is_grammar_accept_string(&grammar, "tag1abcdppppptag2efg"));
     assert!(is_grammar_accept_string(&grammar, "tag2efgtttttag1abc"));
@@ -44,7 +44,7 @@ rule1 ::= "abcd" [p]*
 rule2 ::= "efg" [t]*
 "#;
 
-    let grammar = Grammar::from_ebnf(grammar_str, "root");
+    let grammar = Grammar::from_ebnf(grammar_str, "root").unwrap();
     assert!(is_grammar_accept_string(&grammar, "tag1abcd"));
     assert!(is_grammar_accept_string(&grammar, "tag2efgttt"));
     assert!(!is_grammar_accept_string(&grammar, "tag1abcdppppptag2"));
@@ -65,7 +65,7 @@ rule1 ::= "abcd" [p]*
 rule2 ::= "efg" [t]*
 "#;
 
-    let grammar = Grammar::from_ebnf(grammar_str, "root");
+    let grammar = Grammar::from_ebnf(grammar_str, "root").unwrap();
     assert!(is_grammar_accept_string(&grammar, "tag1abcdllw"));
     assert!(is_grammar_accept_string(&grammar, "tag1abcdtag3w"));
     assert!(is_grammar_accept_string(&grammar, "tag1abcdqqqtag2efgtag3w"));
@@ -97,7 +97,7 @@ rule1 ::= "abcd" [p]*
 rule2 ::= "efg" [t]*
 "#;
 
-    let grammar = Grammar::from_ebnf(grammar_str, "root");
+    let grammar = Grammar::from_ebnf(grammar_str, "root").unwrap();
     assert!(is_grammar_accept_string(&grammar, "tag1abcdllw"));
     assert!(is_grammar_accept_string(&grammar, "tag1abcdtag3w"));
     assert!(matcher_from_grammar(&grammar).accept_string("tag1abcd", false));
@@ -184,12 +184,12 @@ rule2 ::= "dg"
         allocate_token_bitmask, testing,
     };
 
-    let grammar = Grammar::from_ebnf(grammar_str, "root");
+    let grammar = Grammar::from_ebnf(grammar_str, "root").unwrap();
     let tokenizer_info =
-        TokenizerInfo::new(&tokens, VocabType::RAW, &None, false);
-    let mut compiler = GrammarCompiler::new(&tokenizer_info, 1, false, -1);
-    let compiled_grammar = compiler.compile_grammar(&grammar);
-    let mut matcher = GrammarMatcher::new(&compiled_grammar, None, true, -1);
+        TokenizerInfo::new(&tokens, VocabType::RAW, &None, false).unwrap();
+    let mut compiler = GrammarCompiler::new(&tokenizer_info, 1, false, -1).unwrap();
+    let compiled_grammar = compiler.compile_grammar(&grammar).unwrap();
+    let mut matcher = GrammarMatcher::new(&compiled_grammar, None, true, -1).unwrap();
 
     let vocab_size = tokenizer_info.vocab_size();
     let mut bitmask_data = allocate_token_bitmask(1, vocab_size);
@@ -260,23 +260,23 @@ rule2 ::= "efg" [t]*
 rule3 ::= "abcd" [p]*
 "#;
     assert!(is_grammar_accept_string(
-        &Grammar::from_ebnf(grammar_str, "root"),
+        &Grammar::from_ebnf(grammar_str, "root").unwrap(),
         "tag1tag1efgllw"
     ));
     assert!(is_grammar_accept_string(
-        &Grammar::from_ebnf(grammar_str, "root"),
+        &Grammar::from_ebnf(grammar_str, "root").unwrap(),
         "tag1tag2abcdtag3w"
     ));
     assert!(!is_grammar_accept_string(
-        &Grammar::from_ebnf(grammar_str, "root"),
+        &Grammar::from_ebnf(grammar_str, "root").unwrap(),
         "tag1Ktag2abcdtag3tag1"
     ));
     assert!(is_grammar_accept_string(
-        &Grammar::from_ebnf(grammar_str, "root"),
+        &Grammar::from_ebnf(grammar_str, "root").unwrap(),
         "tag1tag3w"
     ));
     assert!(!is_grammar_accept_string(
-        &Grammar::from_ebnf(grammar_str, "root"),
+        &Grammar::from_ebnf(grammar_str, "root").unwrap(),
         "tag1tag3tag2abcdll"
     ));
 }

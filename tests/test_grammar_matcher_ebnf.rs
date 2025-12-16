@@ -1,5 +1,6 @@
 mod test_utils;
 
+#[cfg(feature = "hf")]
 use serial_test::serial;
 #[cfg(feature = "hf")]
 use test_utils::{create_bitmask_dltensor, make_hf_tokenizer_info};
@@ -14,10 +15,10 @@ fn matcher_from_grammar(grammar: &Grammar) -> GrammarMatcher {
     let empty_vocab: Vec<&str> = vec![];
     let stop_ids: Option<Box<[i32]>> = None;
     let tokenizer_info =
-        TokenizerInfo::new(&empty_vocab, VocabType::RAW, &stop_ids, false);
-    let mut compiler = GrammarCompiler::new(&tokenizer_info, 1, false, -1);
-    let compiled = compiler.compile_grammar(grammar);
-    GrammarMatcher::new(&compiled, None, true, -1)
+        TokenizerInfo::new(&empty_vocab, VocabType::RAW, &stop_ids, false).unwrap();
+    let mut compiler = GrammarCompiler::new(&tokenizer_info, 1, false, -1).unwrap();
+    let compiled = compiler.compile_grammar(grammar).unwrap();
+    GrammarMatcher::new(&compiled, None, true, -1).unwrap()
 }
 
 fn is_grammar_accept_string(
@@ -39,7 +40,7 @@ rule2 ::= "b"
 rule3 ::= "c"
 "#;
 
-    let grammar = Grammar::from_ebnf(grammar_str, "root");
+    let grammar = Grammar::from_ebnf(grammar_str, "root").unwrap();
     assert!(is_grammar_accept_string(&grammar, "bab"));
     assert!(!is_grammar_accept_string(&grammar, "abb"));
     assert!(is_grammar_accept_string(&grammar, "cab"));
@@ -51,7 +52,7 @@ fn test_repetition() {
         root ::= rule {2, 3}
         rule ::= ("a" | [bc] {4,})
     "#;
-    let grammar = Grammar::from_ebnf(grammar_str, "root");
+    let grammar = Grammar::from_ebnf(grammar_str, "root").unwrap();
     let cases = [
         ("aaa", true),
         ("abcbc", true),
@@ -76,7 +77,7 @@ fn test_repetition_with_empty() {
         root ::= rule {2, 3} "d"?
         rule ::= ("a" | [bc] {4,}) | ""
     "#;
-    let grammar = Grammar::from_ebnf(grammar_str, "root");
+    let grammar = Grammar::from_ebnf(grammar_str, "root").unwrap();
     let cases = [
         ("aaa", true),
         ("abcbc", true),
@@ -101,7 +102,7 @@ fn test_repetition_with_empty() {
 fn test_utf8() {
     // Test utf8-encoded string with EBNF grammar
     let ebnf_grammar_str = "root ::= [，]+"; // fullwidth comma U+FF0C
-    let grammar = Grammar::from_ebnf(ebnf_grammar_str, "root");
+    let grammar = Grammar::from_ebnf(ebnf_grammar_str, "root").unwrap();
     let accepted_inputs =
         ["，", "，，，", "，，，，，，，，，，，，，，，，，，，，，，"]; // a bunch of fullwidth commas
     for input in accepted_inputs {
@@ -120,7 +121,7 @@ escape ::= ["\\/bfnrt] | "u" [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9]
 basic_object ::= "{" ("" | ws basic_string ws ":" ws basic_any ( ws "," ws basic_string ws ":" ws basic_any)*) ws "}"
 ws ::= [ \n\t]*
 "#;
-    let grammar = Grammar::from_ebnf(json_grammar_simple_ebnf, "basic_string");
+    let grammar = Grammar::from_ebnf(json_grammar_simple_ebnf, "basic_string").unwrap();
     assert!(is_grammar_accept_string(&grammar, r#""abc\r\n""#));
     assert!(!is_grammar_accept_string(&grammar, r#"{"name": "John" }"#));
 }
@@ -144,7 +145,7 @@ ws ::= [ \n\t]*
 
 #[test]
 fn test_json_accept() {
-    let grammar = Grammar::from_ebnf(json_grammar_ebnf(), "root");
+    let grammar = Grammar::from_ebnf(json_grammar_ebnf(), "root").unwrap();
     let accepted = [
         "{\"name\": \"John\"}",
         "{ \"name\" : \"John\" }",
@@ -168,7 +169,7 @@ fn test_json_accept() {
 
 #[test]
 fn test_json_refuse() {
-    let grammar = Grammar::from_ebnf(json_grammar_ebnf(), "root");
+    let grammar = Grammar::from_ebnf(json_grammar_ebnf(), "root").unwrap();
     let refused = [
         r#"{ name: "John" }"#,
         r#"{ "name": "John" } "#, // trailing space is not accepted
@@ -189,7 +190,7 @@ fn test_json_refuse() {
 
 #[test]
 fn test_json_pressure() {
-    let grammar = Grammar::from_ebnf(json_grammar_ebnf(), "root");
+    let grammar = Grammar::from_ebnf(json_grammar_ebnf(), "root").unwrap();
     let long_1k: &str = concat!(
         "[\"Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec odio. Praesent ",
         "libero. Sed cursus ante dapibus diam. Sed nisi. Nulla quis sem at nibh elementum ",
@@ -322,7 +323,7 @@ fn test_nullable_grammar() {
     rule2 ::= [0-9]*
     rule3 ::= [a-z]
 "#;
-    let grammar = Grammar::from_ebnf(grammar_str, "root");
+    let grammar = Grammar::from_ebnf(grammar_str, "root").unwrap();
     let test_strings = ["abc12312398014a", ""];
     for s in test_strings {
         assert!(is_grammar_accept_string(&grammar, s), "{}", s);
@@ -344,7 +345,7 @@ fn test_predict_complete() {
     rule9 ::= [0-9]?
     "#;
 
-    let grammar = Grammar::from_ebnf(mixed_grammar_str, "root");
+    let grammar = Grammar::from_ebnf(mixed_grammar_str, "root").unwrap();
     let mut input = String::new();
     for _ in 0..10 {
         assert!(is_grammar_accept_string(&grammar, &input), "{}", input);
@@ -354,7 +355,7 @@ fn test_predict_complete() {
 
     // Test right recursion
     let right_recursion_grammar =
-        Grammar::from_ebnf("root ::= [a-z] root | [a-z]", "root");
+        Grammar::from_ebnf("root ::= [a-z] root | [a-z]", "root").unwrap();
 
     let accept_strings = ["a", "ab", "abc", "abcd", "abcde"];
     let reject_strings = ["", "1", "a1", "ab1", "abc1"];
@@ -374,7 +375,7 @@ fn test_predict_complete() {
     rule1 ::= "{" rule2 | ""
     rule2 ::= root "}"
     "#;
-    let grammar2 = Grammar::from_ebnf(mixed_grammar_str, "root");
+    let grammar2 = Grammar::from_ebnf(mixed_grammar_str, "root").unwrap();
     let test_strings = ["", "{}", "{{}}", "{{{}}}", "{{{{}}}}", "{{{{{}}}}}"];
     let rejected_strings = ["{", "{}{}", "{{{{}", "{{}}}", "{{{{{}}}}}}"];
 
@@ -392,7 +393,7 @@ fn test_advance() {
     let ebnf_grammar_str = r#"root ::= rule1
     rule1 ::= [a] | [a-b] | [a-c]* | "a" | "aaaaaaaaaaaaaaaaaaa"
     "#;
-    let grammar = Grammar::from_ebnf(ebnf_grammar_str, "root");
+    let grammar = Grammar::from_ebnf(ebnf_grammar_str, "root").unwrap();
     for i in 0..10 {
         let input = "a".repeat(i);
         assert!(is_grammar_accept_string(&grammar, &input), "{}", input);
@@ -403,7 +404,7 @@ fn test_advance() {
 fn test_character_class_star_utf8() {
     let ebnf_grammar_str = r#"root ::= [^0-9]*"#;
     let test_string = "worldせかい世界";
-    let grammar = Grammar::from_ebnf(ebnf_grammar_str, "root");
+    let grammar = Grammar::from_ebnf(ebnf_grammar_str, "root").unwrap();
     assert!(is_grammar_accept_string(&grammar, test_string));
 }
 
@@ -415,7 +416,7 @@ rule1 ::= "abc" | ""
 rule2 ::= "abd" | ""
 rule3 ::= [a-n] [b-c] "x" | ""
 "#;
-    let grammar = Grammar::from_ebnf(grammar_str, "root");
+    let grammar = Grammar::from_ebnf(grammar_str, "root").unwrap();
     assert!(is_grammar_accept_string(&grammar, "abc"));
     assert!(is_grammar_accept_string(&grammar, "abx"));
     assert!(is_grammar_accept_string(&grammar, "ccx"));
@@ -437,10 +438,10 @@ character ::= [^"\\\r\n] | "\\" escape
 escape ::= ["\\/bfnrt] | "u" [0-9A-Fa-f]{4}
 number ::= "-"? [0-9]+ ("." [0-9]+)? ([eE] [+-]? [0-9]+)?
 "#;
-    let grammar = Grammar::from_ebnf(json_grammar_ebnf, "root");
-    let mut compiler = GrammarCompiler::new(&tk, 1, false, -1);
-    let compiled = compiler.compile_grammar(&grammar);
-    let mut matcher = GrammarMatcher::new(&compiled, None, true, -1);
+    let grammar = Grammar::from_ebnf(json_grammar_ebnf, "root").unwrap();
+    let mut compiler = GrammarCompiler::new(&tk, 1, false, -1).unwrap();
+    let compiled = compiler.compile_grammar(&grammar).unwrap();
+    let mut matcher = GrammarMatcher::new(&compiled, None, true, -1).unwrap();
 
     let input_str = r#"{"id": 1,"name": "Example"}"#;
     let mut bitmask_data = allocate_token_bitmask(1, tk.vocab_size());
@@ -459,10 +460,10 @@ number ::= "-"? [0-9]+ ("." [0-9]+)? ([eE] [+-]? [0-9]+)?
 fn test_not_neighbour_character_class() {
     let raw_grammar = r#"root ::= [a-cx-z]*"#;
     let tk = make_hf_tokenizer_info("meta-llama/Llama-2-7b-chat-hf");
-    let grammar = Grammar::from_ebnf(raw_grammar, "root");
-    let mut compiler = GrammarCompiler::new(&tk, 1, false, -1);
-    let compiled = compiler.compile_grammar(&grammar);
-    let mut matcher = GrammarMatcher::new(&compiled, None, true, -1);
+    let grammar = Grammar::from_ebnf(raw_grammar, "root").unwrap();
+    let mut compiler = GrammarCompiler::new(&tk, 1, false, -1).unwrap();
+    let compiled = compiler.compile_grammar(&grammar).unwrap();
+    let mut matcher = GrammarMatcher::new(&compiled, None, true, -1).unwrap();
 
     let mut bitmask_data = allocate_token_bitmask(1, tk.vocab_size());
     let (mut tensor, _shape, _strides) =

@@ -1,4 +1,4 @@
-//! Compiler module: CompiledGrammar and GrammarCompiler wrappers.
+//! Compiling grammar for efficient token mask generation.
 
 pub mod compiled_grammar;
 pub mod grammar_compiler;

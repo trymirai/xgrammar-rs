@@ -4,33 +4,43 @@ use crate::{CxxUniquePtr, FFITokenizerInfo, VocabType, cxx_utils};
 
 type StopTokenIds = Option<Box<[i32]>>;
 
-/// TokenizerInfo contains the vocabulary, its type, and metadata used by the
-/// grammar-guided generation.
+/// The tokenizer info contains the vocabulary, the type of the vocabulary, and necessary
+/// information for the grammar-guided generation.
 ///
-/// Notes:
-/// - Tokens may be encoded differently depending on `VocabType` (e.g. ByteFallback
-///   uses "<0x1B>", ByteLevel uses unicode mappings). This wrapper exposes the
-///   decoded vocabulary in the same form as the original text via
-///   `decoded_vocab_as_bytes`.
-/// - Some models pad their vocab size to a multiple of 32 or similar. If your
-///   model's vocab size differs from `encoded_vocab.len()`, use
-///   `new_with_vocab_size` to pass the model's vocab size so bitmask sizes are
-///   computed correctly.
+/// Note that although some tokenizers will encode the tokens in a special format, e.g.
+/// `<0x1B>` for `\u001b` in the ByteFallback tokenizer, and `Ġ` for ` ` in the Byte-Level BPE
+/// tokenizer, TokenizerInfo always decodes the vocabulary to the original format (e.g. `\u001b`
+/// and ` `).
+///
+/// Also note that some models (e.g. Phi-3 and Deepseek-V2) may pad the vocabulary to a multiple
+/// of 32. In this case, the model's vocab_size is larger than the tokenizer's vocabulary size.
+/// Please pass the model's vocab_size to the `vocab_size` parameter in the constructor, because
+/// this information is used to determine the size of the token mask.
 pub struct TokenizerInfo {
     inner: CxxUniquePtr<FFITokenizerInfo>,
 }
 
 impl TokenizerInfo {
-    /// Construct a TokenizerInfo with vocab size derived from `encoded_vocab`.
+    /// Construct the tokenizer info.
     ///
-    /// If the model's vocab size differs from `encoded_vocab.len()`, prefer
-    /// `new_with_vocab_size`.
+    /// # Parameters
+    ///
+    /// - `encoded_vocab`: The encoded vocabulary of the tokenizer.
+    /// - `vocab_type`: The type of the vocabulary. See also `VocabType`.
+    /// - `stop_token_ids`: The stop token ids. If `None`, the stop token ids will be auto
+    ///   detected (but may not be correct).
+    /// - `add_prefix_space`: Whether the tokenizer will prepend a space before the text in
+    ///   the tokenization process.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the tokenizer info cannot be constructed.
     pub fn new<T: AsRef<str>>(
         encoded_vocab: &[T],
         vocab_type: VocabType,
         stop_token_ids: &StopTokenIds,
         add_prefix_space: bool,
-    ) -> Self {
+    ) -> Result<Self, String> {
         Self::new_with_vocab_size(
             encoded_vocab,
             vocab_type,
@@ -40,18 +50,29 @@ impl TokenizerInfo {
         )
     }
 
-    /// Construct a TokenizerInfo with an explicit model `vocab_size`.
+    /// Construct the tokenizer info with an explicit vocab size.
     ///
-    /// Use this when the model's vocab size (e.g., padded to a multiple of 32)
-    /// differs from the tokenizer's `encoded_vocab.len()`. Indices in the range
-    /// `[encoded_vocab.len(), vocab_size)` are treated as special/reserved.
+    /// # Parameters
+    ///
+    /// - `encoded_vocab`: The encoded vocabulary of the tokenizer.
+    /// - `vocab_type`: The type of the vocabulary. See also `VocabType`.
+    /// - `vocab_size`: The size of the vocabulary. If not provided, the vocabulary size will
+    ///   be `encoded_vocab.len()`.
+    /// - `stop_token_ids`: The stop token ids. If `None`, the stop token ids will be auto
+    ///   detected (but may not be correct).
+    /// - `add_prefix_space`: Whether the tokenizer will prepend a space before the text in
+    ///   the tokenization process.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the tokenizer info cannot be constructed.
     pub fn new_with_vocab_size<T: AsRef<str>>(
         encoded_vocab: &[T],
         vocab_type: VocabType,
         vocab_size: Option<usize>,
         stop_token_ids: &StopTokenIds,
         add_prefix_space: bool,
-    ) -> Self {
+    ) -> Result<Self, String> {
         let mut cxx_vec = cxx_utils::new_string_vector();
         {
             let mut cxx_vec_pin = cxx_vec.pin_mut();
@@ -82,6 +103,7 @@ impl TokenizerInfo {
             _ => (false, std::ptr::null(), 0usize),
         };
 
+        cxx::let_cxx_string!(error_out_cxx = "");
         let ffi_obj = unsafe {
             cxx_utils::make_tokenizer_info(
                 cxx_vec.as_ref().unwrap(),
@@ -92,15 +114,25 @@ impl TokenizerInfo {
                 stop_ptr,
                 stop_len,
                 add_prefix_space,
+                error_out_cxx.as_mut().get_unchecked_mut(),
             )
         };
+        if ffi_obj.is_null() {
+            return Err(error_out_cxx.to_string());
+        }
 
         let inner = ffi_obj;
-        Self { inner }
+        Ok(Self {
+            inner,
+        })
     }
 
-    /// Construct TokenizerInfo from encoded vocab (bytes) and a metadata JSON
-    /// string produced by `dump_metadata`.
+    /// Construct the tokenizer info from the vocabulary and the metadata string in JSON format.
+    ///
+    /// # Parameters
+    ///
+    /// - `encoded_vocab`: The encoded vocabulary of the tokenizer.
+    /// - `metadata`: The metadata string in JSON format.
     pub fn from_vocab_and_metadata_bytes<I, B>(
         encoded_vocab: I,
         metadata: &str,
@@ -130,7 +162,9 @@ impl TokenizerInfo {
             &metadata_cxx,
         )
         .within_unique_ptr();
-        Self { inner: ffi_ptr }
+        Self {
+            inner: ffi_ptr,
+        }
     }
 
     /// The type of the vocabulary.
@@ -150,13 +184,11 @@ impl TokenizerInfo {
                 .GetVocabSize()
                 .0,
         )
-            .expect("GetVocabSize returned a negative value")
-            ;
+        .expect("GetVocabSize returned a negative value");
         sz
     }
 
-    /// Whether the tokenizer will prepend a space before the text in the tokenization
-    /// process.
+    /// Whether the tokenizer will prepend a space before the text in the tokenization process.
     pub fn add_prefix_space(&self) -> bool {
         let val = self
             .inner
@@ -166,9 +198,9 @@ impl TokenizerInfo {
         val
     }
 
-    /// The decoded vocabulary of the tokenizer. This converts tokens in the
-    /// LLM's vocabulary back to the original text form (e.g., ByteFallback
-    /// "<0x1B>" -> "\u001b").
+    /// The decoded vocabulary of the tokenizer. This converts the tokens in the LLM's
+    /// vocabulary back to the original format of the input text. E.g. for type ByteFallback,
+    /// the token `<0x1B>` is converted back to `\u001b`.
     pub fn decoded_vocab(&self) -> Box<[Box<[u8]>]> {
         let cxx_vec = self.inner.GetDecodedVocab();
         let mut result: Vec<Box<[u8]>> = Vec::with_capacity(cxx_vec.len());
@@ -184,7 +216,7 @@ impl TokenizerInfo {
         result.into_boxed_slice()
     }
 
-    /// Stop token ids.
+    /// The stop token ids.
     pub fn stop_token_ids(&self) -> Box<[i32]> {
         let cxx_vec = self.inner.GetStopTokenIds();
         cxx_vec.iter().copied().collect::<Vec<_>>().into_boxed_slice()
@@ -201,11 +233,10 @@ impl TokenizerInfo {
         cxx_vec.iter().copied().collect::<Vec<_>>().into_boxed_slice()
     }
 
-    /// Dump the metadata of the tokenizer to a json string. It can be used to construct the
+    /// Dump the metadata of the tokenizer to a JSON string. It can be used to construct the
     /// tokenizer info from the vocabulary and the metadata string.
     pub fn dump_metadata(&self) -> String {
-        self
-            .inner
+        self.inner
             .as_ref()
             .expect("FFITokenizerInfo UniquePtr was null")
             .DumpMetadata()
@@ -213,24 +244,33 @@ impl TokenizerInfo {
     }
 
     /// Serialize the tokenizer info to a JSON string.
+    ///
+    /// # Returns
+    ///
+    /// The JSON string.
     pub fn serialize_json(&self) -> String {
-        self
-            .inner
+        self.inner
             .as_ref()
             .expect("FFITokenizerInfo UniquePtr was null")
             .SerializeJSON()
             .to_string()
     }
 
-    /// Deserialize a `TokenizerInfo` from a JSON string.
+    /// Deserialize a tokenizer info from a JSON string.
     ///
-    /// Returns
-    /// - `Ok(TokenizerInfo)` on success
-    /// - `Err(String)` when deserialization fails due to any of the following:
-    ///   - invalid JSON syntax
-    ///   - schema/format mismatch with `TokenizerInfo` serialization
-    ///   - serialization version mismatch (via the `__VERSION__` field)
-    /// The error string mirrors the C++ exception message.
+    /// # Parameters
+    ///
+    /// - `json`: The JSON string.
+    ///
+    /// # Returns
+    ///
+    /// The tokenizer info.
+    ///
+    /// # Errors
+    ///
+    /// - When the JSON string is invalid.
+    /// - When the JSON string does not follow the serialization format of the tokenizer info.
+    /// - When the `__VERSION__` field in the JSON string is not the same as the current version.
     pub fn deserialize_json(json: &str) -> Result<Self, String> {
         cxx::let_cxx_string!(json_cxx = json);
         cxx::let_cxx_string!(error_out_cxx = "");
@@ -243,48 +283,45 @@ impl TokenizerInfo {
         if uptr.is_null() {
             return Err(error_out_cxx.to_string());
         }
-        Ok(Self { inner: uptr })
+        Ok(Self {
+            inner: uptr,
+        })
     }
 
     pub(crate) fn ffi_ref(&self) -> &FFITokenizerInfo {
-        self.inner
-            .as_ref()
-            .expect("FFITokenizerInfo UniquePtr was null")
+        self.inner.as_ref().expect("FFITokenizerInfo UniquePtr was null")
     }
 
-    pub(crate) fn from_unique_ptr(inner: cxx::UniquePtr<FFITokenizerInfo>) -> Self {
-        Self { inner }
+    pub(crate) fn from_unique_ptr(
+        inner: cxx::UniquePtr<FFITokenizerInfo>
+    ) -> Self {
+        Self {
+            inner,
+        }
     }
-
-    // No from_pinned_ffi needed with UniquePtr ownership
 }
 
 impl Drop for TokenizerInfo {
-    fn drop(&mut self) {
-    }
+    fn drop(&mut self) {}
 }
-
-// ---- Hugging Face tokenizers integration (feature-gated) ----
-//
-// The following helpers mirror Python's TokenizerInfo utilities:
-// - _is_tiktoken_tokenizer
-// - _is_sentencepiece_tokenizer
-// - from_huggingface
-//
-// They are adapted to Rust and the `tokenizers` crate. Detection is heuristic-based
-// using the vocabulary content, since Rust does not expose the Python runtime types.
 
 #[cfg(feature = "tokenizers")]
 impl TokenizerInfo {
     #[inline]
-    fn extract_ordered_vocab(tokenizer: &tokenizers::Tokenizer) -> Box<[String]> {
+    fn extract_ordered_vocab(
+        tokenizer: &tokenizers::Tokenizer
+    ) -> Box<[String]> {
         let mut pairs: Vec<(usize, String)> = tokenizer
             .get_vocab(true)
             .into_iter()
             .map(|(tok, id)| (id as usize, tok))
             .collect();
         pairs.sort_by_key(|(id, _)| *id);
-        pairs.into_iter().map(|(_, tok)| tok).collect::<Vec<_>>().into_boxed_slice()
+        pairs
+            .into_iter()
+            .map(|(_, tok)| tok)
+            .collect::<Vec<_>>()
+            .into_boxed_slice()
     }
 
     /// Heuristically detect whether a tokenizer resembles a tiktoken-style tokenizer.
@@ -292,13 +329,13 @@ impl TokenizerInfo {
     /// In Python this checks `isinstance(tokenizer.tokenizer, tiktoken.Encoding)` or whether
     /// the vocab filename contains "tiktoken". In Rust we do not have those runtime types,
     /// so we approximate: if the vocabulary does NOT contain typical markers of
-    /// SentencePiece ("▁"), Byte-level GPT-2 ("Ġ"), or ByteFallback (tokens like "<0x1B>"),
+    /// SentencePiece (`▁`), Byte-level GPT-2 (`Ġ`), or ByteFallback (tokens like `<0x1B>`),
     /// we consider it RAW (tiktoken-like).
     pub fn _is_tiktoken_tokenizer(tokenizer: &tokenizers::Tokenizer) -> bool {
         let vocab = tokenizer.get_vocab(true);
-        let mut has_sentencepiece_marker = false; // '▁'
-        let mut has_bytelevel_marker = false; // 'Ġ'
-        let mut has_bytefallback_marker = false; // tokens like "<0x..>"
+        let mut has_sentencepiece_marker = false;
+        let mut has_bytelevel_marker = false;
+        let mut has_bytefallback_marker = false;
         for token in vocab.keys() {
             if !has_sentencepiece_marker && token.contains('▁') {
                 has_sentencepiece_marker = true;
@@ -327,7 +364,7 @@ impl TokenizerInfo {
     /// Heuristically detect whether a tokenizer is SentencePiece-based.
     ///
     /// In Python this checks for a `sentencepiece.SentencePieceProcessor`. Here we look for
-    /// typical SentencePiece marker "▁" in the vocabulary. This is a best-effort heuristic
+    /// typical SentencePiece marker `▁` in the vocabulary. This is a best-effort heuristic
     /// and may not be perfect for all models.
     pub fn _is_sentencepiece_tokenizer(
         tokenizer: &tokenizers::Tokenizer
@@ -336,18 +373,31 @@ impl TokenizerInfo {
         vocab.keys().any(|tok| tok.contains('▁'))
     }
 
-    /// Construct from a `tokenizers::Tokenizer` with explicit options, preserving tokenizer indexing.
+    /// Construct from a `tokenizers::Tokenizer` with explicit options, preserving tokenizer
+    /// indexing.
     ///
     /// This matches Python's constructor path where `encoded_vocab` is built by id order and
     /// `vocab_size` may be larger than the tokenizer's vocab (model padding), with special ids
     /// reserved in the tail range.
+    ///
+    /// # Parameters
+    ///
+    /// - `tokenizer`: The tokenizer.
+    /// - `vocab_type`: The type of the vocabulary.
+    /// - `vocab_size`: The vocabulary size defined by the model (not the tokenizer).
+    /// - `stop_token_ids`: The stop token ids.
+    /// - `add_prefix_space`: Whether the tokenizer will prepend a space before the text.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the tokenizer info cannot be constructed.
     pub fn from_tokenizers_with_options(
         tokenizer: &tokenizers::Tokenizer,
         vocab_type: VocabType,
         vocab_size: Option<usize>,
         stop_token_ids: Option<&[i32]>,
         add_prefix_space: bool,
-    ) -> Self {
+    ) -> Result<Self, String> {
         let ordered = Self::extract_ordered_vocab(tokenizer);
         let stop: Option<Box<[i32]>> =
             stop_token_ids.map(|s| s.to_vec().into_boxed_slice());
@@ -361,7 +411,11 @@ impl TokenizerInfo {
     }
 
     /// Convenience: RAW vocab, detected size, no stops, no prefix space.
-    pub fn from_tokenizers_simple(tokenizer: &tokenizers::Tokenizer) -> Self {
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the tokenizer info cannot be constructed.
+    pub fn from_tokenizers_simple(tokenizer: &tokenizers::Tokenizer) -> Result<Self, String> {
         Self::from_tokenizers_with_options(
             tokenizer,
             VocabType::RAW,
@@ -371,21 +425,44 @@ impl TokenizerInfo {
         )
     }
 
-    /// Construct the tokenizer info from a Hugging Face `tokenizers::Tokenizer`.
+    /// Construct the tokenizer info from a Hugging Face tokenizer. This constructor supports
+    /// various tokenizer backends. Necessary information is automatically detected from
+    /// the tokenizer.
     ///
-    /// This mirrors Python's `TokenizerInfo.from_huggingface` and automatically detects
-    /// vocab type and `add_prefix_space` using vocabulary heuristics. Provide `vocab_size`
-    /// if the model's vocab differs from the tokenizer's (padding or reduced vocab). Pass
-    /// `stop_token_ids` if you want to override auto-detection (Rust tokenizers do not carry
-    /// EOS id consistently across models).
+    /// The `vocab_size` parameter is introduced to handle the misalignment between the model's
+    /// vocab_size and the tokenizer's vocabulary size. User should pass the model's vocab_size
+    /// (could be defined in the model config) here.
+    ///
+    /// The stop token ids is by default auto-detected. If there are other stop tokens, you can
+    /// specify them manually.
+    ///
+    /// # Parameters
+    ///
+    /// - `tokenizer`: The tokenizer.
+    /// - `vocab_size`: The vocabulary size defined by the model (not the tokenizer). This equals
+    ///   to the vocab dimension of the model's lm_head. This is the size of the token mask.
+    ///   It can be:
+    ///   1. the same as the tokenizer's vocabulary size. This is the most common case.
+    ///   2. larger than the tokenizer's vocabulary size. This happens when the model has padding
+    ///      to lm_head, possibly due to aligning lm_head to the power of 2.
+    ///   3. smaller than the tokenizer's vocabulary size. This happens when the tokenizer has
+    ///      some added tokens that will not supported by the model.
+    /// - `stop_token_ids`: The stop token ids. If `None`, they will be auto-detected.
+    ///
+    /// # Returns
+    ///
+    /// The tokenizer info.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the tokenizer info cannot be constructed.
     pub fn from_huggingface(
         tokenizer: &tokenizers::Tokenizer,
         vocab_size: Option<usize>,
         stop_token_ids: Option<&[i32]>,
-    ) -> Self {
+    ) -> Result<Self, String> {
         use crate::VocabType;
 
-        // Heuristics for vocab type and prefix-space behavior
         let vocab = tokenizer.get_vocab(true);
         let has_bytefallback_marker =
             vocab.keys().any(|t| t.starts_with("<0x") && t.ends_with('>'));
@@ -395,9 +472,6 @@ impl TokenizerInfo {
         let (vocab_type, add_prefix_space) = if has_bytefallback_marker {
             (VocabType::BYTE_FALLBACK, true)
         } else if has_sentencepiece_marker {
-            // Some SentencePiece tokenizers can still be RAW; however, in Python they default
-            // to add_prefix_space=True for SP. If the vocab also contains "<0x..>" we already
-            // categorized as BYTE_FALLBACK above.
             (VocabType::RAW, true)
         } else if has_bytelevel_marker {
             (VocabType::BYTE_LEVEL, false)
@@ -405,7 +479,6 @@ impl TokenizerInfo {
             (VocabType::RAW, false)
         };
 
-        // Build with explicit options, preserving token id ordering
         Self::from_tokenizers_with_options(
             tokenizer,
             vocab_type,

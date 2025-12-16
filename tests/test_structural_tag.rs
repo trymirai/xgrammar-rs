@@ -32,9 +32,9 @@ fn test_structural_tag_grammar_print_and_accept() {
         xgrammar::VocabType::RAW,
         &None,
         false,
-    );
-    let mut compiler = xgrammar::GrammarCompiler::new(&tok, 1, false, -1);
-    let compiled_grammar = compiler.compile_structural_tag(&tags, &triggers);
+    ).unwrap();
+    let mut compiler = xgrammar::GrammarCompiler::new(&tok, 1, false, -1).unwrap();
+    let compiled_grammar = compiler.compile_structural_tag(&tags, &triggers).unwrap();
     // Basic smoke check: ensure it compiled successfully
     assert!(compiled_grammar.memory_size_bytes() > 0);
 }
@@ -48,17 +48,17 @@ fn test_empty_tag_dispatch_accepts_any() {
   loop_after_dispatch=true
 )
 "#;
-    let g = Grammar::from_ebnf(ebnf, "root");
+    let g = Grammar::from_ebnf(ebnf, "root").unwrap();
     let empty_vocab: Vec<&str> = vec![];
     let tok = xgrammar::TokenizerInfo::new(
         &empty_vocab,
         xgrammar::VocabType::RAW,
         &None,
         false,
-    );
-    let mut compiler = xgrammar::GrammarCompiler::new(&tok, 1, false, -1);
-    let cg = compiler.compile_grammar(&g);
-    let mut m = xgrammar::GrammarMatcher::new(&cg, None, true, -1);
+    ).unwrap();
+    let mut compiler = xgrammar::GrammarCompiler::new(&tok, 1, false, -1).unwrap();
+    let cg = compiler.compile_grammar(&g).unwrap();
+    let mut m = xgrammar::GrammarMatcher::new(&cg, None, true, -1).unwrap();
     assert!(m.accept_string("any string", false));
     assert!(m.is_terminated());
 }

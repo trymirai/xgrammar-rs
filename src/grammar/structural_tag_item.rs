@@ -1,18 +1,13 @@
-/// A structural tag item. See [`crate::Grammar::from_structural_tag`] for more details.
+/// Deprecated. Definition of a structural tag item.
 ///
-/// The structural tag handles the dispatching of different grammars based on the
-/// tags and triggers: it initially allows any output, until a trigger is encountered,
-/// then dispatch to the corresponding tag; when the end tag is encountered, the grammar
-/// will allow any following output, until the next trigger is encountered.
-///
-/// Fields
-/// - `begin`: The begin tag.
-/// - `schema`: The schema (JSON schema as a string).
-/// - `end`: The end tag.
+/// See :meth:`xgrammar.Grammar.from_structural_tag` for more details.
 #[derive(Debug, Clone)]
 pub struct StructuralTagItem {
+    /// The begin tag.
     pub begin: String,
+    /// The schema.
     pub schema: String,
+    /// The end tag.
     pub end: String,
 }
 

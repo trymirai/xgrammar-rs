@@ -31,13 +31,14 @@ fn test_json_schema_find_jump_forward_string() {
         true,
         None,
         false,
-    );
+    )
+    .unwrap();
     let vocab: Vec<&str> = vec![];
     let tokenizer_info =
-        TokenizerInfo::new(&vocab, VocabType::RAW, &None, false);
-    let mut compiler = GrammarCompiler::new(&tokenizer_info, 1, false, -1);
-    let compiled = compiler.compile_grammar(&grammar);
-    let mut matcher = GrammarMatcher::new(&compiled, None, true, -1);
+        TokenizerInfo::new(&vocab, VocabType::RAW, &None, false).unwrap();
+    let mut compiler = GrammarCompiler::new(&tokenizer_info, 1, false, -1).unwrap();
+    let compiled = compiler.compile_grammar(&grammar).unwrap();
+    let mut matcher = GrammarMatcher::new(&compiled, None, true, -1).unwrap();
 
     let jump_str = matcher.find_jump_forward_string();
     assert!(!jump_str.is_empty());
@@ -65,10 +66,11 @@ fn test_fill_next_token_bitmask() {
         true,
         None,
         false,
-    );
-    let mut compiler = GrammarCompiler::new(&tk, 1, false, -1);
-    let compiled = compiler.compile_grammar(&grammar);
-    let mut matcher = GrammarMatcher::new(&compiled, None, true, -1);
+    )
+    .unwrap();
+    let mut compiler = GrammarCompiler::new(&tk, 1, false, -1).unwrap();
+    let compiled = compiler.compile_grammar(&grammar).unwrap();
+    let mut matcher = GrammarMatcher::new(&compiled, None, true, -1).unwrap();
 
     let input_str = r##"{
   "name": "John",
@@ -105,7 +107,8 @@ fn test_implicit_left_recursion_schema() {
         false,
         None,
         false,
-    );
+    )
+    .unwrap();
 
     assert!(is_grammar_accept_string(&grammar, r#"{}"#));
     assert!(is_grammar_accept_string(&grammar, r#"{"value": {}}"#));
@@ -124,7 +127,8 @@ fn test_json_schema_number_without_constraint() {
         true,
         None,
         false,
-    );
+    )
+    .unwrap();
 
     assert!(is_grammar_accept_string(&grammar, "42"));
     assert!(is_grammar_accept_string(&grammar, "3.14"));

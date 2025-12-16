@@ -225,10 +225,10 @@ fn test_fill_next_token_bitmask() {
     for (tokenizer_path, input_str, expected_rejected_sizes) in test_cases {
         let tokenizer_info = make_hf_tokenizer_info(tokenizer_path);
         let mut grammar_compiler =
-            GrammarCompiler::new(&tokenizer_info, 8, false, -1);
-        let compiled_grammar = grammar_compiler.compile_builtin_json_grammar();
+            GrammarCompiler::new(&tokenizer_info, 8, false, -1).unwrap();
+        let compiled_grammar = grammar_compiler.compile_builtin_json_grammar().unwrap();
         let mut matcher =
-            GrammarMatcher::new(&compiled_grammar, None, false, -1);
+            GrammarMatcher::new(&compiled_grammar, None, false, -1).unwrap();
 
         let vocab_size = tokenizer_info.vocab_size();
         let mut bitmask_data = allocate_token_bitmask(1, vocab_size);

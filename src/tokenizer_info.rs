@@ -1,3 +1,5 @@
+use std::os::raw::c_char;
+
 use autocxx::prelude::*;
 
 use crate::{CxxUniquePtr, FFITokenizerInfo, VocabType, cxx_utils};
@@ -85,7 +87,7 @@ impl TokenizerInfo {
                 unsafe {
                     cxx_utils::string_vec_push_bytes(
                         cxx_vec_pin.as_mut(),
-                        bytes.as_ptr() as *const i8,
+                        bytes.as_ptr() as *const c_char,
                         bytes.len(),
                     );
                 }
@@ -149,7 +151,7 @@ impl TokenizerInfo {
                 unsafe {
                     cxx_utils::string_vec_push_bytes(
                         cxx_vec_pin.as_mut(),
-                        bytes.as_ptr() as *const i8,
+                        bytes.as_ptr() as *const c_char,
                         bytes.len(),
                     );
                 }

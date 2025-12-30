@@ -3,9 +3,4 @@
 # Allow includes from crate headers (e.g. cxx_utils.hpp)
 -I..
 
-# XGrammar + 3rdparty headers (relative to src/cxx_utils/)
--I../../external/xgrammar-0.1.28/include
--I../../external/xgrammar-0.1.28/3rdparty/dlpack/include
--I../../external/xgrammar-0.1.28/3rdparty/picojson
-
 

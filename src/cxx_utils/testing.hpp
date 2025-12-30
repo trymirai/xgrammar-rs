@@ -3,8 +3,8 @@
 #include <string>
 #include <vector>
 #include <exception>
-#include "../../external/xgrammar-0.1.28/cpp/testing.h"
-#include "../../external/xgrammar-0.1.28/cpp/json_schema_converter.h"
+#include "cpp/testing.h"
+#include "cpp/json_schema_converter.h"
 
 namespace cxx_utils {
 

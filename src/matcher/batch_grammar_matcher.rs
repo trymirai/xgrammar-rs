@@ -1,4 +1,4 @@
-use std::pin::Pin;
+use std::{os::raw::c_char, pin::Pin};
 
 use autocxx::prelude::*;
 
@@ -214,7 +214,7 @@ impl BatchGrammarMatcher {
                 unsafe {
                     cxx_utils::string_vec_push_bytes(
                         cxx_vec_pin.as_mut(),
-                        bytes.as_ptr() as *const i8,
+                        bytes.as_ptr() as *const c_char,
                         bytes.len(),
                     );
                 }

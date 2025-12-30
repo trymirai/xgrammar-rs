@@ -712,8 +712,10 @@ fn find_libclang_windows() -> Option<PathBuf> {
                 let stdout = String::from_utf8_lossy(&out.stdout);
                 for line in stdout.lines().filter(|l| !l.trim().is_empty()) {
                     let base = PathBuf::from(line.trim());
+                    // Prefer host x64 libclang; fall back to ARM64 if present.
                     candidates.push(base.join(r"VC\Tools\Llvm\x64\bin"));
                     candidates.push(base.join(r"VC\Tools\Llvm\bin"));
+                    candidates.push(base.join(r"VC\Tools\Llvm\ARM64\bin"));
                 }
             }
         }
@@ -726,6 +728,10 @@ fn find_libclang_windows() -> Option<PathBuf> {
         )));
         candidates.push(PathBuf::from(format!(
             r"C:\Program Files\Microsoft Visual Studio\2022\{}\VC\Tools\Llvm\bin",
+            edition
+        )));
+        candidates.push(PathBuf::from(format!(
+            r"C:\Program Files\Microsoft Visual Studio\2022\{}\VC\Tools\Llvm\ARM64\bin",
             edition
         )));
     }
@@ -764,13 +770,30 @@ struct BuildContext {
     target: String,
 }
 
-fn configure_libclang_windows() {
+fn configure_libclang_windows(_target: &str) {
     if env::var("LIBCLANG_PATH").is_err() && cfg!(target_os = "windows") {
         if let Some(dir) = find_libclang_windows() {
-            unsafe {
-                env::set_var("LIBCLANG_PATH", &dir);
+            let host_is_arm64 = cfg!(target_arch = "aarch64");
+            let base = dir.parent().and_then(|p| p.parent());
+            let mut candidates: Vec<PathBuf> = Vec::new();
+            if let Some(base) = base {
+                if host_is_arm64 {
+                    candidates.push(base.join("ARM64").join("bin"));
+                    candidates.push(base.join("x64").join("bin"));
+                } else {
+                    candidates.push(base.join("x64").join("bin"));
+                    candidates.push(base.join("ARM64").join("bin"));
+                }
             }
-            println!("cargo:rustc-env=LIBCLANG_PATH={}", dir.display());
+            candidates.push(dir.clone());
+
+            let chosen = candidates
+                .into_iter()
+                .find(|p| p.join("libclang.dll").exists())
+                .unwrap_or_else(|| dir.clone());
+
+            unsafe { env::set_var("LIBCLANG_PATH", &chosen) };
+            println!("cargo:rustc-env=LIBCLANG_PATH={}", chosen.display());
         }
     }
 }
@@ -921,6 +944,14 @@ fn build_xgrammar_cmake(ctx: &BuildContext) -> PathBuf {
         }
     }
 
+    if ctx.target.contains("msvc") {
+        // Force the release CRT (/MD) even for debug builds to avoid
+        // _ITERATOR_DEBUG_LEVEL and runtime mismatches when linking with Rust.
+        cmake_config.define("CMAKE_MSVC_RUNTIME_LIBRARY", "MultiThreadedDLL");
+        cmake_config.define("CMAKE_C_FLAGS_DEBUG", "/MD");
+        cmake_config.define("CMAKE_CXX_FLAGS_DEBUG", "/MD");
+    }
+
     cmake_config.build_target("xgrammar").build()
 }
 
@@ -1028,7 +1059,8 @@ fn format_generated_bindings_optional(out_dir: &Path) {
 }
 
 fn main() {
-    configure_libclang_windows();
+    let target = env::var("TARGET").unwrap_or_default();
+    configure_libclang_windows(&target);
     let ctx = collect_build_context();
     let destination_path = build_xgrammar_cmake(&ctx);
     link_xgrammar_static(&ctx, &destination_path);

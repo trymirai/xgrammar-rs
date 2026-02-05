@@ -48,3 +48,32 @@ pub fn allocate_token_bitmask(
 pub fn reset_token_bitmask(bitmask: &mut [i32]) {
     bitmask.fill(-1i32);
 }
+
+pub fn apply_token_bitmask_inplace_cpu(
+    logits: &mut crate::DLTensor,
+    bitmask: &crate::DLTensor,
+    vocab_size: Option<i32>,
+    indices: Option<&[i32]>,
+) -> Result<(), String> {
+    let vocab_size_i32 = vocab_size.unwrap_or(-1);
+    let (has_indices, indices_ptr, indices_len) = match indices {
+        Some(slice) if !slice.is_empty() => (true, slice.as_ptr(), slice.len()),
+        _ => (false, std::ptr::null(), 0usize),
+    };
+    cxx::let_cxx_string!(error_out_cxx = "");
+    let ok = unsafe {
+        crate::cxx_utils::apply_token_bitmask_inplace_cpu(
+            logits as *mut _,
+            bitmask as *const _,
+            vocab_size_i32,
+            has_indices,
+            indices_ptr,
+            indices_len,
+            error_out_cxx.as_mut().get_unchecked_mut(),
+        )
+    };
+    if !ok {
+        return Err(error_out_cxx.to_string());
+    }
+    Ok(())
+}

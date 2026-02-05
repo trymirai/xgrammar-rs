@@ -158,6 +158,18 @@ impl GrammarMatcher {
             .AcceptString(&input_cxx, debug_print)
     }
 
+    pub fn accept_bytes(
+        &mut self,
+        input: &[u8],
+        debug_print: bool,
+    ) -> bool {
+        cxx::let_cxx_string!(input_cxx = input);
+        self.inner
+            .as_mut()
+            .expect("GrammarMatcher inner is null")
+            .AcceptString(&input_cxx, debug_print)
+    }
+
     /// Fill the bitmask for the next token prediction. The input bitmask must be on CPU.
     /// `bitmask[index]` will be filled with the next token bitmask.
     ///
@@ -281,6 +293,12 @@ impl GrammarMatcher {
             .expect("GrammarMatcher inner is null")
             ._DebugPrintInternalState()
             .to_string()
+    }
+
+    pub(crate) fn ffi_mut(&mut self) -> Pin<&mut FFIGrammarMatcher> {
+        self.inner
+            .as_mut()
+            .expect("GrammarMatcher inner is null")
     }
 
     pub(crate) fn ffi_ref(&self) -> &FFIGrammarMatcher {

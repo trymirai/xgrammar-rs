@@ -98,10 +98,12 @@ fn probe_compiler_includes(
         .output();
 
     match output {
-        Ok(out) => parse_include_search_list(&String::from_utf8_lossy(&out.stderr))
-            .into_iter()
-            .map(|p| normalize_include_path(&p))
-            .collect(),
+        Ok(out) => {
+            parse_include_search_list(&String::from_utf8_lossy(&out.stderr))
+                .into_iter()
+                .map(|p| normalize_include_path(&p))
+                .collect()
+        },
         Err(_) => Vec::new(),
     }
 }
@@ -120,7 +122,8 @@ fn fallback_include_paths(target: &str) -> Vec<String> {
         (gcc_multiarch_triple(target), gcc_version())
     {
         paths.push(format!("/usr/lib/gcc/{}/{}/include", triple, version));
-        paths.push(format!("/usr/lib/gcc/{}/{}/include-fixed", triple, version));
+        paths
+            .push(format!("/usr/lib/gcc/{}/{}/include-fixed", triple, version));
         paths.push(format!("/usr/include/c++/{}", version));
         paths.push(format!("/usr/include/{}/c++/{}", triple, version));
         paths.extend(libc_dirs.into_iter());
@@ -128,11 +131,16 @@ fn fallback_include_paths(target: &str) -> Vec<String> {
         paths.extend(libc_dirs.into_iter());
     }
 
-    if let Ok(out) = Command::new("gcc").arg("-print-libgcc-file-name").output() {
+    if let Ok(out) = Command::new("gcc").arg("-print-libgcc-file-name").output()
+    {
         if let Ok(path) = String::from_utf8(out.stdout) {
             let p = PathBuf::from(path.trim());
-            if let Some(include_dir) = p.parent().and_then(|p| p.parent()).map(|p| p.join("include")) {
-                paths.push(normalize_include_path(&include_dir.display().to_string()));
+            if let Some(include_dir) =
+                p.parent().and_then(|p| p.parent()).map(|p| p.join("include"))
+            {
+                paths.push(normalize_include_path(
+                    &include_dir.display().to_string(),
+                ));
             }
         }
     }
@@ -154,7 +162,10 @@ fn collect_system_include_args(target: &str) -> Vec<String> {
         if !includes.is_empty() {
             for path in includes {
                 if seen.insert(path.clone()) {
-                    args.push(format!("-isystem{}", normalize_include_path(&path)));
+                    args.push(format!(
+                        "-isystem{}",
+                        normalize_include_path(&path)
+                    ));
                 }
             }
         }
@@ -191,8 +202,8 @@ fn apple_target_clang_args(target: &str) -> Vec<String> {
         } else {
             "x86_64"
         };
-        let version =
-            env::var("IPHONEOS_DEPLOYMENT_TARGET").unwrap_or_else(|_| "17.0".into());
+        let version = env::var("IPHONEOS_DEPLOYMENT_TARGET")
+            .unwrap_or_else(|_| "17.0".into());
         args.push(format!("--target={}-apple-ios{}-simulator", arch, version));
         if let Ok(sdkroot) = env::var("SDKROOT") {
             args.push(format!("-isysroot{}", sdkroot));
@@ -434,6 +445,38 @@ fn copy_dir_recursive_filtered(
     }
 }
 
+fn write_if_changed(
+    path: &Path,
+    contents: &[u8],
+) {
+    if let Ok(existing) = fs::read(path) {
+        if existing == contents {
+            return;
+        }
+    }
+    if let Some(parent) = path.parent() {
+        create_dir_all(parent).ok();
+    }
+    fs::write(path, contents).unwrap_or_else(|e| {
+        panic!("Failed to write {}: {}", path.display(), e)
+    });
+}
+
+fn copy_if_changed(
+    src: &Path,
+    dst: &Path,
+) {
+    if let (Ok(src_bytes), Ok(dst_bytes)) = (fs::read(src), fs::read(dst)) {
+        if src_bytes == dst_bytes {
+            return;
+        }
+    }
+    if let Some(parent) = dst.parent() {
+        create_dir_all(parent).ok();
+    }
+    let _ = copy(src, dst);
+}
+
 fn ensure_git_checkout_cached(
     name: &str,
     url: &str,
@@ -560,6 +603,19 @@ fn prepare_xgrammar_source_tree(
     );
 
     let work_dir = out_dir.join("xgrammar-src");
+
+    let marker_path = work_dir.join(".xgrammar_rs_source_marker");
+    let marker_content = format!(
+        "repo={}\ndlpack={}\n",
+        xgrammar_repo_dir.display(),
+        dlpack_checkout.display(),
+    );
+    if let Ok(existing) = fs::read_to_string(&marker_path) {
+        if existing == marker_content {
+            return work_dir;
+        }
+    }
+
     if work_dir.exists() {
         let _ = fs::remove_dir_all(&work_dir);
     }
@@ -593,6 +649,8 @@ fn prepare_xgrammar_source_tree(
             dlpack_header_work.display()
         );
     }
+
+    let _ = fs::write(&marker_path, marker_content);
 
     work_dir
 }
@@ -865,14 +923,13 @@ fn build_xgrammar_cmake(ctx: &BuildContext) -> PathBuf {
     create_dir_all(&cmake_build_dir).ok();
 
     let config_cmake_path = cmake_build_dir.join("config.cmake");
-    std::fs::write(
+    write_if_changed(
         &config_cmake_path,
-        "set(XGRAMMAR_BUILD_PYTHON_BINDINGS OFF)\n\
-         set(XGRAMMAR_BUILD_CXX_TESTS OFF)\n\
-         set(XGRAMMAR_ENABLE_CPPTRACE OFF)\n\
-         set(CMAKE_BUILD_TYPE RelWithDebInfo)\n",
-    )
-    .expect("Failed to write config.cmake");
+        b"set(XGRAMMAR_BUILD_PYTHON_BINDINGS OFF)\n\
+          set(XGRAMMAR_BUILD_CXX_TESTS OFF)\n\
+          set(XGRAMMAR_ENABLE_CPPTRACE OFF)\n\
+          set(CMAKE_BUILD_TYPE RelWithDebInfo)\n",
+    );
 
     let mut cmake_config = CMakeConfig::new(&ctx.xgrammar_src_dir);
     cmake_config.out_dir(&ctx.out_dir);
@@ -969,6 +1026,8 @@ fn link_xgrammar_static(
 
 fn build_autocxx_bridge(ctx: &BuildContext) {
     println!("cargo:rerun-if-changed=src/lib.rs");
+    println!("cargo:rerun-if-changed=src/cxx_utils.hpp");
+    println!("cargo:rerun-if-changed=src/cxx_utils");
 
     let mut extra_clang_args = vec!["-std=c++17".to_string()];
     extra_clang_args.extend(windows_target_clang_args(&ctx.target));
@@ -1018,23 +1077,23 @@ fn copy_headers_for_generated_rust_code(ctx: &BuildContext) {
     let rs_dir = ctx.out_dir.join("autocxx-build-dir/rs");
 
     let gen_include_dir = ctx.out_dir.join("autocxx-build-dir/include");
-    let _ = copy(
-        gen_include_dir.join("autocxxgen_ffi.h"),
-        rs_dir.join("autocxxgen_ffi.h"),
+    copy_if_changed(
+        &gen_include_dir.join("autocxxgen_ffi.h"),
+        &rs_dir.join("autocxxgen_ffi.h"),
     );
 
     let rs_xgrammar_dir = rs_dir.join("xgrammar");
     create_dir_all(&rs_xgrammar_dir).ok();
-    let _ = copy(
-        ctx.xgrammar_include_dir.join("xgrammar/xgrammar.h"),
-        rs_xgrammar_dir.join("xgrammar.h"),
+    copy_if_changed(
+        &ctx.xgrammar_include_dir.join("xgrammar/xgrammar.h"),
+        &rs_xgrammar_dir.join("xgrammar.h"),
     );
 
     let rs_dlpack_dir = rs_dir.join("dlpack");
     create_dir_all(&rs_dlpack_dir).ok();
-    let _ = copy(
-        ctx.dlpack_include_dir.join("dlpack/dlpack.h"),
-        rs_dlpack_dir.join("dlpack.h"),
+    copy_if_changed(
+        &ctx.dlpack_include_dir.join("dlpack/dlpack.h"),
+        &rs_dlpack_dir.join("dlpack.h"),
     );
 }
 
@@ -1061,11 +1120,11 @@ fn format_generated_bindings_optional(out_dir: &Path) {
 fn main() {
     let target = env::var("TARGET").unwrap_or_default();
     configure_libclang_windows(&target);
-    let ctx = collect_build_context();
-    let destination_path = build_xgrammar_cmake(&ctx);
-    link_xgrammar_static(&ctx, &destination_path);
-    build_autocxx_bridge(&ctx);
-    copy_headers_for_generated_rust_code(&ctx);
-    format_generated_bindings_optional(&ctx.out_dir);
-    strip_autocxx_generated_doc_comments(&ctx.out_dir);
+    let build_context = collect_build_context();
+    let destination_path = build_xgrammar_cmake(&build_context);
+    link_xgrammar_static(&build_context, &destination_path);
+    build_autocxx_bridge(&build_context);
+    copy_headers_for_generated_rust_code(&build_context);
+    format_generated_bindings_optional(&build_context.out_dir);
+    strip_autocxx_generated_doc_comments(&build_context.out_dir);
 }

@@ -1,9 +1,7 @@
-use std::{os::raw::c_char, pin::Pin};
-
 use autocxx::prelude::*;
 
 use super::GrammarMatcher;
-use crate::{CxxUniquePtr, DLTensor, cxx_utils};
+use crate::{CxxUniquePtr, DLTensor, cxx_utils, utils::bytes_as_c_char_ptr};
 
 /// A batch version of `GrammarMatcher` that can fill the next token bitmask for multiple
 /// matchers in parallel. It utilizes multiple threads to speed up the computation. It is
@@ -214,7 +212,7 @@ impl BatchGrammarMatcher {
                 unsafe {
                     cxx_utils::string_vec_push_bytes(
                         cxx_vec_pin.as_mut(),
-                        bytes.as_ptr() as *const c_char,
+                        bytes_as_c_char_ptr(bytes),
                         bytes.len(),
                     );
                 }

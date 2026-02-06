@@ -1,3 +1,5 @@
+#![allow(clippy::type_complexity, clippy::useless_vec)]
+
 mod test_utils;
 
 use serial_test::serial;
@@ -8,19 +10,42 @@ use xgrammar::{
     BatchGrammarMatcher, GrammarCompiler, GrammarMatcher, allocate_token_bitmask,
 };
 
+#[cfg(feature = "hf")]
+fn get_masked_tokens_from_bitmask(
+    bitmask: &[i32],
+    vocab_size: usize,
+) -> Vec<usize> {
+    (0..vocab_size)
+        .filter(|&i| !is_token_accepted_helper(i as i32, bitmask))
+        .collect()
+}
+
+#[derive(Debug)]
+enum TestInput<'a> {
+    Str(&'a str),
+    Bytes(&'a [u8]),
+}
+
 #[test]
 #[serial]
 fn test_accept_string() {
-    let cases: &[(&str, &str, bool)] = &[
-        ("root ::= [^a]+", "bbb", true),
-        ("root ::= [^a]+", "bba", false),
-        ("root ::= [^a]+", "©", true), // U+00A9
+    let cases: &[(&str, TestInput, bool)] = &[
+        ("root ::= [^a]+", TestInput::Str("bbb"), true),
+        ("root ::= [^a]+", TestInput::Str("bba"), false),
+        ("root ::= [^a]+", TestInput::Str("©"), true),
+        ("root ::= [^a]+", TestInput::Bytes(b"\xe2\xa1\xa1"), true),
+        ("root ::= [^a]+", TestInput::Bytes(b"\xe2\xa1\xa1\xa1"), false),
+        ("root ::= [^a]+", TestInput::Bytes(b"\xe2\xa1\xe2\xa1"), false),
     ];
 
     for (ebnf, input, accepted) in cases {
-        let g = Grammar::from_ebnf(ebnf, "root").unwrap();
-        let mut m = matcher_from_grammar(&g);
-        assert_eq!(m.accept_string(input, false), *accepted, "{}", input);
+        let grammar = Grammar::from_ebnf(ebnf, "root").unwrap();
+        let mut matcher = matcher_from_grammar(&grammar);
+        let result = match input {
+            TestInput::Str(s) => matcher.accept_string(s, false),
+            TestInput::Bytes(b) => matcher.accept_bytes(b, false),
+        };
+        assert_eq!(result, *accepted, "ebnf: {}, input: {:?}", ebnf, input);
     }
 }
 
@@ -66,6 +91,77 @@ fn test_debug_print_internal_state() {
         );
         let state = matcher.debug_print_internal_state();
         assert!(!state.is_empty());
+    }
+}
+
+#[test]
+#[serial]
+#[cfg(feature = "hf")]
+fn test_fill_next_token_bitmask() {
+    let cases: Vec<(&str, &str, Option<Box<[usize]>>)> = vec![
+        (
+            "meta-llama/Llama-2-7b-chat-hf",
+            r#"{"id": 1,"name": "Example"}"#,
+            Some(
+                [
+                    31989, 31912, 270, 270, 270, 31973, 31846, 31846, 31948, 31915, 270, 270,
+                    270, 270, 270, 31973, 31846, 31846, 263, 263, 263, 263, 263, 263, 263, 263,
+                    31974, 31999,
+                ]
+                .into(),
+            ),
+        ),
+        (
+            // test for llama 3
+            "meta-llama/Meta-Llama-3-8B-Instruct",
+            r#"{"id": 1,"name": "Example哈哈"}"#,
+            None,
+        ),
+    ];
+
+    for (tokenizer_path, input_str, expected_rejected_sizes) in cases {
+        let tokenizer_info = make_hf_tokenizer_info(tokenizer_path);
+        let json_grammar = Grammar::builtin_json_grammar();
+        let mut matcher =
+            matcher_from_grammar_with_tokenizer(&json_grammar, &tokenizer_info);
+
+        let mut token_bitmask = allocate_token_bitmask(1, tokenizer_info.vocab_size());
+        let (mut tensor, _shape, _strides) = create_bitmask_dltensor(
+            &mut token_bitmask,
+            1,
+            tokenizer_info.vocab_size(),
+        );
+
+        let input_bytes = input_str.as_bytes();
+        let mut rejected_sizes = Vec::new();
+
+        for (i, c) in input_bytes.iter().enumerate() {
+            matcher.fill_next_token_bitmask(&mut tensor, 0, false);
+            let rejected_token_ids =
+                get_masked_tokens_from_bitmask(&token_bitmask, tokenizer_info.vocab_size());
+            rejected_sizes.push(rejected_token_ids.len());
+            if let Some(expected) = expected_rejected_sizes.as_ref() {
+                assert_eq!(
+                    rejected_sizes[rejected_sizes.len() - 1],
+                    expected[i]
+                );
+            }
+            let s = unsafe {
+                std::str::from_utf8_unchecked(std::slice::from_ref(c))
+            };
+            assert!(matcher.accept_string(s, false));
+        }
+
+        matcher.fill_next_token_bitmask(&mut tensor, 0, false);
+        let rejected_token_ids =
+            get_masked_tokens_from_bitmask(&token_bitmask, tokenizer_info.vocab_size());
+        rejected_sizes.push(rejected_token_ids.len());
+        if let Some(expected) = expected_rejected_sizes.as_ref() {
+            assert_eq!(
+                rejected_sizes[rejected_sizes.len() - 1],
+                expected[expected.len() - 1]
+            );
+        }
     }
 }
 
@@ -239,7 +335,7 @@ fn test_graceful_rollback_failure() {
         " ",
         "\"a\":true",
     ];
-    let input_splitted = vec!["{", "\"", "abc", "\"", ":"];
+    let input_splitted = ["{", "\"", "abc", "\"", ":"];
     let input_ids: Vec<i32> = input_splitted
         .iter()
         .map(|t| vocab.iter().position(|v| v == t).unwrap() as i32)
@@ -382,10 +478,10 @@ fn test_get_jump_forward_string() {
 other_rule ::= "a" sub_rule "b"
 sub_rule ::= "b"
 "#;
-    let g = Grammar::from_ebnf(ebnf, "root").unwrap();
+    let grammar = Grammar::from_ebnf(ebnf, "root").unwrap();
     let tokenizer_info =
-        TokenizerInfo::new::<&str>(&vec![], VocabType::RAW, &None, false).unwrap();
-    let mut matcher = matcher_from_grammar_with_tokenizer(&g, &tokenizer_info);
+        TokenizerInfo::new::<&str>(&[], VocabType::RAW, &None, false).unwrap();
+    let mut matcher = matcher_from_grammar_with_tokenizer(&grammar, &tokenizer_info);
     assert!(matcher.accept_string("a", false));
     assert_eq!(matcher.find_jump_forward_string(), "bb");
 }
@@ -440,138 +536,263 @@ fn test_vocab_size() {
 #[serial]
 #[cfg(feature = "hf")]
 fn test_override_stop_tokens() {
-    // Mirror Python: ensure stop token overrides work at both TokenizerInfo and Matcher levels
-    let model_id = "meta-llama/Llama-2-7b-chat-hf";
-    let override_stop_tokens: &[i32] = &[2];
+    let cases: &[(&str, &[i32])] = &[
+        ("meta-llama/Llama-2-7b-chat-hf", &[2]),
+        ("meta-llama/Meta-Llama-3-8B-Instruct", &[128001, 128009]),
+        ("deepseek-ai/DeepSeek-Coder-V2-Lite-Instruct", &[100001]),
+    ];
 
-    // Build tokenizers::Tokenizer and TokenizerInfo with override stops
-    let path = test_utils::download_tokenizer_json(model_id)
-        .expect("download tokenizer.json");
-    let tk = tokenizers::Tokenizer::from_file(&path).expect("load tokenizer");
-    let tokenizer_info_1 = TokenizerInfo::from_huggingface(&tk, None, Some(override_stop_tokens)).unwrap();
-    assert_eq!(&*tokenizer_info_1.stop_token_ids(), override_stop_tokens);
+    for (model_id, override_stop_tokens) in cases {
+        let path = test_utils::download_tokenizer_json(model_id)
+            .expect("download tokenizer.json");
+        let tokenizer = tokenizers::Tokenizer::from_file(&path).expect("load tokenizer");
 
-    // Compile a grammar with tokenizer_info_1 and verify matcher inherits stop ids
-    let grammar = Grammar::builtin_json_grammar();
-    let mut compiler = GrammarCompiler::new(&tokenizer_info_1, 1, false, -1).unwrap();
-    let compiled = compiler.compile_grammar(&grammar).unwrap();
-    let matcher_1 = GrammarMatcher::new(&compiled, None, true, -1).unwrap();
-    assert_eq!(&*matcher_1.stop_token_ids(), override_stop_tokens);
+        let tokenizer_info_with_override = TokenizerInfo::from_huggingface(
+            &tokenizer,
+            None,
+            Some(*override_stop_tokens),
+        )
+        .unwrap();
+        assert_eq!(
+            &*tokenizer_info_with_override.stop_token_ids(),
+            *override_stop_tokens,
+            "tokenizer_info stop_token_ids mismatch for {}",
+            model_id
+        );
 
-    // Build TokenizerInfo without overrides
-    let tokenizer_info_2 = TokenizerInfo::from_huggingface(&tk, None, None).unwrap();
-    let mut compiler2 = GrammarCompiler::new(&tokenizer_info_2, 1, false, -1).unwrap();
-    let compiled2 = compiler2.compile_grammar(&grammar).unwrap();
+        let grammar = Grammar::builtin_json_grammar();
+        let mut compiler = GrammarCompiler::new(&tokenizer_info_with_override, 1, false, -1).unwrap();
+        let compiled = compiler.compile_grammar(&grammar).unwrap();
+        let matcher_with_override = GrammarMatcher::new(&compiled, None, true, -1).unwrap();
+        assert_eq!(
+            &*matcher_with_override.stop_token_ids(),
+            *override_stop_tokens,
+            "matcher stop_token_ids mismatch for {}",
+            model_id
+        );
 
-    // Override at matcher creation
-    let matcher_2 = GrammarMatcher::new(&compiled2, Some(override_stop_tokens), true, -1).unwrap();
-    assert_eq!(&*matcher_2.stop_token_ids(), override_stop_tokens);
+        let tokenizer_info_without_override = TokenizerInfo::from_huggingface(&tokenizer, None, None).unwrap();
+        let mut compiler_no_override = GrammarCompiler::new(&tokenizer_info_without_override, 1, false, -1).unwrap();
+        let compiled_no_override = compiler_no_override.compile_grammar(&grammar).unwrap();
+
+        let matcher_with_override_at_creation = GrammarMatcher::new(
+            &compiled_no_override,
+            Some(*override_stop_tokens),
+            true,
+            -1,
+        )
+        .unwrap();
+        assert_eq!(
+            &*matcher_with_override_at_creation.stop_token_ids(),
+            *override_stop_tokens,
+            "matcher override at creation mismatch for {}",
+            model_id
+        );
+    }
+}
+
+#[test]
+#[serial]
+#[cfg(feature = "hf")]
+fn test_fill_next_token_bitmask_errors() {
+    let tokenizer_info =
+        make_hf_tokenizer_info("meta-llama/Meta-Llama-3-8B-Instruct");
+    let json_grammar = Grammar::builtin_json_grammar();
+    let mut matcher =
+        matcher_from_grammar_with_tokenizer(&json_grammar, &tokenizer_info);
+
+    let mut bitmask_data =
+        allocate_token_bitmask(1, tokenizer_info.vocab_size());
+    let (mut tensor_correct, _shape, _strides) = create_bitmask_dltensor(
+        &mut bitmask_data,
+        1,
+        tokenizer_info.vocab_size(),
+    );
+    matcher.fill_next_token_bitmask(&mut tensor_correct, 0, false);
 }
 
 
 #[test]
 #[serial]
 #[cfg(feature = "hf")]
-fn test_batch_accept_string_basic() {
-    let grammars = vec![r#"root ::= "a""#, r#"root ::= [0-9]+"#, r#"root ::= "ab""#];
-    let inputs = vec!["a", "123", "ab"];
+fn test_batch_accept_string() {
+    let cases = vec![
+        (
+            vec![r#"root ::= "a""#, r#"root ::= [0-9]+"#, r#"root ::= "ab""#],
+            vec!["a", "123", "ab"],
+            vec![true, true, true],
+        ),
+        (
+            vec![r#"root ::= "a""#, r#"root ::= [0-9]+"#, r#"root ::= "ab""#],
+            vec!["b", "123a", "d"],
+            vec![false, false, false],
+        ),
+        (
+            vec![r#"root ::= "a""#, r#"root ::= [0-9]+"#, r#"root ::= "ab""#],
+            vec!["a", "123a", "ab"],
+            vec![true, false, true],
+        ),
+        (vec![r#"root ::= "a""#], vec!["a"], vec![true]),
+        (vec![r#"root ::= "a""#], vec!["b"], vec![false]),
+        (
+            vec![r#"root ::= "你好""#, r#"root ::= "こんにちは""#, r#"root ::= "안녕하세요""#],
+            vec!["你好", "こんにちは", "안녕하세요"],
+            vec![true, true, true],
+        ),
+    ];
 
-    let grammar_objs: Vec<Grammar> = grammars
-        .iter()
-        .map(|g| Grammar::from_ebnf(g, "root").unwrap())
-        .collect();
+    for (grammars, inputs, expecteds) in cases {
+        let grammar_objs: Vec<Grammar> = grammars
+            .iter()
+            .map(|g| Grammar::from_ebnf(g, "root").unwrap())
+            .collect();
+        let matchers: Vec<GrammarMatcher> = grammar_objs
+            .iter()
+            .map(matcher_from_grammar)
+            .collect();
+
+        let results = BatchGrammarMatcher::batch_accept_string(&matchers, &inputs, false);
+        assert_eq!(&*results, expecteds.as_slice());
+    }
+}
+
+#[test]
+#[serial]
+#[cfg(feature = "hf")]
+fn test_batch_accept_token() {
+    let cases = vec![
+        (
+            vec![r#"root ::= "a""#, r#"root ::= [0-9]+"#, r#"root ::= "ab""#],
+            vec![2, 5, 2],
+            vec![true, true, true],
+        ),
+        (
+            vec![r#"root ::= "a""#, r#"root ::= [0-9]+"#, r#"root ::= "ab""#],
+            vec![3, 2, 4],
+            vec![false, false, false],
+        ),
+        (
+            vec![r#"root ::= "a""#, r#"root ::= [0-9]+"#, r#"root ::= "ab""#],
+            vec![2, 8, 9],
+            vec![true, false, true],
+        ),
+        (vec![r#"root ::= "a""#], vec![2], vec![true]),
+        (vec![r#"root ::= "a""#], vec![3], vec![false]),
+    ];
 
     let vocab: Vec<&str> = vec![
         "<s>", "</s>", "a", "b", "c", "1", "2", "3", "123a", "ab",
     ];
-    let tokenizer_info = TokenizerInfo::new(&vocab, VocabType::RAW, &None, false).unwrap();
-    let mut compiler = GrammarCompiler::new(&tokenizer_info, 1, false, -1).unwrap();
+    let tokenizer_info =
+        TokenizerInfo::new(&vocab, VocabType::RAW, &None, false).unwrap();
 
-    let matchers: Vec<GrammarMatcher> = grammar_objs
-        .iter()
-        .map(|g| {
-            let compiled = compiler.compile_grammar(g).unwrap();
-            GrammarMatcher::new(&compiled, None, true, -1).unwrap()
-        })
-        .collect();
+    for (grammars, inputs, expecteds) in cases {
+        let grammar_objs: Vec<Grammar> = grammars
+            .iter()
+            .map(|g| Grammar::from_ebnf(g, "root").unwrap())
+            .collect();
 
-    let results = BatchGrammarMatcher::batch_accept_string(&matchers, &inputs, false);
-    assert_eq!(&*results, &[true, true, true]);
+        let matchers: Vec<GrammarMatcher> = grammar_objs
+            .iter()
+            .map(|g| matcher_from_grammar_with_tokenizer(g, &tokenizer_info))
+            .collect();
+
+        let results = BatchGrammarMatcher::batch_accept_token(&matchers, &inputs, false);
+        assert_eq!(&*results, expecteds.as_slice());
+    }
 }
 
 #[test]
 #[serial]
 #[cfg(feature = "hf")]
-fn test_batch_accept_token_basic() {
-    let grammars = vec![r#"root ::= "a""#, r#"root ::= [0-9]+"#, r#"root ::= "ab""#];
-    let input_ids = vec![2, 5, 9];
-
-    let vocab: Vec<&str> = vec![
-        "<s>", "</s>", "a", "b", "c", "1", "2", "3", "123a", "ab",
+fn test_batch_fill_next_token_bitmask() {
+    let grammars = [
+        r#"root ::= "a""#,
+        r#"root ::= [0-9]+"#,
+        r#"root ::= "ab""#,
+        r#"root ::= [a-z0-9]+"#,
     ];
-    let tokenizer_info = TokenizerInfo::new(&vocab, VocabType::RAW, &None, false).unwrap();
-
-    let grammar_objs: Vec<Grammar> = grammars
-        .iter()
-        .map(|g| Grammar::from_ebnf(g, "root").unwrap())
-        .collect();
-
-    let mut compiler = GrammarCompiler::new(&tokenizer_info, 1, false, -1).unwrap();
-
-    let matchers: Vec<GrammarMatcher> = grammar_objs
-        .iter()
-        .map(|g| {
-            let compiled = compiler.compile_grammar(g).unwrap();
-            GrammarMatcher::new(&compiled, None, true, -1).unwrap()
-        })
-        .collect();
-
-    let results = BatchGrammarMatcher::batch_accept_token(&matchers, &input_ids, false);
-    assert_eq!(&*results, &[true, true, true]);
-}
-
-#[test]
-#[serial]
-#[cfg(feature = "hf")]
-fn test_batch_fill_next_token_bitmask_basic() {
-    let grammars = vec![r#"root ::= "a""#, r#"root ::= [0-9]+"#, r#"root ::= "ab""#, r#"root ::= [a-z0-9]+"#];
     let vocab: Vec<&str> = vec!["ab", "</s>", "a", "b", "c", "1", "2", "3", "123a"];
-    let tokenizer_info = TokenizerInfo::new(&vocab, VocabType::RAW, &None, false).unwrap();
+    let tokenizer_info =
+        TokenizerInfo::new(&vocab, VocabType::RAW, &None, false).unwrap();
 
     let grammar_objs: Vec<Grammar> = grammars
         .iter()
         .map(|g| Grammar::from_ebnf(g, "root").unwrap())
         .collect();
-
-    let mut compiler = GrammarCompiler::new(&tokenizer_info, 1, false, -1).unwrap();
-
     let matchers: Vec<GrammarMatcher> = grammar_objs
         .iter()
-        .map(|g| {
-            let compiled = compiler.compile_grammar(g).unwrap();
-            GrammarMatcher::new(&compiled, None, true, -1).unwrap()
-        })
+        .map(|g| matcher_from_grammar_with_tokenizer(g, &tokenizer_info))
         .collect();
 
     let batch_size = matchers.len();
-    let vocab_size = tokenizer_info.vocab_size();
-    let mut bitmask_data = allocate_token_bitmask(batch_size, vocab_size);
-    let (mut tensor, _shape, _strides) =
-        create_bitmask_dltensor(&mut bitmask_data, batch_size, vocab_size);
+    let mut token_bitmask =
+        allocate_token_bitmask(batch_size, tokenizer_info.vocab_size());
+    let (mut tensor, _shape, _strides) = create_bitmask_dltensor(
+        &mut token_bitmask,
+        batch_size,
+        tokenizer_info.vocab_size(),
+    );
 
-    let mut batch_matcher = BatchGrammarMatcher::new(2).unwrap();
-    batch_matcher.batch_fill_next_token_bitmask(&matchers, &mut tensor, None, false);
+    let input_str = ["a", "1", "a", "123a"];
+    let expected_accepted_tokens = vec![
+        vec![vec![2], vec![5, 6, 7], vec![0, 2], vec![0, 2, 3, 4, 5, 6, 7, 8]],
+        vec![
+            vec![1],
+            vec![1, 5, 6, 7],
+            vec![3],
+            vec![0, 1, 2, 3, 4, 5, 6, 7, 8],
+        ],
+    ];
+
+    let mut batch_grammar_matcher = BatchGrammarMatcher::new(2).unwrap();
+    batch_grammar_matcher.batch_fill_next_token_bitmask(&matchers, &mut tensor, None, false);
+
+    for i in 0..batch_size {
+        let rejected_token_ids =
+            get_masked_tokens_from_bitmask(
+                &token_bitmask[(i * token_bitmask.len() / batch_size)
+                    ..((i + 1) * token_bitmask.len() / batch_size)],
+                tokenizer_info.vocab_size(),
+            );
+        let mut accepted: Vec<usize> = (0..vocab.len())
+            .filter(|id| !rejected_token_ids.contains(id))
+            .collect();
+        accepted.sort();
+        assert_eq!(accepted, expected_accepted_tokens[0][i]);
+    }
+
+    assert_eq!(
+        &*BatchGrammarMatcher::batch_accept_string(&matchers, &input_str, false),
+        &[true, true, true, true]
+    );
+
+    batch_grammar_matcher.batch_fill_next_token_bitmask(&matchers, &mut tensor, None, false);
+
+    for i in 0..batch_size {
+        let rejected_token_ids =
+            get_masked_tokens_from_bitmask(
+                &token_bitmask[(i * token_bitmask.len() / batch_size)
+                    ..((i + 1) * token_bitmask.len() / batch_size)],
+                tokenizer_info.vocab_size(),
+            );
+        let mut accepted: Vec<usize> = (0..vocab.len())
+            .filter(|id| !rejected_token_ids.contains(id))
+            .collect();
+        accepted.sort();
+        assert_eq!(accepted, expected_accepted_tokens[1][i]);
+    }
 }
 
 #[test]
 #[serial]
 #[cfg(feature = "hf")]
 fn test_batch_fill_next_token_bitmask_pressure() {
-    let tk = make_hf_tokenizer_info("meta-llama/Llama-2-7b-chat-hf");
+    let tokenizer_info = make_hf_tokenizer_info("meta-llama/Llama-2-7b-chat-hf");
     let input_str = r#"{"id": 1,"name": "Example"}"#;
 
     let grammar = Grammar::builtin_json_grammar();
-    let mut compiler = GrammarCompiler::new(&tk, 1, false, -1).unwrap();
+    let mut compiler = GrammarCompiler::new(&tokenizer_info, 1, false, -1).unwrap();
     let compiled = compiler.compile_grammar(&grammar).unwrap();
 
     let mut matchers: Vec<GrammarMatcher> = Vec::new();
@@ -583,24 +804,45 @@ fn test_batch_fill_next_token_bitmask_pressure() {
     }
 
     let batch_size = matchers.len();
-    let vocab_size = tk.vocab_size();
+    let vocab_size = compiled.tokenizer_info().vocab_size();
     let mut bitmask_data = allocate_token_bitmask(batch_size, vocab_size);
     let (mut tensor, _shape, _strides) =
         create_bitmask_dltensor(&mut bitmask_data, batch_size, vocab_size);
 
+    let rejected_token_size = vec![
+        31989, 31912, 270, 270, 270, 31973, 31846, 31846, 31948, 31915, 270, 270, 270, 270,
+        270, 31973, 31846, 31846, 263, 263, 263, 263, 263, 263, 263, 263, 31974, 31999,
+    ];
+
     let mut batch_matcher = BatchGrammarMatcher::new(2).unwrap();
     batch_matcher.batch_fill_next_token_bitmask(&matchers, &mut tensor, None, false);
+
+    for i in 0..matchers.len() {
+        let slice_len = bitmask_data.len() / batch_size;
+        let rejected_token_ids = get_masked_tokens_from_bitmask(
+            &bitmask_data[(i * slice_len)..((i + 1) * slice_len)],
+            vocab_size,
+        );
+        assert_eq!(
+            rejected_token_ids.len(),
+            rejected_token_size[i],
+            "index {}, rejected size {} != expected {}",
+            i,
+            rejected_token_ids.len(),
+            rejected_token_size[i]
+        );
+    }
 }
 
 #[test]
 #[serial]
 #[cfg(feature = "hf")]
 fn test_batch_fill_next_token_bitmask_pressure_single_thread() {
-    let tk = make_hf_tokenizer_info("meta-llama/Llama-2-7b-chat-hf");
+    let tokenizer_info = make_hf_tokenizer_info("meta-llama/Llama-2-7b-chat-hf");
     let input_str = r#"{"id": 1,"name": "Example"}"#;
 
     let grammar = Grammar::builtin_json_grammar();
-    let mut compiler = GrammarCompiler::new(&tk, 1, false, -1).unwrap();
+    let mut compiler = GrammarCompiler::new(&tokenizer_info, 1, false, -1).unwrap();
     let compiled = compiler.compile_grammar(&grammar).unwrap();
 
     let mut matchers: Vec<GrammarMatcher> = Vec::new();
@@ -612,24 +854,45 @@ fn test_batch_fill_next_token_bitmask_pressure_single_thread() {
     }
 
     let batch_size = matchers.len();
-    let vocab_size = tk.vocab_size();
+    let vocab_size = compiled.tokenizer_info().vocab_size();
     let mut bitmask_data = allocate_token_bitmask(batch_size, vocab_size);
     let (mut tensor, _shape, _strides) =
         create_bitmask_dltensor(&mut bitmask_data, batch_size, vocab_size);
 
+    let rejected_token_size = vec![
+        31989, 31912, 270, 270, 270, 31973, 31846, 31846, 31948, 31915, 270, 270, 270, 270,
+        270, 31973, 31846, 31846, 263, 263, 263, 263, 263, 263, 263, 263, 31974, 31999,
+    ];
+
     let mut batch_matcher = BatchGrammarMatcher::new(1).unwrap();
     batch_matcher.batch_fill_next_token_bitmask(&matchers, &mut tensor, None, false);
+
+    for i in 0..matchers.len() {
+        let slice_len = bitmask_data.len() / batch_size;
+        let rejected_token_ids = get_masked_tokens_from_bitmask(
+            &bitmask_data[(i * slice_len)..((i + 1) * slice_len)],
+            vocab_size,
+        );
+        assert_eq!(
+            rejected_token_ids.len(),
+            rejected_token_size[i],
+            "index {}, rejected size {} != expected {}",
+            i,
+            rejected_token_ids.len(),
+            rejected_token_size[i]
+        );
+    }
 }
 
 #[test]
 #[serial]
 #[cfg(feature = "hf")]
 fn test_batch_fill_next_token_bitmask_pressure_shuffled() {
-    let tk = make_hf_tokenizer_info("meta-llama/Llama-2-7b-chat-hf");
+    let tokenizer_info = make_hf_tokenizer_info("meta-llama/Llama-2-7b-chat-hf");
     let input_str = r#"{"id": 1,"name": "Example"}"#;
 
     let grammar = Grammar::builtin_json_grammar();
-    let mut compiler = GrammarCompiler::new(&tk, 1, false, -1).unwrap();
+    let mut compiler = GrammarCompiler::new(&tokenizer_info, 1, false, -1).unwrap();
     let compiled = compiler.compile_grammar(&grammar).unwrap();
 
     let mut matchers: Vec<GrammarMatcher> = Vec::new();
@@ -642,11 +905,36 @@ fn test_batch_fill_next_token_bitmask_pressure_shuffled() {
     }
 
     let batch_size = matchers.len();
-    let vocab_size = tk.vocab_size();
+    let vocab_size = compiled.tokenizer_info().vocab_size();
     let mut bitmask_data = allocate_token_bitmask(batch_size, vocab_size);
     let (mut tensor, _shape, _strides) =
         create_bitmask_dltensor(&mut bitmask_data, batch_size, vocab_size);
 
+    let rejected_token_size = vec![
+        31989, 31912, 270, 270, 270, 31973, 31846, 31846, 31948, 31915, 270, 270, 270, 270,
+        270, 31973, 31846, 31846, 263, 263, 263, 263, 263, 263, 263, 263, 31974, 31999,
+    ];
+
+    let mut shuffled_indices: Vec<i32> = (0..batch_size).map(|i| i as i32).collect();
+    shuffled_indices.reverse(); // Deterministic shuffle
+
     let mut batch_matcher = BatchGrammarMatcher::new(2).unwrap();
-    batch_matcher.batch_fill_next_token_bitmask(&matchers, &mut tensor, None, false);
+    batch_matcher.batch_fill_next_token_bitmask(&matchers, &mut tensor, Some(&shuffled_indices), false);
+
+    for i in 0..matchers.len() {
+        let output_idx = shuffled_indices[i] as usize;
+        let slice_len = bitmask_data.len() / batch_size;
+        let rejected_token_ids = get_masked_tokens_from_bitmask(
+            &bitmask_data[(output_idx * slice_len)..((output_idx + 1) * slice_len)],
+            vocab_size,
+        );
+        assert_eq!(
+            rejected_token_ids.len(),
+            rejected_token_size[i],
+            "index {}, rejected size {} != expected {}",
+            i,
+            rejected_token_ids.len(),
+            rejected_token_size[i]
+        );
+    }
 }

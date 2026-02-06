@@ -1,5 +1,7 @@
 #[cfg(feature = "hf")]
 use hf_hub::{Repo, api::sync::ApiBuilder};
+#[cfg(feature = "hf")]
+use std::collections::HashMap;
 use xgrammar::{
     DLDataType, DLDataTypeCode, DLDevice, DLDeviceType, DLTensor, Grammar,
     GrammarCompiler, GrammarMatcher, TokenizerInfo, VocabType,
@@ -22,48 +24,101 @@ pub fn download_tokenizer_json(
     repo.get("tokenizer.json").map_err(|e| e.to_string())
 }
 
+/// Download tokenizer_config.json from HuggingFace model hub
+#[cfg(feature = "hf")]
+#[allow(dead_code)]
+pub fn download_tokenizer_config_json(
+    model_id: &str,
+) -> Result<std::path::PathBuf, String> {
+    let token = std::env::var("HF_TOKEN").ok();
+    let api = ApiBuilder::new()
+        .with_token(token)
+        .build()
+        .map_err(|e| e.to_string())?;
+    let repo = api.repo(Repo::model(model_id.to_string()));
+    repo.get("tokenizer_config.json").map_err(|e| e.to_string())
+}
+
+/// Parse eos_token_id from tokenizer_config.json.
+/// Returns None if the field is absent or the file cannot be loaded.
+#[cfg(feature = "hf")]
+#[allow(dead_code)]
+pub fn parse_eos_token_id(model_id: &str) -> Option<i32> {
+    let path = download_tokenizer_config_json(model_id).ok()?;
+    let content = std::fs::read_to_string(path).ok()?;
+    let config: serde_json::Value = serde_json::from_str(&content).ok()?;
+    if let Some(id) = config.get("eos_token_id") {
+        if let Some(n) = id.as_i64() {
+            return Some(n as i32);
+        }
+        if let Some(arr) = id.as_array() {
+            if let Some(first) = arr.first() {
+                return first.as_i64().map(|n| n as i32);
+            }
+        }
+    }
+    None
+}
+
+/// Extract ordered vocabulary from a tokenizer (by id).
+#[cfg(feature = "hf")]
+#[allow(dead_code)]
+pub fn extract_ordered_vocab(tk: &tokenizers::Tokenizer) -> Box<[String]> {
+    let vocab: HashMap<String, u32> = tk.get_vocab(true);
+    let max_id = vocab.values().copied().max().unwrap_or(0) as usize;
+    let vocab_size = std::cmp::max(vocab.len(), max_id + 1);
+    let mut ordered = vec![String::new(); vocab_size];
+    for (token, id) in vocab {
+        let idx = id as usize;
+        if idx < vocab_size {
+            ordered[idx] = token;
+        }
+    }
+    ordered.into_boxed_slice()
+}
+
 /// Create TokenizerInfo from HuggingFace model
 #[cfg(feature = "hf")]
 #[allow(dead_code)]
 pub fn make_hf_tokenizer_info(model_id: &str) -> TokenizerInfo {
     let path =
         download_tokenizer_json(model_id).expect("download tokenizer.json");
-    let tk = tokenizers::Tokenizer::from_file(&path).expect("load tokenizer");
-    TokenizerInfo::from_huggingface(&tk, None, None).unwrap()
+    let tokenizer = tokenizers::Tokenizer::from_file(&path).expect("load tokenizer");
+    TokenizerInfo::from_huggingface(&tokenizer, None, None).unwrap()
 }
 
 /// Create a GrammarMatcher from a Grammar with minimal tokenizer info
-pub fn matcher_from_grammar(gram: &Grammar) -> GrammarMatcher {
+pub fn matcher_from_grammar(grammar: &Grammar) -> GrammarMatcher {
     let empty_vocab: Vec<&str> = vec![];
     let stop_ids: Option<Box<[i32]>> = None;
     let tokenizer_info =
         TokenizerInfo::new(&empty_vocab, VocabType::RAW, &stop_ids, false).unwrap();
     let mut compiler = GrammarCompiler::new(&tokenizer_info, 1, false, -1).unwrap();
-    let cg = compiler.compile_grammar(gram).unwrap();
-    GrammarMatcher::new(&cg, None, true, -1).unwrap()
+    let compiled_grammar = compiler.compile_grammar(grammar).unwrap();
+    GrammarMatcher::new(&compiled_grammar, None, true, -1).unwrap()
 }
 
 /// Create a GrammarMatcher from a Grammar with a specific TokenizerInfo
 #[allow(dead_code)]
 pub fn matcher_from_grammar_with_tokenizer(
-    gram: &Grammar,
+    grammar: &Grammar,
     tokenizer_info: &TokenizerInfo,
 ) -> GrammarMatcher {
     let mut compiler = GrammarCompiler::new(tokenizer_info, 1, false, -1).unwrap();
-    let cg = compiler.compile_grammar(gram).unwrap();
-    GrammarMatcher::new(&cg, None, true, -1).unwrap()
+    let compiled_grammar = compiler.compile_grammar(grammar).unwrap();
+    GrammarMatcher::new(&compiled_grammar, None, true, -1).unwrap()
 }
 
 /// Create a GrammarMatcher with rollback support
 #[allow(dead_code)]
 pub fn matcher_from_grammar_with_tokenizer_and_rollback(
-    gram: &Grammar,
+    grammar: &Grammar,
     tokenizer_info: &TokenizerInfo,
     max_rollback_tokens: i32,
 ) -> GrammarMatcher {
     let mut compiler = GrammarCompiler::new(tokenizer_info, 1, false, -1).unwrap();
-    let cg = compiler.compile_grammar(gram).unwrap();
-    GrammarMatcher::new(&cg, None, false, max_rollback_tokens).unwrap()
+    let compiled_grammar = compiler.compile_grammar(grammar).unwrap();
+    GrammarMatcher::new(&compiled_grammar, None, false, max_rollback_tokens).unwrap()
 }
 
 /// Check if a grammar accepts a string
@@ -108,6 +163,85 @@ pub fn create_bitmask_dltensor(
         byte_offset: 0,
     };
 
+    (tensor, shape, strides)
+}
+
+#[allow(dead_code)]
+pub fn create_i64_1d_dltensor(
+    data: &mut [i64],
+) -> (DLTensor, Vec<i64>, Vec<i64>) {
+    let mut shape = vec![data.len() as i64];
+    let mut strides = vec![1i64];
+    let tensor = DLTensor {
+        data: data.as_mut_ptr() as *mut std::ffi::c_void,
+        device: DLDevice {
+            device_type: DLDeviceType::kDLCPU,
+            device_id: 0,
+        },
+        ndim: 1,
+        dtype: DLDataType {
+            code: DLDataTypeCode::kDLInt as u8,
+            bits: 64,
+            lanes: 1,
+        },
+        shape: shape.as_mut_ptr(),
+        strides: strides.as_mut_ptr(),
+        byte_offset: 0,
+    };
+    (tensor, shape, strides)
+}
+
+#[allow(dead_code)]
+pub fn create_f32_1d_dltensor(
+    data: &mut [f32],
+) -> (DLTensor, Vec<i64>, Vec<i64>) {
+    let mut shape = vec![data.len() as i64];
+    let mut strides = vec![1i64];
+    let tensor = DLTensor {
+        data: data.as_mut_ptr() as *mut std::ffi::c_void,
+        device: DLDevice {
+            device_type: DLDeviceType::kDLCPU,
+            device_id: 0,
+        },
+        ndim: 1,
+        dtype: DLDataType {
+            code: DLDataTypeCode::kDLFloat as u8,
+            bits: 32,
+            lanes: 1,
+        },
+        shape: shape.as_mut_ptr(),
+        strides: strides.as_mut_ptr(),
+        byte_offset: 0,
+    };
+    (tensor, shape, strides)
+}
+
+#[allow(dead_code)]
+pub fn create_f32_2d_dltensor(
+    data: &mut [f32],
+    rows: usize,
+    cols: usize,
+    stride0: i64,
+    stride1: i64,
+) -> (DLTensor, Vec<i64>, Vec<i64>) {
+    let mut shape = vec![rows as i64, cols as i64];
+    let mut strides = vec![stride0, stride1];
+    let tensor = DLTensor {
+        data: data.as_mut_ptr() as *mut std::ffi::c_void,
+        device: DLDevice {
+            device_type: DLDeviceType::kDLCPU,
+            device_id: 0,
+        },
+        ndim: 2,
+        dtype: DLDataType {
+            code: DLDataTypeCode::kDLFloat as u8,
+            bits: 32,
+            lanes: 1,
+        },
+        shape: shape.as_mut_ptr(),
+        strides: strides.as_mut_ptr(),
+        byte_offset: 0,
+    };
     (tensor, shape, strides)
 }
 

@@ -94,6 +94,33 @@ tokenizer_info_deserialize_json_or_error(
   }
 }
 
+inline bool detect_metadata_from_hf(
+    const std::string& backend_str,
+    std::string* metadata_out,
+    std::string* error_out
+) {
+  try {
+    if (error_out) {
+      error_out->clear();
+    }
+    std::string result = xgrammar::TokenizerInfo::DetectMetadataFromHF(backend_str);
+    if (metadata_out) {
+      *metadata_out = std::move(result);
+    }
+    return true;
+  } catch (const std::exception& e) {
+    if (error_out) {
+      *error_out = e.what();
+    }
+    return false;
+  } catch (...) {
+    if (error_out) {
+      *error_out = "unknown C++ exception";
+    }
+    return false;
+  }
+}
+
 } // namespace cxx_utils
 
 #endif // XGRAMMAR_RS_CXX_UTILS_TOKENIZER_INFO_H_

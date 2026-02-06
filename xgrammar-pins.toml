@@ -3,7 +3,7 @@
 
 [repo]
 url = "https://github.com/mlc-ai/xgrammar.git"
-ref = "v0.1.29"
+ref = "v0.1.31"
 
 [submodules.cpptrace]
 path = "3rdparty/cpptrace"

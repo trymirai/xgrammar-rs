@@ -1,6 +1,8 @@
 #![allow(unsafe_op_in_unsafe_fn)]
 // Suppress warnings from auto-generated FFI code
 #![allow(unused_imports)]
+#![allow(clippy::needless_lifetimes)]
+#![allow(clippy::too_many_arguments)]
 
 use autocxx::prelude::*;
 
@@ -42,6 +44,7 @@ include_cpp! {
     // cxx_utils/tokenizer_info.hpp
     generate!("cxx_utils::make_tokenizer_info")
     generate!("cxx_utils::tokenizer_info_deserialize_json_or_error")
+    generate!("cxx_utils::detect_metadata_from_hf")
 
     // cxx_utils/structural_tag.hpp
     generate!("cxx_utils::new_structural_tag_vector")
@@ -76,6 +79,7 @@ include_cpp! {
     generate!("cxx_utils::grammar_matcher_vec_reserve")
     generate!("cxx_utils::grammar_matcher_vec_push")
     generate!("cxx_utils::batch_matcher_batch_fill_next_token_bitmask")
+    generate!("cxx_utils::apply_token_bitmask_inplace_cpu")
     generate!("cxx_utils::batch_accept_token")
     generate!("cxx_utils::batch_accept_string")
 
@@ -83,9 +87,14 @@ include_cpp! {
     generate!("cxx_utils::ebnf_to_grammar_no_normalization")
     generate!("cxx_utils::json_schema_to_ebnf")
     generate!("cxx_utils::qwen_xml_tool_calling_to_ebnf")
+    generate!("cxx_utils::regex_to_ebnf")
     generate!("cxx_utils::get_masked_tokens_from_bitmask")
     generate!("cxx_utils::SingleTokenResult")
     generate!("cxx_utils::is_single_token_bitmask")
+    generate!("cxx_utils::traverse_draft_tree")
+    generate!("cxx_utils::generate_range_regex")
+    generate!("cxx_utils::generate_float_range_regex")
+    generate!("cxx_utils::print_grammar_fsms")
 
     // DLPack core types
     generate_pod!("DLTensor")
@@ -137,6 +146,7 @@ mod config;
 mod grammar;
 mod matcher;
 mod tokenizer_info;
+mod utils;
 
 pub mod testing;
 
@@ -153,6 +163,6 @@ pub use ffi::xgrammar::VocabType;
 pub use grammar::{Grammar, StructuralTagItem};
 pub use matcher::{
     BatchGrammarMatcher, GrammarMatcher, allocate_token_bitmask,
-    get_bitmask_shape, reset_token_bitmask,
+    apply_token_bitmask_inplace_cpu, get_bitmask_shape, reset_token_bitmask,
 };
-pub use tokenizer_info::TokenizerInfo;
+pub use tokenizer_info::{HfMetadata, TokenizerInfo, detect_metadata_from_hf};

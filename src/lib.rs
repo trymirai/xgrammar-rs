@@ -44,6 +44,7 @@ include_cpp! {
     // cxx_utils/tokenizer_info.hpp
     generate!("cxx_utils::make_tokenizer_info")
     generate!("cxx_utils::tokenizer_info_deserialize_json_or_error")
+    generate!("cxx_utils::detect_metadata_from_hf")
 
     // cxx_utils/structural_tag.hpp
     generate!("cxx_utils::new_structural_tag_vector")
@@ -164,4 +165,4 @@ pub use matcher::{
     BatchGrammarMatcher, GrammarMatcher, allocate_token_bitmask,
     apply_token_bitmask_inplace_cpu, get_bitmask_shape, reset_token_bitmask,
 };
-pub use tokenizer_info::TokenizerInfo;
+pub use tokenizer_info::{HfMetadata, TokenizerInfo, detect_metadata_from_hf};

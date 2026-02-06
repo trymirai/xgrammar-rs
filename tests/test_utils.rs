@@ -1,5 +1,7 @@
 #[cfg(feature = "hf")]
 use hf_hub::{Repo, api::sync::ApiBuilder};
+#[cfg(feature = "hf")]
+use std::collections::HashMap;
 use xgrammar::{
     DLDataType, DLDataTypeCode, DLDevice, DLDeviceType, DLTensor, Grammar,
     GrammarCompiler, GrammarMatcher, TokenizerInfo, VocabType,
@@ -20,6 +22,59 @@ pub fn download_tokenizer_json(
         .map_err(|e| e.to_string())?;
     let repo = api.repo(Repo::model(model_id.to_string()));
     repo.get("tokenizer.json").map_err(|e| e.to_string())
+}
+
+/// Download tokenizer_config.json from HuggingFace model hub
+#[cfg(feature = "hf")]
+#[allow(dead_code)]
+pub fn download_tokenizer_config_json(
+    model_id: &str,
+) -> Result<std::path::PathBuf, String> {
+    let token = std::env::var("HF_TOKEN").ok();
+    let api = ApiBuilder::new()
+        .with_token(token)
+        .build()
+        .map_err(|e| e.to_string())?;
+    let repo = api.repo(Repo::model(model_id.to_string()));
+    repo.get("tokenizer_config.json").map_err(|e| e.to_string())
+}
+
+/// Parse eos_token_id from tokenizer_config.json.
+/// Returns None if the field is absent or the file cannot be loaded.
+#[cfg(feature = "hf")]
+#[allow(dead_code)]
+pub fn parse_eos_token_id(model_id: &str) -> Option<i32> {
+    let path = download_tokenizer_config_json(model_id).ok()?;
+    let content = std::fs::read_to_string(path).ok()?;
+    let config: serde_json::Value = serde_json::from_str(&content).ok()?;
+    if let Some(id) = config.get("eos_token_id") {
+        if let Some(n) = id.as_i64() {
+            return Some(n as i32);
+        }
+        if let Some(arr) = id.as_array() {
+            if let Some(first) = arr.first() {
+                return first.as_i64().map(|n| n as i32);
+            }
+        }
+    }
+    None
+}
+
+/// Extract ordered vocabulary from a tokenizer (by id).
+#[cfg(feature = "hf")]
+#[allow(dead_code)]
+pub fn extract_ordered_vocab(tk: &tokenizers::Tokenizer) -> Box<[String]> {
+    let vocab: HashMap<String, u32> = tk.get_vocab(true);
+    let max_id = vocab.values().copied().max().unwrap_or(0) as usize;
+    let vocab_size = std::cmp::max(vocab.len(), max_id + 1);
+    let mut ordered = vec![String::new(); vocab_size];
+    for (token, id) in vocab {
+        let idx = id as usize;
+        if idx < vocab_size {
+            ordered[idx] = token;
+        }
+    }
+    ordered.into_boxed_slice()
 }
 
 /// Create TokenizerInfo from HuggingFace model

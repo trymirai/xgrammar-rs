@@ -4,6 +4,44 @@ use crate::{CxxUniquePtr, FFITokenizerInfo, VocabType, cxx_utils, utils::bytes_a
 
 type StopTokenIds = Option<Box<[i32]>>;
 
+#[derive(Clone)]
+pub struct HfMetadata {
+    pub vocab_type: VocabType,
+    pub add_prefix_space: bool,
+}
+
+pub fn detect_metadata_from_hf(backend_str: &str) -> Result<HfMetadata, String> {
+    cxx::let_cxx_string!(backend_cxx = backend_str);
+    cxx::let_cxx_string!(metadata_out_cxx = "");
+    cxx::let_cxx_string!(error_out_cxx = "");
+    let ok = unsafe {
+        cxx_utils::detect_metadata_from_hf(
+            &backend_cxx,
+            metadata_out_cxx.as_mut().get_unchecked_mut(),
+            error_out_cxx.as_mut().get_unchecked_mut(),
+        )
+    };
+    if !ok {
+        return Err(error_out_cxx.to_string());
+    }
+    let metadata_json: serde_json::Value =
+        serde_json::from_str(&metadata_out_cxx.to_string())
+            .map_err(|e| format!("failed to parse metadata JSON: {e}"))?;
+    let vocab_type_int = metadata_json["vocab_type"]
+        .as_i64()
+        .ok_or("missing vocab_type in metadata")?;
+    let add_prefix_space = metadata_json["add_prefix_space"]
+        .as_bool()
+        .ok_or("missing add_prefix_space in metadata")?;
+    let vocab_type = match vocab_type_int {
+        0 => VocabType::RAW,
+        1 => VocabType::BYTE_FALLBACK,
+        2 => VocabType::BYTE_LEVEL,
+        other => return Err(format!("unknown vocab_type: {other}")),
+    };
+    Ok(HfMetadata { vocab_type, add_prefix_space })
+}
+
 /// The tokenizer info contains the vocabulary, the type of the vocabulary, and necessary
 /// information for the grammar-guided generation.
 ///
@@ -205,13 +243,7 @@ impl TokenizerInfo {
         let cxx_vec = self.inner.GetDecodedVocab();
         let mut result: Vec<Box<[u8]>> = Vec::with_capacity(cxx_vec.len());
         for cxx_string in cxx_vec.iter() {
-            result.push(
-                cxx_string
-                    .to_string_lossy()
-                    .into_owned()
-                    .into_bytes()
-                    .into_boxed_slice(),
-            );
+            result.push(cxx_string.as_bytes().into());
         }
         result.into_boxed_slice()
     }
@@ -309,68 +341,21 @@ impl Drop for TokenizerInfo {
 impl TokenizerInfo {
     #[inline]
     fn extract_ordered_vocab(
-        tokenizer: &tokenizers::Tokenizer
+        tokenizer: &tokenizers::Tokenizer,
+        vocab_size: Option<usize>,
     ) -> Box<[String]> {
-        let mut pairs: Vec<(usize, String)> = tokenizer
-            .get_vocab(true)
-            .into_iter()
-            .map(|(tok, id)| (id as usize, tok))
-            .collect();
-        pairs.sort_by_key(|(id, _)| *id);
-        pairs
-            .into_iter()
-            .map(|(_, tok)| tok)
-            .collect::<Vec<_>>()
-            .into_boxed_slice()
-    }
-
-    /// Heuristically detect whether a tokenizer resembles a tiktoken-style tokenizer.
-    ///
-    /// In Python this checks `isinstance(tokenizer.tokenizer, tiktoken.Encoding)` or whether
-    /// the vocab filename contains "tiktoken". In Rust we do not have those runtime types,
-    /// so we approximate: if the vocabulary does NOT contain typical markers of
-    /// SentencePiece (`▁`), Byte-level GPT-2 (`Ġ`), or ByteFallback (tokens like `<0x1B>`),
-    /// we consider it RAW (tiktoken-like).
-    pub fn _is_tiktoken_tokenizer(tokenizer: &tokenizers::Tokenizer) -> bool {
         let vocab = tokenizer.get_vocab(true);
-        let mut has_sentencepiece_marker = false;
-        let mut has_bytelevel_marker = false;
-        let mut has_bytefallback_marker = false;
-        for token in vocab.keys() {
-            if !has_sentencepiece_marker && token.contains('▁') {
-                has_sentencepiece_marker = true;
-            }
-            if !has_bytelevel_marker && token.contains('Ġ') {
-                has_bytelevel_marker = true;
-            }
-            if !has_bytefallback_marker
-                && token.starts_with("<0x")
-                && token.ends_with('>')
-            {
-                has_bytefallback_marker = true;
-            }
-            if has_sentencepiece_marker
-                || has_bytelevel_marker
-                || has_bytefallback_marker
-            {
-                break;
+        let max_id = vocab.values().copied().max().unwrap_or(0) as usize;
+        let tokenizer_vocab_size = std::cmp::max(vocab.len(), max_id + 1);
+        let size = vocab_size.unwrap_or(tokenizer_vocab_size);
+        let mut ordered = vec![String::new(); size];
+        for (token, id) in vocab {
+            let idx = id as usize;
+            if idx < size {
+                ordered[idx] = token;
             }
         }
-        !(has_sentencepiece_marker
-            || has_bytelevel_marker
-            || has_bytefallback_marker)
-    }
-
-    /// Heuristically detect whether a tokenizer is SentencePiece-based.
-    ///
-    /// In Python this checks for a `sentencepiece.SentencePieceProcessor`. Here we look for
-    /// typical SentencePiece marker `▁` in the vocabulary. This is a best-effort heuristic
-    /// and may not be perfect for all models.
-    pub fn _is_sentencepiece_tokenizer(
-        tokenizer: &tokenizers::Tokenizer
-    ) -> bool {
-        let vocab = tokenizer.get_vocab(true);
-        vocab.keys().any(|tok| tok.contains('▁'))
+        ordered.into_boxed_slice()
     }
 
     /// Construct from a `tokenizers::Tokenizer` with explicit options, preserving tokenizer
@@ -398,13 +383,13 @@ impl TokenizerInfo {
         stop_token_ids: Option<&[i32]>,
         add_prefix_space: bool,
     ) -> Result<Self, String> {
-        let ordered = Self::extract_ordered_vocab(tokenizer);
+        let ordered = Self::extract_ordered_vocab(tokenizer, vocab_size);
         let stop: Option<Box<[i32]>> =
             stop_token_ids.map(|s| s.to_vec().into_boxed_slice());
         Self::new_with_vocab_size(
             &ordered,
             vocab_type,
-            vocab_size,
+            Some(ordered.len()),
             &stop,
             add_prefix_space,
         )
@@ -416,13 +401,7 @@ impl TokenizerInfo {
     ///
     /// Returns an error if the tokenizer info cannot be constructed.
     pub fn from_tokenizers_simple(tokenizer: &tokenizers::Tokenizer) -> Result<Self, String> {
-        Self::from_tokenizers_with_options(
-            tokenizer,
-            VocabType::RAW,
-            None,
-            None,
-            false,
-        )
+        Self::from_tokenizers_with_options(tokenizer, VocabType::RAW, None, None, false)
     }
 
     /// Construct the tokenizer info from a Hugging Face tokenizer. This constructor supports
@@ -461,30 +440,17 @@ impl TokenizerInfo {
         vocab_size: Option<usize>,
         stop_token_ids: Option<&[i32]>,
     ) -> Result<Self, String> {
-        use crate::VocabType;
-
-        let vocab = tokenizer.get_vocab(true);
-        let has_bytefallback_marker =
-            vocab.keys().any(|t| t.starts_with("<0x") && t.ends_with('>'));
-        let has_sentencepiece_marker = vocab.keys().any(|t| t.contains('▁'));
-        let has_bytelevel_marker = vocab.keys().any(|t| t.contains('Ġ'));
-
-        let (vocab_type, add_prefix_space) = if has_bytefallback_marker {
-            (VocabType::BYTE_FALLBACK, true)
-        } else if has_sentencepiece_marker {
-            (VocabType::RAW, true)
-        } else if has_bytelevel_marker {
-            (VocabType::BYTE_LEVEL, false)
-        } else {
-            (VocabType::RAW, false)
-        };
+        let backend_str = tokenizer
+            .to_string(false)
+            .map_err(|e| format!("failed to serialize tokenizer backend: {e}"))?;
+        let metadata = detect_metadata_from_hf(&backend_str)?;
 
         Self::from_tokenizers_with_options(
             tokenizer,
-            vocab_type,
+            metadata.vocab_type,
             vocab_size,
             stop_token_ids,
-            add_prefix_space,
+            metadata.add_prefix_space,
         )
     }
 }

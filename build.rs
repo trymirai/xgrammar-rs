@@ -674,6 +674,34 @@ fn find_xgrammar_lib_dir(root: &Path) -> Option<PathBuf> {
     None
 }
 
+fn fix_broken_bindgen_type_aliases(out_dir: &Path) {
+    let rs_dir = out_dir.join("autocxx-build-dir/rs");
+    let Ok(rd) = fs::read_dir(&rs_dir) else {
+        return;
+    };
+    for entry in rd.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|s| s.to_str()) != Some("rs") {
+            continue;
+        }
+        let name =
+            path.file_name().and_then(|s| s.to_str()).unwrap_or("");
+        if !name.starts_with("autocxx-") || !name.ends_with("-gen.rs") {
+            continue;
+        }
+        let Ok(contents) = fs::read_to_string(&path) else {
+            continue;
+        };
+        let patched = contents.replace(
+            "pub type basic_string___self_view =",
+            "pub type basic_string___self_view<_CharT> =",
+        );
+        if patched != contents {
+            let _ = fs::write(&path, patched);
+        }
+    }
+}
+
 fn strip_autocxx_generated_doc_comments(out_dir: &Path) {
     let debug = env::var("XGRAMMAR_RS_DEBUG_DOCSTRIP").is_ok();
     let rs_dir = out_dir.join("autocxx-build-dir/rs");
@@ -1127,4 +1155,5 @@ fn main() {
     copy_headers_for_generated_rust_code(&build_context);
     format_generated_bindings_optional(&build_context.out_dir);
     strip_autocxx_generated_doc_comments(&build_context.out_dir);
+    fix_broken_bindgen_type_aliases(&build_context.out_dir);
 }

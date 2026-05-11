@@ -54,13 +54,13 @@ rule2 ::= "efg" [t]*
 #[test]
 #[serial]
 fn test_stop_str() {
-    let grammar_str = r#"root ::= root1 "w"
+    let grammar_str = r#"root ::= root1 stop "w"
 root1 ::= TagDispatch(
   ("tag1", rule1),
   ("tag2", rule2),
-  stop_eos=false,
-  stop_str=("tag3", "ll")
+  excludes=("tag3", "ll")
 )
+stop ::= "tag3" | "ll"
 rule1 ::= "abcd" [p]*
 rule2 ::= "efg" [t]*
 "#;
@@ -85,14 +85,14 @@ rule2 ::= "efg" [t]*
 #[test]
 #[serial]
 fn test_stop_str_no_loop() {
-    let grammar_str = r#"root ::= root1 "w"
+    let grammar_str = r#"root ::= root1 stop "w"
 root1 ::= TagDispatch(
   ("tag1", rule1),
   ("tag2", rule2),
-  stop_eos=false,
-  stop_str=("tag3", "ll"),
+  excludes=("tag3", "ll"),
   loop_after_dispatch=false
 )
+stop ::= "tag3" | "ll"
 rule1 ::= "abcd" [p]*
 rule2 ::= "efg" [t]*
 "#;
@@ -187,9 +187,11 @@ rule2 ::= "dg"
     let grammar = Grammar::from_ebnf(grammar_str, "root").unwrap();
     let tokenizer_info =
         TokenizerInfo::new(&tokens, VocabType::RAW, &None, false).unwrap();
-    let mut compiler = GrammarCompiler::new(&tokenizer_info, 1, false, -1).unwrap();
+    let mut compiler =
+        GrammarCompiler::new(&tokenizer_info, 1, false, -1).unwrap();
     let compiled_grammar = compiler.compile_grammar(&grammar).unwrap();
-    let mut matcher = GrammarMatcher::new(&compiled_grammar, None, true, -1).unwrap();
+    let mut matcher =
+        GrammarMatcher::new(&compiled_grammar, None, true, -1).unwrap();
 
     let vocab_size = tokenizer_info.vocab_size();
     let mut bitmask_data = allocate_token_bitmask(1, vocab_size);
@@ -245,17 +247,16 @@ fn test_regression_multiple_tag_dispatch() {
 root1 ::= TagDispatch(
   ("tag1", rule1),
   ("tag2", rule2),
-  stop_eos=true,
-  stop_str=(),
   loop_after_dispatch=false
 )
-rule1 ::= TagDispatch(
+rule1 ::= rule1_dispatch rule1_stop
+rule1_dispatch ::= TagDispatch(
   ("tag1", rule2),
   ("tag2", rule3),
-  stop_eos=false,
-  stop_str=("tag3", "ll"),
+  excludes=("tag3", "ll"),
   loop_after_dispatch=true
 )
+rule1_stop ::= "tag3" | "ll"
 rule2 ::= "efg" [t]*
 rule3 ::= "abcd" [p]*
 "#;
@@ -284,26 +285,25 @@ rule3 ::= "abcd" [p]*
 #[test]
 #[serial]
 fn test_excluded_str() {
-    let grammar_str = r#"root ::= TagDispatch(
+    let grammar_str = r#"root ::= root_dispatch end_tag
+root_dispatch ::= TagDispatch(
   ("start", rule1),
-  stop_str=("</think>"),
-  excludes=("</conclude>"),
-  loop_after_dispatch=true,
-  stop_eos=false
+  excludes=("</think>", "</conclude>"),
+  loop_after_dispatch=true
 )
 rule1 ::= "12345"
-"#;
-
-    let expected = r#"root ::= TagDispatch(
-  ("start", rule1),
-  stop_eos=false,
-  stop_str=("</think>"),
-  loop_after_dispatch=true,
-  excludes=("</conclude>")
-)
-rule1 ::= (("12345"))
+end_tag ::= "</think>"
 "#;
 
     let grammar = Grammar::from_ebnf(grammar_str, "root").unwrap();
-    assert_eq!(grammar.to_string_ebnf(), expected);
+    assert!(
+        grammar
+            .to_string_ebnf()
+            .contains(r#"excludes=("</think>", "</conclude>")"#)
+    );
+
+    assert!(is_grammar_accept_string(&grammar, "start12345</think>"));
+    assert!(!is_grammar_accept_string(&grammar, "start12345</conclude>"));
+    assert!(is_grammar_accept_string(&grammar, "start12345abc</think>"));
+    assert!(!is_grammar_accept_string(&grammar, "start12345</conclude>abc"));
 }

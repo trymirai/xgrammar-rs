@@ -1,6 +1,9 @@
 use autocxx::prelude::*;
 
-use crate::{CxxUniquePtr, FFITokenizerInfo, VocabType, cxx_utils, utils::bytes_as_c_char_ptr};
+use crate::{
+    CxxUniquePtr, FFITokenizerInfo, VocabType, cxx_utils,
+    utils::bytes_as_c_char_ptr,
+};
 
 type StopTokenIds = Option<Box<[i32]>>;
 
@@ -10,7 +13,9 @@ pub struct HfMetadata {
     pub add_prefix_space: bool,
 }
 
-pub fn detect_metadata_from_hf(backend_str: &str) -> Result<HfMetadata, String> {
+pub fn detect_metadata_from_hf(
+    backend_str: &str
+) -> Result<HfMetadata, String> {
     cxx::let_cxx_string!(backend_cxx = backend_str);
     cxx::let_cxx_string!(metadata_out_cxx = "");
     cxx::let_cxx_string!(error_out_cxx = "");
@@ -39,7 +44,10 @@ pub fn detect_metadata_from_hf(backend_str: &str) -> Result<HfMetadata, String> 
         2 => VocabType::BYTE_LEVEL,
         other => return Err(format!("unknown vocab_type: {other}")),
     };
-    Ok(HfMetadata { vocab_type, add_prefix_space })
+    Ok(HfMetadata {
+        vocab_type,
+        add_prefix_space,
+    })
 }
 
 /// The tokenizer info contains the vocabulary, the type of the vocabulary, and necessary
@@ -400,8 +408,16 @@ impl TokenizerInfo {
     /// # Errors
     ///
     /// Returns an error if the tokenizer info cannot be constructed.
-    pub fn from_tokenizers_simple(tokenizer: &tokenizers::Tokenizer) -> Result<Self, String> {
-        Self::from_tokenizers_with_options(tokenizer, VocabType::RAW, None, None, false)
+    pub fn from_tokenizers_simple(
+        tokenizer: &tokenizers::Tokenizer
+    ) -> Result<Self, String> {
+        Self::from_tokenizers_with_options(
+            tokenizer,
+            VocabType::RAW,
+            None,
+            None,
+            false,
+        )
     }
 
     /// Construct the tokenizer info from a Hugging Face tokenizer. This constructor supports
@@ -440,9 +456,9 @@ impl TokenizerInfo {
         vocab_size: Option<usize>,
         stop_token_ids: Option<&[i32]>,
     ) -> Result<Self, String> {
-        let backend_str = tokenizer
-            .to_string(false)
-            .map_err(|e| format!("failed to serialize tokenizer backend: {e}"))?;
+        let backend_str = tokenizer.to_string(false).map_err(|e| {
+            format!("failed to serialize tokenizer backend: {e}")
+        })?;
         let metadata = detect_metadata_from_hf(&backend_str)?;
 
         Self::from_tokenizers_with_options(

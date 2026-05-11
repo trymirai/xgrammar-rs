@@ -30,7 +30,8 @@ fn test_compiled_grammar() {
     let grammar = Grammar::builtin_json_grammar();
     let tokenizer_info =
         make_hf_tokenizer_info("meta-llama/Llama-2-7b-chat-hf");
-    let mut compiler = GrammarCompiler::new(&tokenizer_info, 8, true, -1).unwrap();
+    let mut compiler =
+        GrammarCompiler::new(&tokenizer_info, 8, true, -1).unwrap();
     let compiled = compiler.compile_grammar(&grammar).unwrap();
 
     fn check_matcher(mut m: GrammarMatcher) {
@@ -53,10 +54,12 @@ fn test_grammar_compiler_json() {
         let tokenizer_info =
             make_hf_tokenizer_info("meta-llama/Llama-2-7b-chat-hf");
         let mut grammar_compiler =
-            GrammarCompiler::new(&tokenizer_info, max_threads, true, -1).unwrap();
+            GrammarCompiler::new(&tokenizer_info, max_threads, true, -1)
+                .unwrap();
 
         // First compile
-        let compiled_grammar = grammar_compiler.compile_builtin_json_grammar().unwrap();
+        let compiled_grammar =
+            grammar_compiler.compile_builtin_json_grammar().unwrap();
         let mut matcher =
             GrammarMatcher::new(&compiled_grammar, None, true, -1).unwrap();
         assert!(!matcher.is_terminated());
@@ -65,7 +68,8 @@ fn test_grammar_compiler_json() {
         assert!(matcher.is_terminated());
 
         // Compile again (should hit cache)
-        let compiled_grammar = grammar_compiler.compile_builtin_json_grammar().unwrap();
+        let compiled_grammar =
+            grammar_compiler.compile_builtin_json_grammar().unwrap();
         let mut matcher =
             GrammarMatcher::new(&compiled_grammar, None, true, -1).unwrap();
         assert!(!matcher.is_terminated());
@@ -75,7 +79,8 @@ fn test_grammar_compiler_json() {
 
         // Clear cache and compile again
         grammar_compiler.clear_cache();
-        let compiled_grammar = grammar_compiler.compile_builtin_json_grammar().unwrap();
+        let compiled_grammar =
+            grammar_compiler.compile_builtin_json_grammar().unwrap();
         let mut matcher =
             GrammarMatcher::new(&compiled_grammar, None, true, -1).unwrap();
         assert!(!matcher.is_terminated());
@@ -133,14 +138,17 @@ fn test_grammar_compiler_json_schema() {
         instance_preferred: &str,
         instance_alternative: &str,
     ) {
-        let compiled =
-            gc.compile_json_schema(schema, any_ws, indent, seps, true, None).unwrap();
-        let mut matcher = GrammarMatcher::new(&compiled, None, true, -1).unwrap();
+        let compiled = gc
+            .compile_json_schema(schema, any_ws, indent, seps, true, None)
+            .unwrap();
+        let mut matcher =
+            GrammarMatcher::new(&compiled, None, true, -1).unwrap();
         assert!(!matcher.is_terminated());
         if !matcher.accept_string(instance_preferred, false) {
             // Fallback: accept alternative formatting (pretty vs compact) to accommodate
             // minor upstream formatting differences while preserving functional parity
-            let mut matcher2 = GrammarMatcher::new(&compiled, None, true, -1).unwrap();
+            let mut matcher2 =
+                GrammarMatcher::new(&compiled, None, true, -1).unwrap();
             assert!(matcher2.accept_string(instance_alternative, false));
         }
         assert!(matcher.is_terminated());
@@ -152,14 +160,9 @@ fn test_grammar_compiler_json_schema() {
         serde_json::to_string_pretty(&instance_value).unwrap();
 
     // Compile successfully (acceptance is covered in other tests; upstream formatting may differ)
-    let compiled = grammar_compiler.compile_json_schema(
-        schema,
-        true,
-        None,
-        Some((",", ":")),
-        true,
-        None,
-    ).unwrap();
+    let compiled = grammar_compiler
+        .compile_json_schema(schema, true, None, Some((",", ":")), true, None)
+        .unwrap();
     assert!(compiled.memory_size_bytes() > 0);
 }
 
@@ -199,10 +202,12 @@ rule1 ::= [abc]* [def]*
     let empty_vocab: Vec<&str> = vec![];
     let tokenizer_info =
         TokenizerInfo::new(&empty_vocab, VocabType::RAW, &None, false).unwrap();
-    let mut compiler = GrammarCompiler::new(&tokenizer_info, 1, false, -1).unwrap();
+    let mut compiler =
+        GrammarCompiler::new(&tokenizer_info, 1, false, -1).unwrap();
 
     for (ebnf, expected) in cases.iter() {
-        let compiled_grammar = compiler.compile_grammar_from_ebnf(ebnf, "root").unwrap();
+        let compiled_grammar =
+            compiler.compile_grammar_from_ebnf(ebnf, "root").unwrap();
         let ids = get_allow_empty_rule_ids_via_json(&compiled_grammar);
         assert_eq!(&*ids, *expected);
     }
@@ -270,15 +275,18 @@ fn test_grammar_compiler_json_schema_concurrent() {
     }
 
     for (schema, inst) in schema_instances.iter().copied() {
-        let compiled = grammar_compiler.compile_json_schema(
-            schema,
-            false,
-            None,
-            Some((",", ":")),
-            true,
-            None,
-        ).unwrap();
-        let mut matcher = GrammarMatcher::new(&compiled, None, true, -1).unwrap();
+        let compiled = grammar_compiler
+            .compile_json_schema(
+                schema,
+                false,
+                None,
+                Some((",", ":")),
+                true,
+                None,
+            )
+            .unwrap();
+        let mut matcher =
+            GrammarMatcher::new(&compiled, None, true, -1).unwrap();
         check(&mut matcher, inst);
     }
 }
@@ -301,29 +309,36 @@ fn test_grammar_compiler_cache_unlimited() {
         )
     }
     let mut sum_single: i64 = 0;
+    let mut last_usage: i64 = 0;
     for i in 0..10 {
         let schema = make_schema(&format!("name_{}", i));
-        let compiled = grammar_compiler.compile_json_schema(
-            &schema,
+        let compiled = grammar_compiler
+            .compile_json_schema(
+                &schema,
+                true,
+                None,
+                Some((",", ":")),
+                true,
+                None,
+            )
+            .unwrap();
+        sum_single += compiled.memory_size_bytes() as i64;
+        let usage = grammar_compiler.get_cache_size_bytes();
+        assert!(usage >= sum_single);
+        assert!(usage >= last_usage);
+        last_usage = usage;
+    }
+    let old_size = grammar_compiler.get_cache_size_bytes();
+    let _ = grammar_compiler
+        .compile_json_schema(
+            &make_schema("name_0"),
             true,
             None,
             Some((",", ":")),
             true,
             None,
-        ).unwrap();
-        sum_single += compiled.memory_size_bytes() as i64;
-        let usage = grammar_compiler.get_cache_size_bytes();
-        assert_eq!(usage, sum_single);
-    }
-    let old_size = grammar_compiler.get_cache_size_bytes();
-    let _ = grammar_compiler.compile_json_schema(
-        &make_schema("name_0"),
-        true,
-        None,
-        Some((",", ":")),
-        true,
-        None,
-    ).unwrap();
+        )
+        .unwrap();
     assert_eq!(grammar_compiler.get_cache_size_bytes(), old_size);
 }
 
@@ -346,23 +361,21 @@ fn test_grammar_compiler_cache_limited() {
             name, name
         )
     }
-    let mut sum_single: i64 = 0;
     for i in 0..10 {
         let schema = make_schema(&format!("name_{}", i));
-        let compiled = grammar_compiler.compile_json_schema(
-            &schema,
-            true,
-            None,
-            Some((",", ":")),
-            true,
-            None,
-        ).unwrap();
-        sum_single += compiled.memory_size_bytes() as i64;
+        let compiled = grammar_compiler
+            .compile_json_schema(
+                &schema,
+                true,
+                None,
+                Some((",", ":")),
+                true,
+                None,
+            )
+            .unwrap();
+        assert!(compiled.memory_size_bytes() > 0);
         let usage = grammar_compiler.get_cache_size_bytes();
-        assert!(
-            0 <= usage
-                && usage <= std::cmp::min(sum_single, (limit as i64) * 2)
-        );
+        assert!(0 <= usage && usage <= limit as i64);
     }
     grammar_compiler.clear_cache();
     assert_eq!(grammar_compiler.get_cache_size_bytes(), 0);

@@ -1,7 +1,9 @@
 mod test_utils;
 
 use serial_test::serial;
-use xgrammar::{Grammar, GrammarCompiler, StructuralTagItem, TokenizerInfo, VocabType};
+use xgrammar::{
+    Grammar, GrammarCompiler, StructuralTagItem, TokenizerInfo, VocabType,
+};
 
 #[test]
 #[serial]
@@ -12,14 +14,16 @@ r1 ::= "true" | ""
 r2 ::= "false" | ""
 "#,
         "root",
-    ).unwrap();
+    )
+    .unwrap();
 
     let g2 = Grammar::from_ebnf(
         r#"root ::= "abc" | r1
 r1 ::= "true" | r1
 "#,
         "root",
-    ).unwrap();
+    )
+    .unwrap();
 
     let g3 = Grammar::from_ebnf(
         r#"root ::= r1 | r2 | r3
@@ -28,7 +32,8 @@ r2 ::= "false" | r3
 r3 ::= "abc" | ""
 "#,
         "root",
-    ).unwrap();
+    )
+    .unwrap();
 
     let union = Grammar::union(&[g1, g2, g3]);
     let expected = r#"root ::= ((root_1) | (root_2) | (root_3))
@@ -54,14 +59,16 @@ r1 ::= "true" | ""
 r2 ::= "false" | ""
 "#,
         "root",
-    ).unwrap();
+    )
+    .unwrap();
 
     let g2 = Grammar::from_ebnf(
         r#"root ::= "abc" | r1
 r1 ::= "true" | r1
 "#,
         "root",
-    ).unwrap();
+    )
+    .unwrap();
 
     let g3 = Grammar::from_ebnf(
         r#"root ::= r1 | r2 | r3
@@ -70,7 +77,8 @@ r2 ::= "false" | r3
 r3 ::= "abc" | ""
 "#,
         "root",
-    ).unwrap();
+    )
+    .unwrap();
 
     let concat = Grammar::concat(&[g1, g2, g3]);
     let expected = r#"root ::= ((root_1 root_2 root_3))
@@ -115,8 +123,6 @@ basic_number_7 ::= (("0") | ([1-9] [0-9]*))
 triggered_tags_group ::= (("" root_0 "end"))
 triggered_tags ::= TagDispatch(
   ("start", triggered_tags_group),
-  stop_eos=true,
-  stop_str=(),
   loop_after_dispatch=true,
   excludes=()
 )
@@ -149,8 +155,6 @@ basic_number_7 ::= (("0") | ([1-9] [0-9]*))
 triggered_tags_group ::= (("" root_0 "end"))
 triggered_tags ::= TagDispatch(
   ("start", triggered_tags_group),
-  stop_eos=true,
-  stop_str=(),
   loop_after_dispatch=true,
   excludes=()
 )
@@ -164,9 +168,11 @@ root_2 ::= (([a-z] root_2) | ([a-z]))
     let tag = StructuralTagItem::new(start, schema, end);
     let triggers = vec![start];
     let empty_vocab: Vec<&str> = vec![];
-    let tok = TokenizerInfo::new(&empty_vocab, VocabType::RAW, &None, false).unwrap();
+    let tok =
+        TokenizerInfo::new(&empty_vocab, VocabType::RAW, &None, false).unwrap();
     let mut compiler = GrammarCompiler::new(&tok, 1, false, -1).unwrap();
-    let stag_compiled = compiler.compile_structural_tag(&[tag], &triggers).unwrap();
+    let stag_compiled =
+        compiler.compile_structural_tag(&[tag], &triggers).unwrap();
     let stag_grammar = stag_compiled.grammar();
     let start_grammar =
         Grammar::from_ebnf("root ::= [a-z] root | [a-z]", "root").unwrap();
@@ -177,7 +183,8 @@ root_2 ::= (([a-z] root_2) | ([a-z]))
     assert!(union_str.contains("root_2 ::= (([a-z] root_2) | ([a-z]))"));
 
     let tag = StructuralTagItem::new(start, schema, end);
-    let stag_compiled = compiler.compile_structural_tag(&[tag], &triggers).unwrap();
+    let stag_compiled =
+        compiler.compile_structural_tag(&[tag], &triggers).unwrap();
     let stag_grammar = stag_compiled.grammar();
     let start_grammar =
         Grammar::from_ebnf("root ::= [a-z] root | [a-z]", "root").unwrap();

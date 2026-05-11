@@ -4,11 +4,11 @@ use serial_test::serial;
 use test_utils::is_grammar_accept_string;
 #[cfg(feature = "hf")]
 use test_utils::{create_bitmask_dltensor, make_hf_tokenizer_info};
-#[cfg(feature = "hf")]
-use xgrammar::{allocate_token_bitmask, testing, GrammarMatcher};
 use xgrammar::{
     CompiledGrammar, Grammar, GrammarCompiler, TokenizerInfo, VocabType,
 };
+#[cfg(feature = "hf")]
+use xgrammar::{GrammarMatcher, allocate_token_bitmask, testing};
 
 fn construct_grammar() -> Grammar {
     Grammar::from_ebnf(
@@ -16,7 +16,8 @@ fn construct_grammar() -> Grammar {
 root_rule ::= rule1 "a"
 "#,
         "root_rule",
-    ).unwrap()
+    )
+    .unwrap()
 }
 
 fn construct_tokenizer_info() -> TokenizerInfo {
@@ -28,13 +29,15 @@ fn construct_tokenizer_info() -> TokenizerInfo {
         Some(10),
         &stop_ids,
         true,
-    ).unwrap()
+    )
+    .unwrap()
 }
 
 fn construct_compiled_grammar() -> (CompiledGrammar, TokenizerInfo) {
     let tokenizer_info = construct_tokenizer_info();
     let grammar = construct_grammar();
-    let mut compiler = GrammarCompiler::new(&tokenizer_info, 1, false, -1).unwrap();
+    let mut compiler =
+        GrammarCompiler::new(&tokenizer_info, 1, false, -1).unwrap();
     let compiled = compiler.compile_grammar(&grammar).unwrap();
     (compiled, tokenizer_info)
 }
@@ -51,7 +54,7 @@ fn test_serialize_grammar_roundtrip() {
 #[test]
 #[serial]
 fn test_get_serialization_version() {
-    assert_eq!(xgrammar::get_serialization_version(), "v8");
+    assert_eq!(xgrammar::get_serialization_version(), "v11");
 }
 
 #[test]
@@ -112,8 +115,10 @@ fn test_serialize_compiled_grammar_functional() {
     let recovered = CompiledGrammar::deserialize_json(&s, &tok)
         .expect("deserialize compiled grammar");
 
-    let mut m1 = xgrammar::GrammarMatcher::new(&orig_cg, None, true, -1).unwrap();
-    let mut m2 = xgrammar::GrammarMatcher::new(&recovered, None, true, -1).unwrap();
+    let mut m1 =
+        xgrammar::GrammarMatcher::new(&orig_cg, None, true, -1).unwrap();
+    let mut m2 =
+        xgrammar::GrammarMatcher::new(&recovered, None, true, -1).unwrap();
     let input = "aaa";
     assert_eq!(m1.accept_string(input, false), m2.accept_string(input, false));
     assert_eq!(m1.is_terminated(), m2.is_terminated());
@@ -179,7 +184,8 @@ fn test_serialize_tokenizer_info() {
         VocabType::BYTE_FALLBACK,
         &Some(stop_ids),
         true,
-    ).unwrap();
+    )
+    .unwrap();
 
     let serialized = tok.serialize_json();
     let parsed: serde_json::Value = serde_json::from_str(&serialized).unwrap();
@@ -199,7 +205,8 @@ fn test_serialize_tokenizer_info_functional() {
         VocabType::BYTE_FALLBACK,
         &Some(stop_ids),
         true,
-    ).unwrap();
+    )
+    .unwrap();
 
     let serialized = tok.serialize_json();
     let deserialized = TokenizerInfo::deserialize_json(&serialized).unwrap();
@@ -228,46 +235,50 @@ fn test_serialize_compiled_grammar() {
 #[cfg(feature = "hf")]
 fn test_serialize_compiled_grammar_with_hf_tokenizer() {
     // Test CompiledGrammar serialization with a real HuggingFace tokenizer.
-    let tokenizer_path = test_utils::download_tokenizer_json(
-        "meta-llama/Llama-3.1-8B-Instruct",
-    )
-    .expect("download tokenizer.json");
-    let tokenizer =
-        tokenizers::Tokenizer::from_file(&tokenizer_path).unwrap();
-    let tokenizer_info = TokenizerInfo::from_huggingface(&tokenizer, None, None)
-        .unwrap();
+    let tokenizer_path =
+        test_utils::download_tokenizer_json("meta-llama/Llama-3.1-8B-Instruct")
+            .expect("download tokenizer.json");
+    let tokenizer = tokenizers::Tokenizer::from_file(&tokenizer_path).unwrap();
+    let tokenizer_info =
+        TokenizerInfo::from_huggingface(&tokenizer, None, None).unwrap();
     let mut grammar_compiler =
         GrammarCompiler::new(&tokenizer_info, 1, false, -1).unwrap();
 
     let schema = r#"{"type":"object","properties":{"name":{"type":"string"},"age":{"type":"integer"}},"required":["name","age"]}"#;
     let compiled = grammar_compiler
-        .compile_json_schema(schema, true, None, None::<(&str, &str)>, true, None)
+        .compile_json_schema(
+            schema,
+            true,
+            None,
+            None::<(&str, &str)>,
+            true,
+            None,
+        )
         .unwrap();
 
     let tokenizer_info_json = tokenizer_info.serialize_json();
     let tokenizer_info_recovered =
         TokenizerInfo::deserialize_json(&tokenizer_info_json).unwrap();
     let serialized = compiled.serialize_json();
-    let recovered_compiled =
-        CompiledGrammar::deserialize_json(&serialized, &tokenizer_info_recovered)
-            .unwrap();
+    let recovered_compiled = CompiledGrammar::deserialize_json(
+        &serialized,
+        &tokenizer_info_recovered,
+    )
+    .unwrap();
 
     let test_json = r#"{"name": "John", "age": 30}"#;
-    let ids = tokenizer
-        .encode(test_json, true)
-        .expect("encode")
-        .get_ids()
-        .to_vec();
-    let token_ids = if ids.len() > 1 { &ids[1..] } else { &ids[..] };
+    let ids =
+        tokenizer.encode(test_json, true).expect("encode").get_ids().to_vec();
+    let token_ids = if ids.len() > 1 {
+        &ids[1..]
+    } else {
+        &ids[..]
+    };
     let mut matcher =
         GrammarMatcher::new(&recovered_compiled, None, true, -1).unwrap();
-    let mut bitmask =
-        allocate_token_bitmask(1, tokenizer_info.vocab_size());
-    let (mut tensor, _shape, _strides) = create_bitmask_dltensor(
-        &mut bitmask,
-        1,
-        tokenizer_info.vocab_size(),
-    );
+    let mut bitmask = allocate_token_bitmask(1, tokenizer_info.vocab_size());
+    let (mut tensor, _shape, _strides) =
+        create_bitmask_dltensor(&mut bitmask, 1, tokenizer_info.vocab_size());
 
     for &token_id in token_ids {
         matcher.fill_next_token_bitmask(&mut tensor, 0, false);

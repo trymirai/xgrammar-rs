@@ -5,7 +5,9 @@ use test_utils::*;
 
 use xgrammar::{Grammar, testing};
 #[cfg(feature = "hf")]
-use xgrammar::{GrammarCompiler, GrammarMatcher, TokenizerInfo, allocate_token_bitmask};
+use xgrammar::{
+    GrammarCompiler, GrammarMatcher, TokenizerInfo, allocate_token_bitmask,
+};
 
 #[cfg(feature = "hf")]
 fn get_stop_token_id(tokenizer_info: &TokenizerInfo) -> Option<i32> {
@@ -155,7 +157,9 @@ fn test_consecutive_quantifiers() {
     for regex in bad {
         let err = testing::regex_to_ebnf(regex, true).unwrap_err();
         assert!(
-            err.contains("Two consecutive repetition modifiers are not allowed."),
+            err.contains(
+                "Two consecutive repetition modifiers are not allowed."
+            ),
             "unexpected error for {regex}: {err}"
         );
     }
@@ -327,8 +331,8 @@ fn test_group_modifiers() {
 
     // Test unsupported group modifiers
     let unsupported = [
-        ("(?=abc)", "Lookahead is not supported yet."),  // Positive lookahead
-        ("(?!abc)", "Lookahead is not supported yet."),  // Negative lookahead
+        ("(?=abc)", "Lookahead is not supported yet."), // Positive lookahead
+        ("(?!abc)", "Lookahead is not supported yet."), // Negative lookahead
         ("(?<=abc)", "Lookbehind is not supported yet."), // Positive lookbehind
         ("(?<!abc)", "Lookbehind is not supported yet."), // Negative lookbehind
         ("(?i)abc", "Group modifier flag is not supported yet."), // Case-insensitive flag
@@ -477,26 +481,25 @@ fn test_mask_generation() {
                 tokenizer_path, regex, instance
             );
 
-            let tokenizer_path = test_utils::download_tokenizer_json(tokenizer_path)
-                .expect("download tokenizer.json");
+            let tokenizer_path =
+                test_utils::download_tokenizer_json(tokenizer_path)
+                    .expect("download tokenizer.json");
             let tokenizer =
                 tokenizers::Tokenizer::from_file(&tokenizer_path).unwrap();
             let tokenizer_info =
-                TokenizerInfo::from_huggingface(&tokenizer, None, None).unwrap();
+                TokenizerInfo::from_huggingface(&tokenizer, None, None)
+                    .unwrap();
             let mut grammar_compiler =
                 GrammarCompiler::new(&tokenizer_info, 1, false, -1).unwrap();
 
             let time_start = std::time::Instant::now();
             let ebnf = testing::regex_to_ebnf(regex, true).unwrap();
             let grammar = Grammar::from_ebnf(&ebnf, "root").unwrap();
-            let compiled =
-                grammar_compiler.compile_grammar(&grammar).unwrap();
+            let compiled = grammar_compiler.compile_grammar(&grammar).unwrap();
             let time_end = time_start.elapsed();
-            println!(
-                "Time for preprocessing: {} us",
-                time_end.as_micros()
-            );
-            let mut matcher = GrammarMatcher::new(&compiled, None, true, -1).unwrap();
+            println!("Time for preprocessing: {} us", time_end.as_micros());
+            let mut matcher =
+                GrammarMatcher::new(&compiled, None, true, -1).unwrap();
             let mut token_bitmask =
                 allocate_token_bitmask(1, tokenizer_info.vocab_size());
             let (mut tensor, _shape, _strides) = create_bitmask_dltensor(

@@ -66,12 +66,12 @@ fn test_regex_accept() {
 #[serial]
 fn test_regex_refuse() {
     let patterns = [
-        r"a{,3}", // Invalid range
+        r"a{,3}",  // Invalid range
         r"a{3,2}", // Invalid range (max < min)
-        r"[z-a]", // Invalid range (max < min)
-        r"a++", // Invalid repetition
-        r"(?=a)", // Lookahead not supported
-        r"(?!a)", // Negative lookahead not supported
+        r"[z-a]",  // Invalid range (max < min)
+        r"a++",    // Invalid repetition
+        r"(?=a)",  // Lookahead not supported
+        r"(?!a)",  // Negative lookahead not supported
     ];
     for p in patterns {
         assert!(Grammar::from_regex(p, false).is_err());
@@ -157,7 +157,8 @@ fn test_fill_next_token_bitmask() {
         // Note: Using Llama-2 instead of Llama-3 due to authentication requirements
         let tokenizer_info =
             make_hf_tokenizer_info("meta-llama/Llama-2-7b-chat-hf");
-        let mut compiler = GrammarCompiler::new(&tokenizer_info, 8, false, -1).unwrap();
+        let mut compiler =
+            GrammarCompiler::new(&tokenizer_info, 8, false, -1).unwrap();
 
         let compiled_grammar = compiler.compile_regex(regex).unwrap();
         let mut matcher =
@@ -210,12 +211,12 @@ fn test_regex_with_large_range_compilation() {
     // Note: Using Llama-2 instead of Llama-3 due to authentication requirements
     let tokenizer_info =
         make_hf_tokenizer_info("meta-llama/Llama-2-7b-chat-hf");
-    let mut compiler = GrammarCompiler::new(&tokenizer_info, 8, false, -1).unwrap();
+    let mut compiler =
+        GrammarCompiler::new(&tokenizer_info, 8, false, -1).unwrap();
 
     let _ = compiler.compile_regex(regex_with_large_range);
     // Test passes if compilation succeeds without panic
 }
-
 
 #[test]
 #[serial]
@@ -223,7 +224,8 @@ fn test_regex_with_large_range_compilation() {
 fn test_regression_lookahead_already_completed() {
     let tokenizer_info = make_hf_tokenizer_info("Qwen/Qwen2.5-0.5B");
     let regex = r"[0-9]+";
-    let mut compiler = GrammarCompiler::new(&tokenizer_info, 1, false, -1).unwrap();
+    let mut compiler =
+        GrammarCompiler::new(&tokenizer_info, 1, false, -1).unwrap();
     let grammar = Grammar::from_regex(regex, false).unwrap();
     let compiled = compiler.compile_grammar(&grammar).unwrap();
     let mut matcher = GrammarMatcher::new(&compiled, None, true, -1).unwrap();

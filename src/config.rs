@@ -6,7 +6,7 @@ use crate::ffi::xgrammar::{
     SetMaxRecursionDepth as FFISetMaxRecursionDepth,
 };
 
-/// Get the serialization version number. The current version is "v4".
+/// Get the serialization version number. The current version is "v11".
 ///
 /// Returns
 /// -------

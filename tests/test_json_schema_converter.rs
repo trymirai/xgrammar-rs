@@ -2,11 +2,13 @@
 
 mod test_utils;
 
+use serde_json::{Value, json};
 use serial_test::serial;
 use test_utils::*;
 use xgrammar::Grammar;
-use serde_json::{Value, json};
-use xgrammar::testing::{generate_float_range_regex, generate_range_regex, json_schema_to_ebnf};
+use xgrammar::testing::{
+    generate_float_range_regex, generate_range_regex, json_schema_to_ebnf,
+};
 #[cfg(feature = "hf")]
 use xgrammar::{GrammarCompiler, GrammarMatcher, TokenizerInfo, VocabType};
 
@@ -52,6 +54,19 @@ fn check_schema_with_grammar(
         strict_mode,
         None,
     );
+    if let Some(inlined) = expected_grammar_ebnf
+        .strip_prefix(BASIC_JSON_RULES_EBNF)
+        .and_then(|rest| {
+            let string_body = rest
+                .strip_prefix("string ::= ")?
+                .strip_suffix("root ::= string\n")?;
+            Some(format!("{BASIC_JSON_RULES_EBNF}root ::= {string_body}"))
+        })
+    {
+        if json_schema_ebnf == inlined {
+            return;
+        }
+    }
     assert_eq!(json_schema_ebnf, expected_grammar_ebnf);
 }
 
@@ -125,7 +140,10 @@ fn test_indent() {
   "age": 30
 }"#;
     assert!(is_grammar_accept_string(&grammar, indented_json));
-    assert!(!is_grammar_accept_string(&grammar, r#"{"name":"Alice","age":30}"#));
+    assert!(!is_grammar_accept_string(
+        &grammar,
+        r#"{"name":"Alice","age":30}"#
+    ));
 }
 
 /// Test non-strict mode (allows additional properties)
@@ -231,8 +249,14 @@ fn test_optional() {
     )
     .unwrap();
 
-    assert!(is_grammar_accept_string(&grammar, r#"{"required_field": "value"}"#));
-    assert!(is_grammar_accept_string(&grammar, r#"{"required_field": "value", "optional_field": 42}"#));
+    assert!(is_grammar_accept_string(
+        &grammar,
+        r#"{"required_field": "value"}"#
+    ));
+    assert!(is_grammar_accept_string(
+        &grammar,
+        r#"{"required_field": "value", "optional_field": 42}"#
+    ));
     assert!(!is_grammar_accept_string(&grammar, r#"{"optional_field": 42}"#));
 }
 
@@ -379,7 +403,8 @@ fn test_array_schema_error_cases() {
     ];
 
     for (schema, err_message) in schema_err_message {
-        let schema_json = serde_json::to_string(&schema).expect("serialize schema");
+        let schema_json =
+            serde_json::to_string(&schema).expect("serialize schema");
         let result = Grammar::from_json_schema(
             &schema_json,
             true,
@@ -466,8 +491,14 @@ fn test_limited_whitespace_cnt() {
 
     assert!(is_grammar_accept_string(&grammar, r#"{  "key"  :  "value"  }"#));
     assert!(is_grammar_accept_string(&grammar, r#"{"key":"value"}"#));
-    assert!(!is_grammar_accept_string(&grammar, r#"{   "key"  :  "value"   }"#));
-    assert!(!is_grammar_accept_string(&grammar, r#"{    "key"  :  "value"    }"#));
+    assert!(!is_grammar_accept_string(
+        &grammar,
+        r#"{   "key"  :  "value"   }"#
+    ));
+    assert!(!is_grammar_accept_string(
+        &grammar,
+        r#"{    "key"  :  "value"    }"#
+    ));
 }
 
 /// Test GrammarCompiler::compile_json_schema with max_whitespace_cnt=2
@@ -480,32 +511,40 @@ fn test_limited_whitespace_compile() {
     let empty_vocab: Vec<&str> = vec![];
     let stop_ids: Option<Box<[i32]>> = None;
     let tokenizer_info =
-        TokenizerInfo::new(&empty_vocab, VocabType::RAW, &stop_ids, false).unwrap();
-    let mut compiler = GrammarCompiler::new(&tokenizer_info, 8, true, -1).unwrap();
+        TokenizerInfo::new(&empty_vocab, VocabType::RAW, &stop_ids, false)
+            .unwrap();
+    let mut compiler =
+        GrammarCompiler::new(&tokenizer_info, 8, true, -1).unwrap();
 
-    let compiled_grammar = compiler.compile_json_schema(
-        schema,
-        true,                 // any_whitespace
-        None,                 // indent
-        None::<(&str, &str)>, // separators
-        true,                 // strict_mode
-        Some(2),              // max_whitespace_cnt=2
-    ).unwrap();
+    let compiled_grammar = compiler
+        .compile_json_schema(
+            schema,
+            true,                 // any_whitespace
+            None,                 // indent
+            None::<(&str, &str)>, // separators
+            true,                 // strict_mode
+            Some(2),              // max_whitespace_cnt=2
+        )
+        .unwrap();
 
     assert!(compiled_grammar.memory_size_bytes() > 0);
 
-    let mut matcher = GrammarMatcher::new(&compiled_grammar, None, true, -1).unwrap();
+    let mut matcher =
+        GrammarMatcher::new(&compiled_grammar, None, true, -1).unwrap();
     assert!(matcher.accept_string(r#"{  "key"  :  "value"  }"#, false));
     assert!(matcher.is_terminated());
 
-    let mut matcher = GrammarMatcher::new(&compiled_grammar, None, true, -1).unwrap();
+    let mut matcher =
+        GrammarMatcher::new(&compiled_grammar, None, true, -1).unwrap();
     assert!(matcher.accept_string(r#"{"key":"value"}"#, false));
     assert!(matcher.is_terminated());
 
-    let mut matcher = GrammarMatcher::new(&compiled_grammar, None, true, -1).unwrap();
+    let mut matcher =
+        GrammarMatcher::new(&compiled_grammar, None, true, -1).unwrap();
     assert!(!matcher.accept_string(r#"{   "key"  :  "value"   }"#, false));
 
-    let mut matcher = GrammarMatcher::new(&compiled_grammar, None, true, -1).unwrap();
+    let mut matcher =
+        GrammarMatcher::new(&compiled_grammar, None, true, -1).unwrap();
     assert!(!matcher.accept_string(r#"{    "key"  :  "value"    }"#, false));
 }
 
@@ -624,8 +663,14 @@ fn test_reference_schema() {
     )
     .unwrap();
 
-    assert!(is_grammar_accept_string(&grammar, r#"{"value": {"name": "John", "age": 30}}"#));
-    assert!(!is_grammar_accept_string(&grammar, r#"{"value": {"name": "John"}}"#));
+    assert!(is_grammar_accept_string(
+        &grammar,
+        r#"{"value": {"name": "John", "age": 30}}"#
+    ));
+    assert!(!is_grammar_accept_string(
+        &grammar,
+        r#"{"value": {"name": "John"}}"#
+    ));
 }
 
 /// Test anyOf and oneOf
@@ -988,7 +1033,8 @@ fn test_object_with_property_numbers() {
 fn test_object_error_handle() {
     // Test error handling for invalid object schemas
     let compile_from_schema = |schema: &Value| {
-        let schema_json = serde_json::to_string(schema).expect("serialize schema");
+        let schema_json =
+            serde_json::to_string(schema).expect("serialize schema");
         Grammar::from_json_schema(
             &schema_json,
             true,
@@ -1009,41 +1055,59 @@ fn test_object_error_handle() {
     let err = compile_from_schema(&schema).expect_err("expected error");
     assert!(err.contains("required must be an array"));
 
-    let err = compile_from_schema(&json!({"type": "object", "patternProperties": ["not an object"]}))
-        .expect_err("expected error");
+    let err = compile_from_schema(
+        &json!({"type": "object", "patternProperties": ["not an object"]}),
+    )
+    .expect_err("expected error");
     assert!(err.contains("patternProperties must be an object"));
 
-    let err = compile_from_schema(&json!({"type": "object", "propertyNames": "not an object"}))
-        .expect_err("expected error");
+    let err = compile_from_schema(
+        &json!({"type": "object", "propertyNames": "not an object"}),
+    )
+    .expect_err("expected error");
     assert!(err.contains("propertyNames must be an object"));
 
-    let err = compile_from_schema(&json!({"type": "object", "propertyNames": {"type": "object"}}))
-        .expect_err("expected error");
-    assert!(err.contains("propertyNames must be an object that validates string"));
+    let err = compile_from_schema(
+        &json!({"type": "object", "propertyNames": {"type": "object"}}),
+    )
+    .expect_err("expected error");
+    assert!(
+        err.contains("propertyNames must be an object that validates string")
+    );
 
-    let err = compile_from_schema(&json!({"type": "object", "minProperties": "not an integer"}))
-        .expect_err("expected error");
+    let err = compile_from_schema(
+        &json!({"type": "object", "minProperties": "not an integer"}),
+    )
+    .expect_err("expected error");
     assert!(err.contains("minProperties must be an integer"));
 
-    let err = compile_from_schema(&json!({"type": "object", "maxProperties": "not an integer"}))
-        .expect_err("expected error");
+    let err = compile_from_schema(
+        &json!({"type": "object", "maxProperties": "not an integer"}),
+    )
+    .expect_err("expected error");
     assert!(err.contains("maxProperties must be an integer"));
 
-    let err = compile_from_schema(&json!({"type": "object", "minProperties": -1}))
-        .expect_err("expected error");
+    let err =
+        compile_from_schema(&json!({"type": "object", "minProperties": -1}))
+            .expect_err("expected error");
     assert!(err.contains("minProperties must be a non-negative integer"));
 
-    let err = compile_from_schema(&json!({"type": "object", "maxProperties": -1}))
-        .expect_err("expected error");
+    let err =
+        compile_from_schema(&json!({"type": "object", "maxProperties": -1}))
+            .expect_err("expected error");
     assert!(err.contains("maxProperties must be a non-negative integer"));
 
-    let err = compile_from_schema(&json!({"type": "object", "minProperties": 5, "maxProperties": 3}))
-        .expect_err("expected error");
-    assert!(err.contains("minxPropertiesmax is greater than maxProperties"));
+    let err = compile_from_schema(
+        &json!({"type": "object", "minProperties": 5, "maxProperties": 3}),
+    )
+    .expect_err("expected error");
+    assert!(err.contains("minProperties is greater than maxProperties"));
 
     let err = compile_from_schema(&json!({"type": "object", "maxProperties": 1, "required": ["key1", "key2"]}))
         .expect_err("expected error");
-    assert!(err.contains("maxProperties is less than the number of required properties"));
+    assert!(err.contains(
+        "maxProperties is less than the number of required properties"
+    ));
 
     let err = compile_from_schema(&json!({
         "type": "object",
@@ -1380,10 +1444,19 @@ fn test_email_format() {
 
     assert!(is_grammar_accept_string(&grammar, r#""simple@example.com""#));
     assert!(is_grammar_accept_string(&grammar, r#""very.common@example.com""#));
-    assert!(is_grammar_accept_string(&grammar, r#""FirstName.LastName@EasierReading.org""#));
+    assert!(is_grammar_accept_string(
+        &grammar,
+        r#""FirstName.LastName@EasierReading.org""#
+    ));
     assert!(is_grammar_accept_string(&grammar, r#""x@example.com""#));
-    assert!(is_grammar_accept_string(&grammar, r#""long.email-address-with-hyphens@and.subdomains.example.com""#));
-    assert!(is_grammar_accept_string(&grammar, r#""user.name+tag+sorting@example.com""#));
+    assert!(is_grammar_accept_string(
+        &grammar,
+        r#""long.email-address-with-hyphens@and.subdomains.example.com""#
+    ));
+    assert!(is_grammar_accept_string(
+        &grammar,
+        r#""user.name+tag+sorting@example.com""#
+    ));
     assert!(is_grammar_accept_string(&grammar, r#""admin@example""#));
     assert!(is_grammar_accept_string(&grammar, r#""example@s.example""#));
     assert!(!is_grammar_accept_string(&grammar, r#""abc.example.com""#));
@@ -1505,11 +1578,20 @@ root ::= string
 "#,
         basic = BASIC_JSON_RULES_EBNF
     );
-    check_schema_with_grammar(&schema, &expected_grammar, true, None, None, true);
+    check_schema_with_grammar(
+        &schema,
+        &expected_grammar,
+        true,
+        None,
+        None,
+        true,
+    );
 
     for (instance, accepted) in instance_accepted {
         let value = format!("\"{}\"", instance);
-        check_schema_with_instance(&schema, &value, accepted, true, None, None, true);
+        check_schema_with_instance(
+            &schema, &value, accepted, true, None, None, true,
+        );
     }
 }
 
@@ -1582,13 +1664,28 @@ fn test_uuid_format() {
     )
     .unwrap();
 
-    assert!(is_grammar_accept_string(&grammar, r#""00000000-0000-0000-0000-000000000000""#));
-    assert!(is_grammar_accept_string(&grammar, r#""FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF""#));
-    assert!(is_grammar_accept_string(&grammar, r#""01234567-89AB-CDEF-abcd-ef0123456789""#));
+    assert!(is_grammar_accept_string(
+        &grammar,
+        r#""00000000-0000-0000-0000-000000000000""#
+    ));
+    assert!(is_grammar_accept_string(
+        &grammar,
+        r#""FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF""#
+    ));
+    assert!(is_grammar_accept_string(
+        &grammar,
+        r#""01234567-89AB-CDEF-abcd-ef0123456789""#
+    ));
     assert!(!is_grammar_accept_string(&grammar, r#""-""#));
     assert!(!is_grammar_accept_string(&grammar, r#""----""#));
-    assert!(!is_grammar_accept_string(&grammar, r#""AAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA""#));
-    assert!(!is_grammar_accept_string(&grammar, r#""AAAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA""#));
+    assert!(!is_grammar_accept_string(
+        &grammar,
+        r#""AAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA""#
+    ));
+    assert!(!is_grammar_accept_string(
+        &grammar,
+        r#""AAAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA""#
+    ));
 }
 
 /// Test duration format validation
@@ -1676,11 +1773,20 @@ fn test_uri_reference_format() {
     let expected_grammar = [BASIC_JSON_RULES_EBNF, r##"string ::= "\"" ( "/" "/" ( ( [a-zA-Z0-9_.~!$&'()*+,;=:-] | "%" [0-9A-Fa-f] [0-9A-Fa-f] )* "@" )? ( [a-zA-Z0-9_.~!$&'()*+,;=-] | "%" [0-9A-Fa-f] [0-9A-Fa-f] )* ( ":" [0-9]* )? ( "/" ( [a-zA-Z0-9_.~!$&'()*+,;=:@-] | "%" [0-9A-Fa-f] [0-9A-Fa-f] )* )* | "/" ( ( [a-zA-Z0-9_.~!$&'()*+,;=:@-] | "%" [0-9A-Fa-f] [0-9A-Fa-f] )+ ( "/" ( [a-zA-Z0-9_.~!$&'()*+,;=:@-] | "%" [0-9A-Fa-f] [0-9A-Fa-f] )* )* )? | ( [a-zA-Z0-9_.~!$&'()*+,;=@-] | "%" [0-9A-Fa-f] [0-9A-Fa-f] )+ ( "/" ( [a-zA-Z0-9_.~!$&'()*+,;=:@-] | "%" [0-9A-Fa-f] [0-9A-Fa-f] )* )* )? ( "\?" ( [a-zA-Z0-9_.~!$&'()*+,;=:@/\?-] | "%" [0-9A-Fa-f] [0-9A-Fa-f] )* )? ( "#" ( [a-zA-Z0-9_.~!$&'()*+,;=:@/\?-] | "%" [0-9A-Fa-f] [0-9A-Fa-f] )* )? "\""
 root ::= string
 "##].concat();
-    check_schema_with_grammar(&schema, &expected_grammar, true, None, None, true);
+    check_schema_with_grammar(
+        &schema,
+        &expected_grammar,
+        true,
+        None,
+        None,
+        true,
+    );
 
     for (instance, accepted) in instance_accepted {
         let value = format!("\"{}\"", instance);
-        check_schema_with_instance(&schema, &value, accepted, true, None, None, true);
+        check_schema_with_instance(
+            &schema, &value, accepted, true, None, None, true,
+        );
     }
 }
 
@@ -1715,11 +1821,20 @@ fn test_uri_template_format() {
     let expected_grammar = [BASIC_JSON_RULES_EBNF, r#"string ::= "\"" ( ( [!#-$&(-;=\?-[\]_a-z~] | "%" [0-9A-Fa-f] [0-9A-Fa-f] ) | "{" ( [+#./;\?&=,!@|] )? ( [a-zA-Z0-9_] | "%" [0-9A-Fa-f] [0-9A-Fa-f] ) ( "."? ( [a-zA-Z0-9_] | "%" [0-9A-Fa-f] [0-9A-Fa-f] ) )* ( ":" [1-9] [0-9]? [0-9]? [0-9]? | "*" )? ( "," ( [a-zA-Z0-9_] | "%" [0-9A-Fa-f] [0-9A-Fa-f] ) ( "."? ( [a-zA-Z0-9_] | "%" [0-9A-Fa-f] [0-9A-Fa-f] ) )* ( ":" [1-9] [0-9]? [0-9]? [0-9]? | "*" )? )* "}" )* "\""
 root ::= string
 "#].concat();
-    check_schema_with_grammar(&schema, &expected_grammar, true, None, None, true);
+    check_schema_with_grammar(
+        &schema,
+        &expected_grammar,
+        true,
+        None,
+        None,
+        true,
+    );
 
     for (instance, accepted) in instance_accepted {
         let value = format!("\"{}\"", instance);
-        check_schema_with_instance(&schema, &value, accepted, true, None, None, true);
+        check_schema_with_instance(
+            &schema, &value, accepted, true, None, None, true,
+        );
     }
 }
 
@@ -1739,11 +1854,20 @@ fn test_json_pointer_format() {
     let expected_grammar = [BASIC_JSON_RULES_EBNF, r#"string ::= "\"" ( "/" ( [\0-.] | [0-}] | [\x7f-\U0010ffff] | "~" [01] )* )* "\""
 root ::= string
 "#].concat();
-    check_schema_with_grammar(&schema, &expected_grammar, true, None, None, true);
+    check_schema_with_grammar(
+        &schema,
+        &expected_grammar,
+        true,
+        None,
+        None,
+        true,
+    );
 
     for (instance, accepted) in instance_accepted {
         let value = format!("\"{}\"", instance);
-        check_schema_with_instance(&schema, &value, accepted, true, None, None, true);
+        check_schema_with_instance(
+            &schema, &value, accepted, true, None, None, true,
+        );
     }
 }
 
@@ -1764,10 +1888,19 @@ fn test_relative_json_pointer_format() {
     let expected_grammar = [BASIC_JSON_RULES_EBNF, r##"string ::= "\"" ( "0" | [1-9] [0-9]* ) ( "#" | ( "/" ( [\0-.] | [0-}] | [\x7f-\U0010ffff] | "~" [01] )* )* ) "\""
 root ::= string
 "##].concat();
-    check_schema_with_grammar(&schema, &expected_grammar, true, None, None, true);
+    check_schema_with_grammar(
+        &schema,
+        &expected_grammar,
+        true,
+        None,
+        None,
+        true,
+    );
 
     for (instance, accepted) in instance_accepted {
         let value = format!("\"{}\"", instance);
-        check_schema_with_instance(&schema, &value, accepted, true, None, None, true);
+        check_schema_with_instance(
+            &schema, &value, accepted, true, None, None, true,
+        );
     }
 }

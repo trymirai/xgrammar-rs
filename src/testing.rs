@@ -1,9 +1,7 @@
 use autocxx::prelude::*;
 
 use crate::{
-    DLTensor, cxx_utils, ffi,
-    grammar::Grammar,
-    matcher::GrammarMatcher,
+    DLTensor, cxx_utils, ffi, grammar::Grammar, matcher::GrammarMatcher,
 };
 
 /// Convert EBNF to Grammar without normalization.
@@ -18,10 +16,15 @@ use crate::{
 /// # Returns
 ///
 /// The constructed grammar.
-pub fn ebnf_to_grammar_no_normalization(ebnf_string: &str, root_rule_name: &str) -> Grammar {
+pub fn ebnf_to_grammar_no_normalization(
+    ebnf_string: &str,
+    root_rule_name: &str,
+) -> Grammar {
     let ebnf_cxx = ffi::make_string(ebnf_string);
     let root_cxx = ffi::make_string(root_rule_name);
-    Grammar::from_unique_ptr(cxx_utils::ebnf_to_grammar_no_normalization(&ebnf_cxx, &root_cxx))
+    Grammar::from_unique_ptr(cxx_utils::ebnf_to_grammar_no_normalization(
+        &ebnf_cxx, &root_cxx,
+    ))
 }
 
 /// Convert a JSON schema to EBNF grammar string.
@@ -146,7 +149,10 @@ pub fn is_single_token_bitmask(
     }
 }
 
-pub fn regex_to_ebnf(regex: &str, with_rule_name: bool) -> Result<String, String> {
+pub fn regex_to_ebnf(
+    regex: &str,
+    with_rule_name: bool,
+) -> Result<String, String> {
     cxx::let_cxx_string!(regex_cxx = regex);
     cxx::let_cxx_string!(error_out_cxx = "");
     let out = unsafe {
@@ -187,7 +193,10 @@ pub fn traverse_draft_tree(
     Ok(())
 }
 
-pub fn generate_range_regex(start: Option<i64>, end: Option<i64>) -> Result<String, String> {
+pub fn generate_range_regex(
+    start: Option<i64>,
+    end: Option<i64>,
+) -> Result<String, String> {
     let has_start = start.is_some();
     let start_val = start.unwrap_or(0);
     let has_end = end.is_some();

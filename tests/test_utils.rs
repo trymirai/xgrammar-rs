@@ -8,6 +8,23 @@ use xgrammar::{
     allocate_token_bitmask, get_bitmask_shape,
 };
 
+#[cfg(feature = "hf")]
+fn public_tokenizer_model_id(model_id: &str) -> &str {
+    match model_id {
+        "meta-llama/Llama-2-7b-chat-hf" => {
+            "hf-internal-testing/llama-tokenizer"
+        },
+        "meta-llama/Meta-Llama-3-8B-Instruct" => {
+            "NousResearch/Meta-Llama-3-8B-Instruct"
+        },
+        "meta-llama/Meta-Llama-3.1-8B-Instruct"
+        | "meta-llama/Llama-3.1-8B-Instruct" => {
+            "NousResearch/Meta-Llama-3.1-8B-Instruct"
+        },
+        _ => model_id,
+    }
+}
+
 /// Download tokenizer.json from HuggingFace model hub
 #[cfg(feature = "hf")]
 #[allow(dead_code)]
@@ -20,7 +37,8 @@ pub fn download_tokenizer_json(
         .with_token(token)
         .build()
         .map_err(|e| e.to_string())?;
-    let repo = api.repo(Repo::model(model_id.to_string()));
+    let repo =
+        api.repo(Repo::model(public_tokenizer_model_id(model_id).to_string()));
     repo.get("tokenizer.json").map_err(|e| e.to_string())
 }
 
@@ -28,14 +46,15 @@ pub fn download_tokenizer_json(
 #[cfg(feature = "hf")]
 #[allow(dead_code)]
 pub fn download_tokenizer_config_json(
-    model_id: &str,
+    model_id: &str
 ) -> Result<std::path::PathBuf, String> {
     let token = std::env::var("HF_TOKEN").ok();
     let api = ApiBuilder::new()
         .with_token(token)
         .build()
         .map_err(|e| e.to_string())?;
-    let repo = api.repo(Repo::model(model_id.to_string()));
+    let repo =
+        api.repo(Repo::model(public_tokenizer_model_id(model_id).to_string()));
     repo.get("tokenizer_config.json").map_err(|e| e.to_string())
 }
 
@@ -83,7 +102,8 @@ pub fn extract_ordered_vocab(tk: &tokenizers::Tokenizer) -> Box<[String]> {
 pub fn make_hf_tokenizer_info(model_id: &str) -> TokenizerInfo {
     let path =
         download_tokenizer_json(model_id).expect("download tokenizer.json");
-    let tokenizer = tokenizers::Tokenizer::from_file(&path).expect("load tokenizer");
+    let tokenizer =
+        tokenizers::Tokenizer::from_file(&path).expect("load tokenizer");
     TokenizerInfo::from_huggingface(&tokenizer, None, None).unwrap()
 }
 
@@ -92,8 +112,10 @@ pub fn matcher_from_grammar(grammar: &Grammar) -> GrammarMatcher {
     let empty_vocab: Vec<&str> = vec![];
     let stop_ids: Option<Box<[i32]>> = None;
     let tokenizer_info =
-        TokenizerInfo::new(&empty_vocab, VocabType::RAW, &stop_ids, false).unwrap();
-    let mut compiler = GrammarCompiler::new(&tokenizer_info, 1, false, -1).unwrap();
+        TokenizerInfo::new(&empty_vocab, VocabType::RAW, &stop_ids, false)
+            .unwrap();
+    let mut compiler =
+        GrammarCompiler::new(&tokenizer_info, 1, false, -1).unwrap();
     let compiled_grammar = compiler.compile_grammar(grammar).unwrap();
     GrammarMatcher::new(&compiled_grammar, None, true, -1).unwrap()
 }
@@ -104,7 +126,8 @@ pub fn matcher_from_grammar_with_tokenizer(
     grammar: &Grammar,
     tokenizer_info: &TokenizerInfo,
 ) -> GrammarMatcher {
-    let mut compiler = GrammarCompiler::new(tokenizer_info, 1, false, -1).unwrap();
+    let mut compiler =
+        GrammarCompiler::new(tokenizer_info, 1, false, -1).unwrap();
     let compiled_grammar = compiler.compile_grammar(grammar).unwrap();
     GrammarMatcher::new(&compiled_grammar, None, true, -1).unwrap()
 }
@@ -116,9 +139,11 @@ pub fn matcher_from_grammar_with_tokenizer_and_rollback(
     tokenizer_info: &TokenizerInfo,
     max_rollback_tokens: i32,
 ) -> GrammarMatcher {
-    let mut compiler = GrammarCompiler::new(tokenizer_info, 1, false, -1).unwrap();
+    let mut compiler =
+        GrammarCompiler::new(tokenizer_info, 1, false, -1).unwrap();
     let compiled_grammar = compiler.compile_grammar(grammar).unwrap();
-    GrammarMatcher::new(&compiled_grammar, None, false, max_rollback_tokens).unwrap()
+    GrammarMatcher::new(&compiled_grammar, None, false, max_rollback_tokens)
+        .unwrap()
 }
 
 /// Check if a grammar accepts a string
@@ -168,7 +193,7 @@ pub fn create_bitmask_dltensor(
 
 #[allow(dead_code)]
 pub fn create_i64_1d_dltensor(
-    data: &mut [i64],
+    data: &mut [i64]
 ) -> (DLTensor, Vec<i64>, Vec<i64>) {
     let mut shape = vec![data.len() as i64];
     let mut strides = vec![1i64];
@@ -193,7 +218,7 @@ pub fn create_i64_1d_dltensor(
 
 #[allow(dead_code)]
 pub fn create_f32_1d_dltensor(
-    data: &mut [f32],
+    data: &mut [f32]
 ) -> (DLTensor, Vec<i64>, Vec<i64>) {
     let mut shape = vec![data.len() as i64];
     let mut strides = vec![1i64];

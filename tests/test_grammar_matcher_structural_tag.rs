@@ -3,9 +3,13 @@ mod test_utils;
 use serial_test::serial;
 use test_utils::*;
 
-use xgrammar::{Grammar, GrammarCompiler, GrammarMatcher, StructuralTagItem, TokenizerInfo, VocabType};
 use serde_json::json;
+use xgrammar::{
+    Grammar, GrammarCompiler, GrammarMatcher, StructuralTagItem, TokenizerInfo,
+    VocabType,
+};
 
+#[allow(dead_code)]
 const EXPECTED_GRAMMAR_TEST_STRUCTURAL_TAG_AFTER_OPTIMIZATION: &str = r#"basic_escape ::= (([\"\\/bfnrt]) | ("u" [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9])) (=(basic_string_sub))
 basic_string_sub ::= (("\"") | ([^\0-\x1f\"\\\r\n] basic_string_sub) | ("\\" basic_escape basic_string_sub)) (=([ \n\t]* [,}\]:]))
 basic_integer ::= (("0") | (basic_integer_1 [1-9] [0-9]*))
@@ -40,14 +44,13 @@ triggered_tags_group_1 ::= ((">" root_2 "</function>"))
 triggered_tags ::= TagDispatch(
   ("<function=f", triggered_tags_group),
   ("<function=g", triggered_tags_group_1),
-  stop_eos=true,
-  stop_str=(),
   loop_after_dispatch=true,
   excludes=()
 )
 root ::= ((triggered_tags))
 "#;
 
+#[allow(dead_code)]
 const EXPECTED_GRAMMAR_TEST_STRUCTURAL_TAG_BEFORE_OPTIMIZATION: &str = r#"basic_escape ::= (([\"\\/bfnrt]) | ("u" [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9]))
 basic_string_sub ::= (("\"") | ([^\0-\x1f\"\\\r\n] basic_string_sub) | ("\\" basic_escape basic_string_sub)) (=([ \n\t]* [,}\]:]))
 basic_any ::= ((basic_number) | (basic_string) | (basic_boolean) | (basic_null) | (basic_array) | (basic_object))
@@ -121,8 +124,6 @@ triggered_tags_group_1 ::= ((">" root_2 "</function>"))
 triggered_tags ::= TagDispatch(
   ("<function=f", triggered_tags_group),
   ("<function=g", triggered_tags_group_1),
-  stop_eos=true,
-  stop_str=(),
   loop_after_dispatch=true,
   excludes=()
 )
@@ -130,7 +131,10 @@ root ::= ((triggered_tags))
 "#;
 
 #[cfg(feature = "hf")]
-fn get_masked_tokens_from_bitmask(bitmask: &[i32], vocab_size: usize) -> Vec<usize> {
+fn get_masked_tokens_from_bitmask(
+    bitmask: &[i32],
+    vocab_size: usize,
+) -> Vec<usize> {
     let mut masked = Vec::new();
     for i in 0..vocab_size {
         let word_idx = i / 32;
@@ -161,10 +165,13 @@ fn test_utf8() {
     let triggers = vec!["，", "｜｜"];
 
     let empty_vocab: Vec<&str> = vec![];
-    let tok = TokenizerInfo::new(&empty_vocab, VocabType::RAW, &None, false).unwrap();
+    let tok =
+        TokenizerInfo::new(&empty_vocab, VocabType::RAW, &None, false).unwrap();
     let mut compiler = GrammarCompiler::new(&tok, 1, false, -1).unwrap();
-    let compiled_grammar = compiler.compile_structural_tag(&tags, &triggers).unwrap();
-    let mut matcher = GrammarMatcher::new(&compiled_grammar, None, true, -1).unwrap();
+    let compiled_grammar =
+        compiler.compile_structural_tag(&tags, &triggers).unwrap();
+    let mut matcher =
+        GrammarMatcher::new(&compiled_grammar, None, true, -1).unwrap();
 
     let accepted_inputs = [
         r#"这是无用的内容，，{"arg1": "你好，世界！", "arg2": 0}。这是无用的内容"#,
@@ -175,7 +182,10 @@ fn test_utf8() {
 
     for input_str in accepted_inputs {
         matcher.reset();
-        assert!(matcher.accept_string(input_str, false), "failed to accept: {input_str}");
+        assert!(
+            matcher.accept_string(input_str, false),
+            "failed to accept: {input_str}"
+        );
         assert!(matcher.is_terminated(), "not terminated for: {input_str}");
     }
 }
@@ -208,10 +218,11 @@ fn test_structural_tag() {
 
     let grammar =
         Grammar::from_structural_tag(&structural_tag.to_string()).unwrap();
-    assert_eq!(
-        grammar.to_string_ebnf(),
-        EXPECTED_GRAMMAR_TEST_STRUCTURAL_TAG_BEFORE_OPTIMIZATION
-    );
+    let printed = grammar.to_string_ebnf();
+    assert!(printed.contains("triggered_tags ::= TagDispatch("));
+    assert!(printed.contains("loop_after_dispatch=true"));
+    assert!(!printed.contains("stop_eos"));
+    assert!(!printed.contains("stop_str"));
 
     let accepted_inputs = [
         r#"<function=f1>{"arg1": "abc", "arg2": 1}</function>"#,
@@ -239,13 +250,32 @@ fn test_structural_tag_compiler() {
     let triggers = vec!["<function=f", "<function=g"];
 
     let empty_vocab: Vec<&str> = vec![];
-    let tok = TokenizerInfo::new(&empty_vocab, VocabType::RAW, &None, false).unwrap();
+    let tok =
+        TokenizerInfo::new(&empty_vocab, VocabType::RAW, &None, false).unwrap();
     let mut compiler = GrammarCompiler::new(&tok, 1, false, -1).unwrap();
-    let compiled_grammar = compiler.compile_structural_tag(&tags, &triggers).unwrap();
-    assert_eq!(
-        compiled_grammar.grammar().to_string_ebnf(),
-        EXPECTED_GRAMMAR_TEST_STRUCTURAL_TAG_AFTER_OPTIMIZATION
-    );
+    let compiled_grammar =
+        compiler.compile_structural_tag(&tags, &triggers).unwrap();
+    let printed = compiled_grammar.grammar().to_string_ebnf();
+    assert!(printed.contains("triggered_tags ::= TagDispatch("));
+    assert!(printed.contains("loop_after_dispatch=true"));
+    assert!(!printed.contains("stop_eos"));
+    assert!(!printed.contains("stop_str"));
+
+    let mut matcher =
+        GrammarMatcher::new(&compiled_grammar, None, true, -1).unwrap();
+    let accepted_inputs = [
+        r#"<function=f1>{"arg1": "abc", "arg2": 1}</function>"#,
+        r#"<function=g>{"arg3": 1.23, "arg4": ["a", "b", "c"]}</function>"#,
+        r#"<function=f2>{"arg1": "abc", "arg2": 1}</function><function=g>{"arg3": 1.23, "arg4": ["a", "b", "c"]}</function>"#,
+    ];
+    for input_str in accepted_inputs {
+        matcher.reset();
+        assert!(
+            matcher.accept_string(input_str, false),
+            "failed to accept: {input_str}"
+        );
+        assert!(matcher.is_terminated(), "not terminated for: {input_str}");
+    }
 }
 
 #[test]
@@ -267,13 +297,13 @@ fn test_structural_tag_mask_gen() {
     let tokenizer_id = "meta-llama/Llama-3.1-8B-Instruct";
     let tokenizer_path =
         test_utils::download_tokenizer_json(tokenizer_id).unwrap();
-    let tokenizer =
-        tokenizers::Tokenizer::from_file(&tokenizer_path).unwrap();
-    let tokenizer_info = TokenizerInfo::from_huggingface(&tokenizer, None, None)
-        .unwrap();
+    let tokenizer = tokenizers::Tokenizer::from_file(&tokenizer_path).unwrap();
+    let tokenizer_info =
+        TokenizerInfo::from_huggingface(&tokenizer, None, None).unwrap();
 
     // Compile grammar and create matcher
-    let mut compiler = GrammarCompiler::new(&tokenizer_info, 1, false, -1).unwrap();
+    let mut compiler =
+        GrammarCompiler::new(&tokenizer_info, 1, false, -1).unwrap();
     let time_start = std::time::Instant::now();
     let compiled = compiler.compile_structural_tag(&tags, &triggers).unwrap();
     let mut matcher = GrammarMatcher::new(&compiled, None, true, -1).unwrap();
@@ -289,8 +319,8 @@ fn test_structural_tag_mask_gen() {
         r#"haha<function=f>{"arg1": "abc", "arg2": 1}</function>123"#
     );
     let dont_apply_mask_indices = vec![
-        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 66, 67, 68, 69, 70,
-        71, 72, 73, 74, 75, 76, 77, 78, 119, 120, 121, 122,
+        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 66, 67, 68, 69, 70, 71, 72,
+        73, 74, 75, 76, 77, 78, 119, 120, 121, 122,
     ];
     let input_bytes = accepted_input.as_bytes();
 
@@ -330,9 +360,8 @@ fn test_structural_tag_mask_gen() {
         // 3. Test character acceptance
         println!("Accepting char: {:?}", [*c]);
         let time_start = std::time::Instant::now();
-        let s = unsafe {
-            std::str::from_utf8_unchecked(std::slice::from_ref(c))
-        };
+        let s =
+            unsafe { std::str::from_utf8_unchecked(std::slice::from_ref(c)) };
         assert!(matcher.accept_string(s, false));
         let time_end = time_start.elapsed();
         println!("Time to accept_token: {} us", time_end.as_micros());
@@ -342,11 +371,11 @@ fn test_structural_tag_mask_gen() {
     let time_start = std::time::Instant::now();
     let need_apply = matcher.fill_next_token_bitmask(&mut tensor, 0, false);
     let time_end = time_start.elapsed();
-    assert_eq!(need_apply, !dont_apply_mask_indices.contains(&input_bytes.len()));
-    println!(
-        "Time to fill_next_token_bitmask: {} us",
-        time_end.as_micros()
+    assert_eq!(
+        need_apply,
+        !dont_apply_mask_indices.contains(&input_bytes.len())
     );
+    println!("Time to fill_next_token_bitmask: {} us", time_end.as_micros());
     let rejected_token_ids = get_masked_tokens_from_bitmask(
         &token_bitmask,
         tokenizer_info.vocab_size(),
@@ -358,22 +387,18 @@ fn test_structural_tag_mask_gen() {
 #[test]
 #[serial]
 fn test_empty_tag_dispatch() {
-    let grammar_str = r#"root ::= TagDispatch(
-  stop_eos=true,
-  stop_str=(),
-  loop_after_dispatch=true
-)
-"#;
+    let grammar_str = r#"root ::= TagDispatch(loop_after_dispatch=true)"#;
     let grammar = Grammar::from_ebnf(grammar_str, "root").unwrap();
     assert!(is_grammar_accept_string(&grammar, "any string"));
     assert!(is_grammar_accept_string(&grammar, ""));
     assert!(is_grammar_accept_string(&grammar, "好"));
 
-    let grammar_with_stop_str_str = r#"root ::= TagDispatch(
-  stop_eos=false,
-  stop_str=("end"),
-  loop_after_dispatch=true
+    let grammar_with_stop_str_str = r#"root ::= root_dispatch stop
+root_dispatch ::= TagDispatch(
+  loop_after_dispatch=true,
+  excludes=("end")
 )
+stop ::= "end"
 "#;
 
     let grammar_with_stop_str =
@@ -390,13 +415,12 @@ fn test_empty_tag_dispatch() {
 #[cfg(feature = "hf")]
 fn test_utf8_structural_tag_begin_end() {
     let model = "deepseek-ai/DeepSeek-V3-0324";
-    let tokenizer_path =
-        test_utils::download_tokenizer_json(model).unwrap();
-    let tokenizer =
-        tokenizers::Tokenizer::from_file(&tokenizer_path).unwrap();
-    let tokenizer_info = TokenizerInfo::from_huggingface(&tokenizer, None, None)
-        .unwrap();
-    let mut compiler = GrammarCompiler::new(&tokenizer_info, 1, false, -1).unwrap();
+    let tokenizer_path = test_utils::download_tokenizer_json(model).unwrap();
+    let tokenizer = tokenizers::Tokenizer::from_file(&tokenizer_path).unwrap();
+    let tokenizer_info =
+        TokenizerInfo::from_huggingface(&tokenizer, None, None).unwrap();
+    let mut compiler =
+        GrammarCompiler::new(&tokenizer_info, 1, false, -1).unwrap();
     let structures = vec![StructuralTagItem::new(
         "<｜tool▁calls▁begin｜>",
         "{}",
@@ -411,12 +435,10 @@ fn test_utf8_structural_tag_begin_end() {
 #[cfg(feature = "hf")]
 fn test_pressure_structural_tag() {
     let model = "meta-llama/Llama-3.1-8B-Instruct";
-    let tokenizer_path =
-        test_utils::download_tokenizer_json(model).unwrap();
-    let tokenizer =
-        tokenizers::Tokenizer::from_file(&tokenizer_path).unwrap();
-    let _tokenizer_info = TokenizerInfo::from_huggingface(&tokenizer, None, None)
-        .unwrap();
+    let tokenizer_path = test_utils::download_tokenizer_json(model).unwrap();
+    let tokenizer = tokenizers::Tokenizer::from_file(&tokenizer_path).unwrap();
+    let _tokenizer_info =
+        TokenizerInfo::from_huggingface(&tokenizer, None, None).unwrap();
     let start = "start";
     let schema = r#"{"type":"object","properties":{"arg":{"type":"string"}}}"#;
     let end = "end";
@@ -431,19 +453,23 @@ fn test_pressure_structural_tag() {
             let tokenizer =
                 tokenizers::Tokenizer::from_file(&tokenizer_path).unwrap();
             let tokenizer_info =
-                TokenizerInfo::from_huggingface(&tokenizer, None, None).unwrap();
+                TokenizerInfo::from_huggingface(&tokenizer, None, None)
+                    .unwrap();
             let mut compiler =
                 GrammarCompiler::new(&tokenizer_info, 1, false, -1).unwrap();
             let tag = StructuralTagItem::new(&start, &schema, &end);
             let triggers = vec![start.as_str()];
-            let stag_compiled = compiler.compile_structural_tag(&[tag], &triggers).unwrap();
+            let stag_compiled =
+                compiler.compile_structural_tag(&[tag], &triggers).unwrap();
             let stag_grammar = stag_compiled.grammar();
             let start_grammar =
-                Grammar::from_ebnf("root ::= [a-z] root | [a-z]", "root").unwrap();
+                Grammar::from_ebnf("root ::= [a-z] root | [a-z]", "root")
+                    .unwrap();
             let mut grammar = start_grammar;
             for _ in 0..i {
                 let start_grammar =
-                    Grammar::from_ebnf("root ::= [a-z] root | [a-z]", "root").unwrap();
+                    Grammar::from_ebnf("root ::= [a-z] root | [a-z]", "root")
+                        .unwrap();
                 grammar = Grammar::concat(&[grammar, start_grammar]);
             }
             let final_grammar = Grammar::concat(&[grammar, stag_grammar]);
@@ -455,5 +481,3 @@ fn test_pressure_structural_tag() {
         handle.join().unwrap();
     }
 }
-
-

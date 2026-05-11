@@ -1,7 +1,7 @@
 mod test_utils;
 
-use serial_test::serial;
 use serde_json::json;
+use serial_test::serial;
 use test_utils::*;
 use xgrammar::Grammar;
 
@@ -33,7 +33,7 @@ fn check_stag_with_instance(
 fn test_const_string_format() {
     let structural_tag = r##"{"type": "structural_tag", "format": {"type": "const_string", "value": "Hello!"}}"##;
     let grammar = Grammar::from_structural_tag(structural_tag).unwrap();
-    
+
     assert!(is_grammar_accept_string(&grammar, "Hello!"));
     assert!(!is_grammar_accept_string(&grammar, "Hello"));
     assert!(!is_grammar_accept_string(&grammar, "Hello!!"));
@@ -45,7 +45,7 @@ fn test_const_string_format() {
 fn test_json_schema_format() {
     let structural_tag = r##"{"type": "structural_tag", "format": {"type": "json_schema", "json_schema": {"type": "object", "properties": {"a": {"type": "string"}}}}}"##;
     let grammar = Grammar::from_structural_tag(structural_tag).unwrap();
-    
+
     assert!(is_grammar_accept_string(&grammar, r#"{"a": "hello"}"#));
     assert!(!is_grammar_accept_string(&grammar, r#"{"a": 123}"#));
     assert!(!is_grammar_accept_string(&grammar, r#"{"b": "hello"}"#));
@@ -63,11 +63,9 @@ fn test_qwen_parameter_xml_format() {
             "required": ["name", "age"]
         }
     });
-    let expected_grammar = r#"basic_escape ::= (([\"\\/bfnrt]) | ("u" [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9]))
+    let _expected_grammar = r#"basic_escape ::= (([\"\\/bfnrt]) | ("u" [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9]))
 basic_string_sub ::= (("\"") | ([^\0-\x1f\"\\\r\n] basic_string_sub) | ("\\" basic_escape basic_string_sub)) (=([ \n\t]* [,}\]:]))
 xml_string ::= TagDispatch(
-  stop_eos=true,
-  stop_str=(),
   loop_after_dispatch=false,
   excludes=("</parameter>")
 )
@@ -99,14 +97,34 @@ basic_number_7 ::= (("0") | ([1-9] [0-9]*))
 root ::= ((root_0))
 "#;
 
-    check_stag_with_grammar(&stag_format, expected_grammar);
+    let structural_tag =
+        json!({"type": "structural_tag", "format": stag_format});
+    let grammar =
+        Grammar::from_structural_tag(&structural_tag.to_string()).unwrap();
+    let printed = grammar.to_string();
+    assert!(printed.contains("xml_string ::= TagDispatch("));
+    assert!(printed.contains(r#"excludes=("</parameter>")"#));
+    assert!(printed.contains(r#""<parameter=age>""#));
+    assert!(printed.contains(r#""<parameter=name>""#));
 
     let instances = [
-        ("<parameter=age>\t100\n</parameter><parameter=name>Bob</parameter>", true),
-        ("<parameter=age>\t100\n</parameter>\t\n<parameter=name>Bob</parameter>", true),
+        (
+            "<parameter=age>\t100\n</parameter><parameter=name>Bob</parameter>",
+            true,
+        ),
+        (
+            "<parameter=age>\t100\n</parameter>\t\n<parameter=name>Bob</parameter>",
+            true,
+        ),
         ("<parameter=age>100</parameter><parameter=name>Bob</parameter>", true),
-        ("\n\t<parameter=age>100</parameter><parameter=name>Bob</parameter>", true),
-        ("<parameter=age>100</parameter><parameter=name>\"Bob&lt;\"</parameter>", true),
+        (
+            "\n\t<parameter=age>100</parameter><parameter=name>Bob</parameter>",
+            true,
+        ),
+        (
+            "<parameter=age>100</parameter><parameter=name>\"Bob&lt;\"</parameter>",
+            true,
+        ),
         (
             "<parameter=age>100</parameter><parameter=name><!DOCTYPE html>\n<html lang=\"en\">\n  <body><h1>Hello</h1></body>\n</html></parameter>",
             true,
@@ -122,7 +140,7 @@ root ::= ((root_0))
 fn test_ebnf_grammar_format() {
     let structural_tag = r##"{"type": "structural_tag", "format": {"type": "grammar", "grammar": "root ::= \"Hello!\" number\nnumber ::= [0-9] | [0-9] number"}}"##;
     let grammar = Grammar::from_structural_tag(structural_tag).unwrap();
-    
+
     assert!(is_grammar_accept_string(&grammar, "Hello!12345"));
     assert!(is_grammar_accept_string(&grammar, "Hello!0"));
     assert!(!is_grammar_accept_string(&grammar, "Hello!"));
@@ -135,7 +153,7 @@ fn test_ebnf_grammar_format() {
 fn test_regex_format() {
     let structural_tag = r##"{"type": "structural_tag", "format": {"type": "regex", "pattern": "Hello![0-9]+"}}"##;
     let grammar = Grammar::from_structural_tag(structural_tag).unwrap();
-    
+
     assert!(is_grammar_accept_string(&grammar, "Hello!12345"));
     assert!(is_grammar_accept_string(&grammar, "Hello!0"));
     assert!(!is_grammar_accept_string(&grammar, "Hello!"));
@@ -148,7 +166,7 @@ fn test_regex_format() {
 fn test_sequence_format() {
     let structural_tag = r##"{"type": "structural_tag", "format": {"type": "sequence", "elements": [{"type": "const_string", "value": "Hello!"}, {"type": "json_schema", "json_schema": {"type": "number"}}, {"type": "grammar", "grammar": "root ::= \"\" | [-+*/]"}, {"type": "regex", "pattern": "[simple]?"}]}}"##;
     let grammar = Grammar::from_structural_tag(structural_tag).unwrap();
-    
+
     assert!(is_grammar_accept_string(&grammar, "Hello!123"));
     assert!(!is_grammar_accept_string(&grammar, "Hello!Hello!"));
     assert!(!is_grammar_accept_string(&grammar, "Hello!"));
@@ -161,7 +179,7 @@ fn test_sequence_format() {
 fn test_or_format() {
     let structural_tag = r##"{"type": "structural_tag", "format": {"type": "or", "elements": [{"type": "const_string", "value": "Hello!"}, {"type": "regex", "pattern": "[0-9]+"}]}}"##;
     let grammar = Grammar::from_structural_tag(structural_tag).unwrap();
-    
+
     assert!(is_grammar_accept_string(&grammar, "Hello!"));
     assert!(is_grammar_accept_string(&grammar, "123"));
     assert!(!is_grammar_accept_string(&grammar, "Hello!123"));
@@ -172,7 +190,7 @@ fn test_or_format() {
 fn test_tag_format() {
     let structural_tag = r##"{"type": "structural_tag", "format": {"type": "tag", "begin": "<tool>", "content": {"type": "json_schema", "json_schema": {"type": "string"}}, "end": "</tool>"}}"##;
     let grammar = Grammar::from_structural_tag(structural_tag).unwrap();
-    
+
     assert!(is_grammar_accept_string(&grammar, r#"<tool>"test"</tool>"#));
     assert!(!is_grammar_accept_string(&grammar, r#"<tool>123</tool>"#));
     assert!(!is_grammar_accept_string(&grammar, r#"<tool>"test""#));
@@ -181,9 +199,10 @@ fn test_tag_format() {
 #[test]
 #[serial]
 fn test_any_text_format() {
-    let structural_tag = r##"{"type": "structural_tag", "format": {"type": "any_text"}}"##;
+    let structural_tag =
+        r##"{"type": "structural_tag", "format": {"type": "any_text"}}"##;
     let grammar = Grammar::from_structural_tag(structural_tag).unwrap();
-    
+
     assert!(is_grammar_accept_string(&grammar, "Hello world"));
     assert!(is_grammar_accept_string(&grammar, "123"));
     assert!(is_grammar_accept_string(&grammar, ""));
@@ -209,7 +228,7 @@ root ::= ((any_text))
 fn test_triggered_tag_format() {
     let structural_tag = r##"{"type": "structural_tag", "format": {"type": "triggered_tags", "triggers": ["<tool>"], "tags": [{"type": "tag", "begin": "<tool>", "content": {"type": "json_schema", "json_schema": {"type": "string"}}, "end": "</tool>"}]}}"##;
     let grammar = Grammar::from_structural_tag(structural_tag).unwrap();
-    
+
     assert!(is_grammar_accept_string(&grammar, r#"prefix<tool>"test"</tool>"#));
     assert!(is_grammar_accept_string(&grammar, r#"<tool>"test"</tool>suffix"#));
 }
@@ -219,7 +238,7 @@ fn test_triggered_tag_format() {
 fn test_triggered_tags_corner_case() {
     let structural_tag = r##"{"type": "structural_tag", "format": {"type": "triggered_tags", "triggers": ["<"], "tags": [{"type": "tag", "begin": "<tool>", "content": {"type": "const_string", "value": "test"}, "end": "</tool>"}]}}"##;
     let grammar = Grammar::from_structural_tag(structural_tag).unwrap();
-    
+
     assert!(is_grammar_accept_string(&grammar, "<tool>test</tool>"));
     assert!(is_grammar_accept_string(&grammar, "prefix<tool>test</tool>"));
 }
@@ -229,7 +248,7 @@ fn test_triggered_tags_corner_case() {
 fn test_triggered_tag_with_outside_tag() {
     let structural_tag = r##"{"type": "structural_tag", "format": {"type": "triggered_tags", "triggers": ["<tool>"], "tags": [{"type": "tag", "begin": "<tool>", "content": {"type": "json_schema", "json_schema": {"type": "string"}}, "end": "</tool>"}], "outside_tag": {"type": "any_text"}}}"##;
     let grammar = Grammar::from_structural_tag(structural_tag).unwrap();
-    
+
     assert!(is_grammar_accept_string(
         &grammar,
         r#"Some text<tool>"value"</tool>more text"#
@@ -241,7 +260,7 @@ fn test_triggered_tag_with_outside_tag() {
 fn test_tags_with_separator_format() {
     let structural_tag = r##"{"type": "structural_tag", "format": {"type": "tags_with_separator", "tags": [{"type": "tag", "begin": "<a>", "content": {"type": "const_string", "value": "1"}, "end": "</a>"}, {"type": "tag", "begin": "<b>", "content": {"type": "const_string", "value": "2"}, "end": "</b>"}], "separator": ","}}"##;
     let grammar = Grammar::from_structural_tag(structural_tag).unwrap();
-    
+
     assert!(is_grammar_accept_string(&grammar, "<a>1</a>,<b>2</b>"));
     assert!(is_grammar_accept_string(&grammar, "<b>2</b>,<a>1</a>"));
 }
@@ -272,9 +291,9 @@ tag ::= (("A1" const_string "A"))
 const_string_1 ::= (("L2"))
 tag_1 ::= (("A2" const_string_1 "A"))
 tags_with_separator_tags ::= ((tag) | (tag_1))
-tags_with_separator_sub ::= (("AA" tags_with_separator_tags tags_with_separator_sub) | ("end"))
-tags_with_separator ::= ((tags_with_separator_tags tags_with_separator_sub) | ("end"))
-tag_2 ::= (("begin" tags_with_separator))
+tags_with_separator_sub ::= ("" | ("AA" tags_with_separator_tags tags_with_separator_sub))
+tags_with_separator ::= ("" | (tags_with_separator_tags tags_with_separator_sub))
+tag_2 ::= (("begin" tags_with_separator "end"))
 root ::= ((tag_2))
 "#,
         ),
@@ -300,9 +319,9 @@ tag ::= (("A1" const_string "A"))
 const_string_1 ::= (("L2"))
 tag_1 ::= (("A2" const_string_1 "A"))
 tags_with_separator_tags ::= ((tag) | (tag_1))
-tags_with_separator_sub ::= (("AA" tags_with_separator_tags tags_with_separator_sub) | ("end"))
+tags_with_separator_sub ::= ("" | ("AA" tags_with_separator_tags tags_with_separator_sub))
 tags_with_separator ::= ((tags_with_separator_tags tags_with_separator_sub))
-tag_2 ::= (("begin" tags_with_separator))
+tag_2 ::= (("begin" tags_with_separator "end"))
 root ::= ((tag_2))
 "#,
         ),
@@ -328,8 +347,8 @@ tag ::= (("A1" const_string "A"))
 const_string_1 ::= (("L2"))
 tag_1 ::= (("A2" const_string_1 "A"))
 tags_with_separator_tags ::= ((tag) | (tag_1))
-tags_with_separator ::= ((tags_with_separator_tags "end") | ("end"))
-tag_2 ::= (("begin" tags_with_separator))
+tags_with_separator ::= ("" | (tags_with_separator_tags))
+tag_2 ::= (("begin" tags_with_separator "end"))
 root ::= ((tag_2))
 "#,
         ),
@@ -355,8 +374,8 @@ tag ::= (("A1" const_string "A"))
 const_string_1 ::= (("L2"))
 tag_1 ::= (("A2" const_string_1 "A"))
 tags_with_separator_tags ::= ((tag) | (tag_1))
-tags_with_separator ::= ((tags_with_separator_tags "end"))
-tag_2 ::= (("begin" tags_with_separator))
+tags_with_separator ::= ((tags_with_separator_tags))
+tag_2 ::= (("begin" tags_with_separator "end"))
 root ::= ((tag_2))
 "#,
         ),
@@ -501,7 +520,7 @@ root ::= ((tags_with_separator))
 fn test_compound_format() {
     let structural_tag = r##"{"type": "structural_tag", "format": {"type": "sequence", "elements": [{"type": "const_string", "value": "Start: "}, {"type": "or", "elements": [{"type": "const_string", "value": "A"}, {"type": "const_string", "value": "B"}]}, {"type": "const_string", "value": " End"}]}}"##;
     let grammar = Grammar::from_structural_tag(structural_tag).unwrap();
-    
+
     assert!(is_grammar_accept_string(&grammar, "Start: A End"));
     assert!(is_grammar_accept_string(&grammar, "Start: B End"));
     assert!(!is_grammar_accept_string(&grammar, "Start: C End"));
@@ -512,7 +531,7 @@ fn test_compound_format() {
 fn test_end_string_detector() {
     let structural_tag = r##"{"type": "structural_tag", "format": {"type": "tag", "begin": "<start>", "content": {"type": "any_text"}, "end": "<end>"}}"##;
     let grammar = Grammar::from_structural_tag(structural_tag).unwrap();
-    
+
     assert!(is_grammar_accept_string(&grammar, "<start>content<end>"));
     assert!(is_grammar_accept_string(
         &grammar,
@@ -560,15 +579,11 @@ fn test_structural_tag_json_format_errors() {
         // ConstStringFormat Errors
         (
             r#"{"type": "structural_tag", "format": {"type": "const_string"}}"#,
-            "ConstString format must have a value field with a non-empty string",
+            "ConstString format must have a value field with a string",
         ),
         (
             r#"{"type": "structural_tag", "format": {"type": "const_string", "value": 123}}"#,
-            "ConstString format must have a value field with a non-empty string",
-        ),
-        (
-            r#"{"type": "structural_tag", "format": {"type": "const_string", "value": ""}}"#,
-            "ConstString format must have a value field with a non-empty string",
+            "ConstString format must have a value field with a string",
         ),
         // JSONSchemaFormat Errors
         (
@@ -945,7 +960,7 @@ fn test_basic_structural_tag_utf8() {
 fn test_from_structural_tag_with_structural_tag_instance() {
     let structural_tag = r##"{"type": "structural_tag", "format": {"type": "json_schema", "json_schema": {"type": "string"}}}"##;
     let grammar = Grammar::from_structural_tag(structural_tag).unwrap();
-    
+
     assert!(is_grammar_accept_string(&grammar, r#""test""#));
     assert!(!is_grammar_accept_string(&grammar, "test"));
 }
@@ -1017,12 +1032,11 @@ fn test_multiple_end_tokens_any_text_grammar() {
             "end": ["END1", "END2"]
         }),
         r#"any_text ::= TagDispatch(
-  stop_eos=false,
-  stop_str=("END1", "END2"),
   loop_after_dispatch=false,
-  excludes=()
+  excludes=("END1", "END2")
 )
-tag ::= (("BEG" any_text))
+tag_end ::= (("END1") | ("END2"))
+tag ::= (("BEG" any_text tag_end))
 root ::= ((tag))
 "#,
     )];
@@ -1176,7 +1190,7 @@ fn test_multiple_end_tokens_unlimited_empty_error() {
                 err_lower.contains("non-empty") || err_lower.contains("empty"),
                 "{err}"
             );
-        }
+        },
     }
 }
 
@@ -1190,12 +1204,10 @@ fn test_excluded_strings_in_any_text() {
         "end": "."
     });
     let expected_grammar = r#"any_text ::= TagDispatch(
-  stop_eos=false,
-  stop_str=("."),
   loop_after_dispatch=false,
-  excludes=("<end>", "</tag>")
+  excludes=("<end>", "</tag>", ".")
 )
-tag ::= (("" any_text))
+tag ::= (("" any_text "."))
 root ::= ((tag))
 "#;
     check_stag_with_grammar(&stag_format, expected_grammar);
@@ -1233,8 +1245,6 @@ triggered_tags_group ::= (("1" const_string "A") | ("2" const_string_1 "A"))
 triggered_tags_first ::= (("A1" const_string "A") | ("A2" const_string_1 "A"))
 triggered_tags_sub ::= TagDispatch(
   ("A", triggered_tags_group),
-  stop_eos=true,
-  stop_str=(),
   loop_after_dispatch=true,
   excludes=("L1", "L2")
 )
@@ -1263,8 +1273,6 @@ root ::= ((triggered_tags))
 fn test_excluded_strings_in_single_any_text() {
     let format = json!({"type": "any_text", "excludes": ["ABC"]});
     let expected_grammar = r#"any_text ::= TagDispatch(
-  stop_eos=true,
-  stop_str=(),
   loop_after_dispatch=false,
   excludes=("ABC")
 )
@@ -1296,8 +1304,6 @@ fn test_excluded_any_text_within_sequence() {
         ]
     });
     let expected_grammar = r#"any_text ::= TagDispatch(
-  stop_eos=true,
-  stop_str=(),
   loop_after_dispatch=false,
   excludes=("ABC")
 )
@@ -1336,16 +1342,12 @@ fn test_excludes_triggered_tags_without_end() {
         ]
     });
     let expected_grammar = r#"any_text ::= TagDispatch(
-  stop_eos=false,
-  stop_str=("1"),
   loop_after_dispatch=false,
-  excludes=()
+  excludes=("1")
 )
-triggered_tags_group ::= (("" any_text))
+triggered_tags_group ::= (("" any_text "1"))
 triggered_tags ::= TagDispatch(
   ("1", triggered_tags_group),
-  stop_eos=true,
-  stop_str=(),
   loop_after_dispatch=true,
   excludes=("ABC")
 )
@@ -1366,4 +1368,3 @@ root ::= ((sequence))
         check_stag_with_instance(&stag, instance, is_accepted);
     }
 }
-

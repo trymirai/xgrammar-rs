@@ -1,5 +1,7 @@
 mod test_utils;
 
+#[cfg(feature = "hf")]
+use serde_json::json;
 use serial_test::serial;
 use test_utils::*;
 #[cfg(feature = "hf")]
@@ -7,8 +9,6 @@ use xgrammar::allocate_token_bitmask;
 use xgrammar::{
     Grammar, GrammarCompiler, GrammarMatcher, TokenizerInfo, VocabType,
 };
-#[cfg(feature = "hf")]
-use serde_json::json;
 
 const MAIN_MODEL_SCHEMA: &str = r##"{
     "type": "object",
@@ -114,15 +114,16 @@ fn test_json_schema_debug_accept_string() {
     )
     .unwrap();
 
-    let tokenizer_info = make_hf_tokenizer_info("meta-llama/Llama-2-7b-chat-hf");
-    let mut compiler = GrammarCompiler::new(&tokenizer_info, 1, false, -1).unwrap();
+    let tokenizer_info =
+        make_hf_tokenizer_info("meta-llama/Llama-2-7b-chat-hf");
+    let mut compiler =
+        GrammarCompiler::new(&tokenizer_info, 1, false, -1).unwrap();
     let compiled = compiler.compile_grammar(&grammar).unwrap();
     let mut matcher = GrammarMatcher::new(&compiled, None, true, -1).unwrap();
 
     for c in MAIN_MODEL_INSTANCE_STR.bytes() {
-        let s = unsafe {
-            std::str::from_utf8_unchecked(std::slice::from_ref(&c))
-        };
+        let s =
+            unsafe { std::str::from_utf8_unchecked(std::slice::from_ref(&c)) };
         assert!(matcher.accept_string(s, false));
     }
     if let Some(stop_id) = get_stop_token_id(&tokenizer_info)
@@ -148,7 +149,8 @@ fn test_json_schema_find_jump_forward_string() {
     let vocab: Vec<&str> = vec![];
     let tokenizer_info =
         TokenizerInfo::new(&vocab, VocabType::RAW, &None, false).unwrap();
-    let mut compiler = GrammarCompiler::new(&tokenizer_info, 1, false, -1).unwrap();
+    let mut compiler =
+        GrammarCompiler::new(&tokenizer_info, 1, false, -1).unwrap();
     let compiled = compiler.compile_grammar(&grammar).unwrap();
     let mut matcher = GrammarMatcher::new(&compiled, None, true, -1).unwrap();
 
@@ -156,12 +158,11 @@ fn test_json_schema_find_jump_forward_string() {
     for i in 0..instance_bytes.len() {
         let jump_forward_str = matcher.find_jump_forward_string();
         let jump_bytes = jump_forward_str.as_bytes();
-        assert_eq!(
-            &instance_bytes[i..i + jump_bytes.len()],
-            jump_bytes
-        );
+        assert_eq!(&instance_bytes[i..i + jump_bytes.len()], jump_bytes);
         let s = unsafe {
-            std::str::from_utf8_unchecked(std::slice::from_ref(&instance_bytes[i]))
+            std::str::from_utf8_unchecked(std::slice::from_ref(
+                &instance_bytes[i],
+            ))
         };
         assert!(matcher.accept_string(s, false));
     }
@@ -193,12 +194,10 @@ fn test_fill_next_token_bitmask() {
                 None,
             )
             .unwrap();
-        let mut matcher = GrammarMatcher::new(&compiled, None, true, -1).unwrap();
+        let mut matcher =
+            GrammarMatcher::new(&compiled, None, true, -1).unwrap();
         let time_end = time_start.elapsed();
-        println!(
-            "Time to init GrammarMatcher: {} us",
-            time_end.as_micros()
-        );
+        println!("Time to init GrammarMatcher: {} us", time_end.as_micros());
 
         let mut bitmask_data =
             allocate_token_bitmask(1, tokenizer_info.vocab_size());
@@ -269,46 +268,166 @@ fn test_fill_next_token_bitmask_intfloat_range() {
     let cases: Vec<(&str, String, &str)> = vec![
         // Integer test cases
         ("RangeSchema", int_schema("1", "100"), r#"{"value": 42}"#),
-        ("ExtendedRangeSchema", int_schema("-128", "256"), r#"{"value": -128}"#),
+        (
+            "ExtendedRangeSchema",
+            int_schema("-128", "256"),
+            r#"{"value": -128}"#,
+        ),
         ("ExtendedRangeSchema", int_schema("-128", "256"), r#"{"value": 0}"#),
         ("ExtendedRangeSchema", int_schema("-128", "256"), r#"{"value": 256}"#),
         ("ExtendedRangeSchema", int_schema("-128", "256"), r#"{"value": 14}"#),
-        ("NegativeRangeSchema", int_schema("-1000", "-1"), r#"{"value": -1000}"#),
-        ("NegativeRangeSchema", int_schema("-1000", "-1"), r#"{"value": -500}"#),
+        (
+            "NegativeRangeSchema",
+            int_schema("-1000", "-1"),
+            r#"{"value": -1000}"#,
+        ),
+        (
+            "NegativeRangeSchema",
+            int_schema("-1000", "-1"),
+            r#"{"value": -500}"#,
+        ),
         ("NegativeRangeSchema", int_schema("-1000", "-1"), r#"{"value": -1}"#),
-        ("LargeRangeSchema", int_schema("-99999", "99999"), r#"{"value": -99999}"#),
-        ("LargeRangeSchema", int_schema("-99999", "99999"), r#"{"value": -5678}"#),
+        (
+            "LargeRangeSchema",
+            int_schema("-99999", "99999"),
+            r#"{"value": -99999}"#,
+        ),
+        (
+            "LargeRangeSchema",
+            int_schema("-99999", "99999"),
+            r#"{"value": -5678}"#,
+        ),
         ("LargeRangeSchema", int_schema("-99999", "99999"), r#"{"value": 0}"#),
-        ("LargeRangeSchema", int_schema("-99999", "99999"), r#"{"value": 5678}"#),
-        ("LargeRangeSchema", int_schema("-99999", "99999"), r#"{"value": 99999}"#),
-        ("LargeRangeSchemaStartZero", int_schema("0", "20000000000"), r#"{"value": 20000000000}"#),
-        ("LargeRangeSchemaStartZero", int_schema("0", "20000000000"), r#"{"value": 0}"#),
-        ("LargeRangeSchemaStartZero", int_schema("0", "20000000000"), r#"{"value": 10000000000}"#),
-        ("LargeRangeSchemaStartZero", int_schema("0", "20000000000"), r#"{"value": 19999999999}"#),
+        (
+            "LargeRangeSchema",
+            int_schema("-99999", "99999"),
+            r#"{"value": 5678}"#,
+        ),
+        (
+            "LargeRangeSchema",
+            int_schema("-99999", "99999"),
+            r#"{"value": 99999}"#,
+        ),
+        (
+            "LargeRangeSchemaStartZero",
+            int_schema("0", "20000000000"),
+            r#"{"value": 20000000000}"#,
+        ),
+        (
+            "LargeRangeSchemaStartZero",
+            int_schema("0", "20000000000"),
+            r#"{"value": 0}"#,
+        ),
+        (
+            "LargeRangeSchemaStartZero",
+            int_schema("0", "20000000000"),
+            r#"{"value": 10000000000}"#,
+        ),
+        (
+            "LargeRangeSchemaStartZero",
+            int_schema("0", "20000000000"),
+            r#"{"value": 19999999999}"#,
+        ),
         // Float test cases
         ("FloatRangeSchema", float_schema("0.0", "1.0"), r#"{"value": 0.0}"#),
         ("FloatRangeSchema", float_schema("0.0", "1.0"), r#"{"value": 0.5}"#),
         ("FloatRangeSchema", float_schema("0.0", "1.0"), r#"{"value": 1.0}"#),
-        ("NegativeFloatRangeSchema", float_schema("-10.0", "-0.1"), r#"{"value": -10.0}"#),
-        ("NegativeFloatRangeSchema", float_schema("-10.0", "-0.1"), r#"{"value": -5.5}"#),
-        ("NegativeFloatRangeSchema", float_schema("-10.0", "-0.1"), r#"{"value": -0.1}"#),
-        ("LargeFloatRangeSchema", float_schema("-1000.0", "1000.0"), r#"{"value": -1000.0}"#),
-        ("LargeFloatRangeSchema", float_schema("-1000.0", "1000.0"), r#"{"value": -500.5}"#),
-        ("LargeFloatRangeSchema", float_schema("-1000.0", "1000.0"), r#"{"value": 0.0}"#),
-        ("LargeFloatRangeSchema", float_schema("-1000.0", "1000.0"), r#"{"value": 500.5}"#),
-        ("LargeFloatRangeSchema", float_schema("-1000.0", "1000.0"), r#"{"value": 1000.0}"#),
-        ("ComplexFloatRangeSchema", float_schema("-12345.12345", "56789.56789"), r#"{"value": -1234.1234}"#),
-        ("ComplexFloatRangeSchema", float_schema("-12345.12345", "56789.56789"), r#"{"value": 0}"#),
-        ("ComplexFloatRangeSchema", float_schema("-12345.12345", "56789.56789"), r#"{"value": 5671.123456}"#),
-        ("VeryLargeFloatRangeSchema", float_schema("-20000000000.123123", "20000000000.456789"), r#"{"value": 20000000000.456788}"#),
-        ("VeryLargeFloatRangeSchema", float_schema("-20000000000.123123", "20000000000.456789"), r#"{"value": -19999999999.456788}"#),
+        (
+            "NegativeFloatRangeSchema",
+            float_schema("-10.0", "-0.1"),
+            r#"{"value": -10.0}"#,
+        ),
+        (
+            "NegativeFloatRangeSchema",
+            float_schema("-10.0", "-0.1"),
+            r#"{"value": -5.5}"#,
+        ),
+        (
+            "NegativeFloatRangeSchema",
+            float_schema("-10.0", "-0.1"),
+            r#"{"value": -0.1}"#,
+        ),
+        (
+            "LargeFloatRangeSchema",
+            float_schema("-1000.0", "1000.0"),
+            r#"{"value": -1000.0}"#,
+        ),
+        (
+            "LargeFloatRangeSchema",
+            float_schema("-1000.0", "1000.0"),
+            r#"{"value": -500.5}"#,
+        ),
+        (
+            "LargeFloatRangeSchema",
+            float_schema("-1000.0", "1000.0"),
+            r#"{"value": 0.0}"#,
+        ),
+        (
+            "LargeFloatRangeSchema",
+            float_schema("-1000.0", "1000.0"),
+            r#"{"value": 500.5}"#,
+        ),
+        (
+            "LargeFloatRangeSchema",
+            float_schema("-1000.0", "1000.0"),
+            r#"{"value": 1000.0}"#,
+        ),
+        (
+            "ComplexFloatRangeSchema",
+            float_schema("-12345.12345", "56789.56789"),
+            r#"{"value": -1234.1234}"#,
+        ),
+        (
+            "ComplexFloatRangeSchema",
+            float_schema("-12345.12345", "56789.56789"),
+            r#"{"value": 0}"#,
+        ),
+        (
+            "ComplexFloatRangeSchema",
+            float_schema("-12345.12345", "56789.56789"),
+            r#"{"value": 5671.123456}"#,
+        ),
+        (
+            "VeryLargeFloatRangeSchema",
+            float_schema("-20000000000.123123", "20000000000.456789"),
+            r#"{"value": 20000000000.456788}"#,
+        ),
+        (
+            "VeryLargeFloatRangeSchema",
+            float_schema("-20000000000.123123", "20000000000.456789"),
+            r#"{"value": -19999999999.456788}"#,
+        ),
         // Signed 64-bit boundary test cases (should succeed)
-        ("ValidInt64MaxSchema", int_schema("0", "9223372036854775807"), r#"{"value": 9223372036854775807}"#),
-        ("ValidInt64MaxSchema", int_schema("0", "9223372036854775807"), r#"{"value": 1000}"#),
-        ("ValidInt64MinSchema", int_schema("-9223372036854775808", "0"), r#"{"value": -9223372036854775808}"#),
-        ("ValidInt64MinSchema", int_schema("-9223372036854775808", "0"), r#"{"value": -1000}"#),
-        ("ValidLargeIntSchema", int_schema("0", "1000000000000000000"), r#"{"value": 1000000000000000000}"#),
-        ("ValidLargeIntSchema", int_schema("0", "1000000000000000000"), r#"{"value": 1000}"#),
+        (
+            "ValidInt64MaxSchema",
+            int_schema("0", "9223372036854775807"),
+            r#"{"value": 9223372036854775807}"#,
+        ),
+        (
+            "ValidInt64MaxSchema",
+            int_schema("0", "9223372036854775807"),
+            r#"{"value": 1000}"#,
+        ),
+        (
+            "ValidInt64MinSchema",
+            int_schema("-9223372036854775808", "0"),
+            r#"{"value": -9223372036854775808}"#,
+        ),
+        (
+            "ValidInt64MinSchema",
+            int_schema("-9223372036854775808", "0"),
+            r#"{"value": -1000}"#,
+        ),
+        (
+            "ValidLargeIntSchema",
+            int_schema("0", "1000000000000000000"),
+            r#"{"value": 1000000000000000000}"#,
+        ),
+        (
+            "ValidLargeIntSchema",
+            int_schema("0", "1000000000000000000"),
+            r#"{"value": 1000}"#,
+        ),
     ];
 
     for tokenizer_path in tokenizer_paths {
@@ -330,7 +449,8 @@ fn test_fill_next_token_bitmask_intfloat_range() {
                     None,
                 )
                 .unwrap();
-            let mut matcher = GrammarMatcher::new(&compiled, None, true, -1).unwrap();
+            let mut matcher =
+                GrammarMatcher::new(&compiled, None, true, -1).unwrap();
             let time_end = time_start.elapsed();
             println!(
                 "Time to init GrammarMatcher: {} us",
@@ -439,9 +559,18 @@ fn test_signed_64bit_boundary_values_work() {
         "meta-llama/Meta-Llama-3-8B-Instruct",
     ];
     let cases = vec![
-        (9223372036854775807i64, r#"{"type":"object","properties":{"value":{"type":"integer","minimum":0,"maximum":9223372036854775807}},"required":["value"]}"#),
-        (-9223372036854775808i64, r#"{"type":"object","properties":{"value":{"type":"integer","minimum":-9223372036854775808,"maximum":0}},"required":["value"]}"#),
-        (1000000000000000000i64, r#"{"type":"object","properties":{"value":{"type":"integer","minimum":0,"maximum":1000000000000000000}},"required":["value"]}"#),
+        (
+            9223372036854775807i64,
+            r#"{"type":"object","properties":{"value":{"type":"integer","minimum":0,"maximum":9223372036854775807}},"required":["value"]}"#,
+        ),
+        (
+            -9223372036854775808i64,
+            r#"{"type":"object","properties":{"value":{"type":"integer","minimum":-9223372036854775808,"maximum":0}},"required":["value"]}"#,
+        ),
+        (
+            1000000000000000000i64,
+            r#"{"type":"object","properties":{"value":{"type":"integer","minimum":0,"maximum":1000000000000000000}},"required":["value"]}"#,
+        ),
     ];
 
     for tokenizer_path in tokenizer_paths {
@@ -460,7 +589,8 @@ fn test_signed_64bit_boundary_values_work() {
                     None,
                 )
                 .unwrap();
-            let mut matcher = GrammarMatcher::new(&compiled, None, true, -1).unwrap();
+            let mut matcher =
+                GrammarMatcher::new(&compiled, None, true, -1).unwrap();
 
             let mut test_value = if *boundary_value == i64::MIN {
                 -1000
@@ -535,7 +665,8 @@ fn test_mixed_type_range_schema() {
                     None,
                 )
                 .unwrap();
-            let mut matcher = GrammarMatcher::new(&compiled, None, true, -1).unwrap();
+            let mut matcher =
+                GrammarMatcher::new(&compiled, None, true, -1).unwrap();
             let time_end = time_start.elapsed();
             println!(
                 "Time to init GrammarMatcher: {} us",
@@ -615,7 +746,8 @@ fn test_multiple_boundaries_schema() {
                     None,
                 )
                 .unwrap();
-            let mut matcher = GrammarMatcher::new(&compiled, None, true, -1).unwrap();
+            let mut matcher =
+                GrammarMatcher::new(&compiled, None, true, -1).unwrap();
             let time_end = time_start.elapsed();
             println!(
                 "Time to init GrammarMatcher: {} us",
@@ -662,7 +794,10 @@ fn test_multiple_boundaries_schema() {
 fn test_mask_generation_format() {
     let string_format_instances = vec![
         ("long.email-address-with-hyphens@and.subdomains.example.com", "email"),
-        (r#""very.(),:;<>[]\".VERY.\"very@\\ \"very\".unusual"@strange.example.com"#, "email"),
+        (
+            r#""very.(),:;<>[]\".VERY.\"very@\\ \"very\".unusual"@strange.example.com"#,
+            "email",
+        ),
         ("128.255.000.222", "ipv4"),
         ("2001:db8:3:4::192.0.2.33", "ipv6"),
         ("P1Y23M456DT9H87M654S", "duration"),
@@ -675,7 +810,8 @@ fn test_mask_generation_format() {
         ),
     ];
 
-    let tokenizer_info = make_hf_tokenizer_info("meta-llama/Meta-Llama-3.1-8B-Instruct");
+    let tokenizer_info =
+        make_hf_tokenizer_info("meta-llama/Meta-Llama-3.1-8B-Instruct");
     let mut grammar_compiler =
         GrammarCompiler::new(&tokenizer_info, 1, false, -1).unwrap();
 
@@ -697,12 +833,10 @@ fn test_mask_generation_format() {
                 None,
             )
             .unwrap();
-        let mut matcher = GrammarMatcher::new(&compiled, None, true, -1).unwrap();
+        let mut matcher =
+            GrammarMatcher::new(&compiled, None, true, -1).unwrap();
         let time_end = time_start.elapsed();
-        println!(
-            "Time for preprocessing: {} us",
-            time_end.as_micros()
-        );
+        println!("Time for preprocessing: {} us", time_end.as_micros());
 
         let mut token_bitmask =
             allocate_token_bitmask(1, tokenizer_info.vocab_size());
@@ -782,9 +916,10 @@ fn test_regression_accept_invalid_token() {
         Err(err) => {
             eprintln!("skip kimi tokenizer download: {err}");
             return;
-        }
+        },
     };
-    let tokenizer = tokenizers::Tokenizer::from_file(&path).expect("load tokenizer");
+    let tokenizer =
+        tokenizers::Tokenizer::from_file(&path).expect("load tokenizer");
     let vocab = tokenizer.get_vocab(true);
     let eos_id = vocab
         .get("</s>")
@@ -798,7 +933,8 @@ fn test_regression_accept_invalid_token() {
         Some(&[eos_id]),
     )
     .unwrap();
-    let mut compiler = GrammarCompiler::new(&tokenizer_info, 1, false, -1).unwrap();
+    let mut compiler =
+        GrammarCompiler::new(&tokenizer_info, 1, false, -1).unwrap();
     let schema = r#"
 {"type": "object", "properties": {"value": {"type": ["string", "null"], "maxLength": 10},
 "nested": {"type": "object", "properties": {"value": {"type": ["string", "null"]},
@@ -806,7 +942,14 @@ fn test_regression_accept_invalid_token() {
 "required": ["value", "nested_nested"], "maxItems": 10, "minItems": 1}},
 "required": ["value", "nested"], "additionalProperties": false}"#;
     let compiled = compiler
-        .compile_json_schema(schema, true, None, None::<(&str, &str)>, true, None)
+        .compile_json_schema(
+            schema,
+            true,
+            None,
+            None::<(&str, &str)>,
+            true,
+            None,
+        )
         .unwrap();
     let mut matcher = GrammarMatcher::new(&compiled, None, true, 200).unwrap();
     let batch_size = 7usize;
@@ -824,8 +967,8 @@ fn test_regression_accept_invalid_token() {
             true
         } else {
             let parent_pos = i - 1;
-            let parent_row =
-                &token_bitmask[parent_pos * bitmask_size..(parent_pos + 1) * bitmask_size];
+            let parent_row = &token_bitmask
+                [parent_pos * bitmask_size..(parent_pos + 1) * bitmask_size];
             let word = parent_row[(token / 32) as usize];
             (word & (1 << (token % 32))) != 0
         };
@@ -844,9 +987,10 @@ fn test_regression_accept_kimi_tokenizer_token() {
         Err(err) => {
             eprintln!("skip kimi tokenizer download: {err}");
             return;
-        }
+        },
     };
-    let tokenizer = tokenizers::Tokenizer::from_file(&path).expect("load tokenizer");
+    let tokenizer =
+        tokenizers::Tokenizer::from_file(&path).expect("load tokenizer");
     let vocab_size = tokenizer.get_vocab_size(true);
     let vocab = tokenizer.get_vocab(true);
     let eos_id = vocab
@@ -869,7 +1013,8 @@ fn test_regression_accept_kimi_tokenizer_token() {
         Some(&[eos_id]),
     )
     .unwrap();
-    let mut compiler = GrammarCompiler::new(&tokenizer_info, 1, false, -1).unwrap();
+    let mut compiler =
+        GrammarCompiler::new(&tokenizer_info, 1, false, -1).unwrap();
     let schema = r#"{
         "type": "object",
         "properties": {
@@ -879,7 +1024,14 @@ fn test_regression_accept_kimi_tokenizer_token() {
         "required": ["command"]
     }"#;
     let compiled = compiler
-        .compile_json_schema(schema, true, None, None::<(&str, &str)>, true, None)
+        .compile_json_schema(
+            schema,
+            true,
+            None,
+            None::<(&str, &str)>,
+            true,
+            None,
+        )
         .unwrap();
     let mut matcher = GrammarMatcher::new(&compiled, None, true, 200).unwrap();
     for token in ids {
@@ -942,4 +1094,3 @@ fn test_json_schema_number_without_constraint() {
     assert!(is_grammar_accept_string(&grammar, r#"{"value": -0.0}"#));
     assert!(!is_grammar_accept_string(&grammar, r#"{"value": "abc"}"#));
 }
-

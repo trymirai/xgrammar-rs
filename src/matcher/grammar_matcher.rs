@@ -296,9 +296,7 @@ impl GrammarMatcher {
     }
 
     pub(crate) fn ffi_mut(&mut self) -> Pin<&mut FFIGrammarMatcher> {
-        self.inner
-            .as_mut()
-            .expect("GrammarMatcher inner is null")
+        self.inner.as_mut().expect("GrammarMatcher inner is null")
     }
 
     pub(crate) fn ffi_ref(&self) -> &FFIGrammarMatcher {

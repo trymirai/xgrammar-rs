@@ -43,4 +43,3 @@ fn test_recursion_exceed_does_not_crash() {
     assert!(m.is_terminated());
     xgrammar::set_max_recursion_depth(prev);
 }
-

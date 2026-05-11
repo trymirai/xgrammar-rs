@@ -3,8 +3,8 @@ use std::pin::Pin;
 use autocxx::prelude::*;
 
 use crate::{
-    CxxUniquePtr, FFICompiledGrammar, Grammar, TokenizerInfo, cxx_ulong, cxx_ulonglong,
-    cxx_utils,
+    CxxUniquePtr, FFICompiledGrammar, Grammar, TokenizerInfo, cxx_ulong,
+    cxx_ulonglong, cxx_utils,
 };
 
 /// This is the primary object to store compiled grammar.
@@ -22,14 +22,18 @@ pub struct CompiledGrammar {
 impl CompiledGrammar {
     /// The original grammar.
     pub fn grammar(&self) -> Grammar {
-        let inner_ref = self.inner.as_ref().expect("CompiledGrammar inner is null");
+        let inner_ref =
+            self.inner.as_ref().expect("CompiledGrammar inner is null");
         Grammar::from_unique_ptr(inner_ref.GetGrammar().within_unique_ptr())
     }
 
     /// The tokenizer info associated with the compiled grammar.
     pub fn tokenizer_info(&self) -> TokenizerInfo {
-        let inner_ref = self.inner.as_ref().expect("CompiledGrammar inner is null");
-        TokenizerInfo::from_unique_ptr(inner_ref.GetTokenizerInfo().within_unique_ptr())
+        let inner_ref =
+            self.inner.as_ref().expect("CompiledGrammar inner is null");
+        TokenizerInfo::from_unique_ptr(
+            inner_ref.GetTokenizerInfo().within_unique_ptr(),
+        )
     }
 
     /// The approximate memory usage of the compiled grammar in bytes.
@@ -75,7 +79,8 @@ impl CompiledGrammar {
             }
         }
 
-        let inner_ref = self.inner.as_ref().expect("CompiledGrammar inner is null");
+        let inner_ref =
+            self.inner.as_ref().expect("CompiledGrammar inner is null");
         let sz = inner_ref.MemorySizeBytes().to_usize();
         sz
     }
@@ -92,7 +97,8 @@ impl CompiledGrammar {
     ///
     /// The JSON string.
     pub fn serialize_json(&self) -> String {
-        let inner_ref = self.inner.as_ref().expect("CompiledGrammar inner is null");
+        let inner_ref =
+            self.inner.as_ref().expect("CompiledGrammar inner is null");
         inner_ref.SerializeJSON().to_string()
     }
 
@@ -135,11 +141,17 @@ impl CompiledGrammar {
         if unique_ptr.is_null() {
             return Err(error_out_cxx.to_string());
         }
-        Ok(Self { inner: unique_ptr })
+        Ok(Self {
+            inner: unique_ptr,
+        })
     }
 
-    pub(crate) fn from_unique_ptr(inner: cxx::UniquePtr<FFICompiledGrammar>) -> Self {
-        Self { inner }
+    pub(crate) fn from_unique_ptr(
+        inner: cxx::UniquePtr<FFICompiledGrammar>
+    ) -> Self {
+        Self {
+            inner,
+        }
     }
 
     pub(crate) fn ffi_ref(&self) -> &FFICompiledGrammar {
@@ -148,6 +160,5 @@ impl CompiledGrammar {
 }
 
 impl Drop for CompiledGrammar {
-    fn drop(&mut self) {
-    }
+    fn drop(&mut self) {}
 }

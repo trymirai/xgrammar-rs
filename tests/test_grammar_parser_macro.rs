@@ -9,8 +9,7 @@ fn test_tag_dispatch() {
     let before = r#"root ::= TagDispatch(
     ("tag1", rule1),
     ("tag2", rule2),
-    stop_eos = false,
-    stop_str = ("abc", "def"),
+    excludes = ("abc", "def"),
     loop_after_dispatch = false
 )
 rule1 ::= "a"
@@ -20,10 +19,8 @@ rule2 ::= "b"
     let expected = r#"root ::= ((TagDispatch(
   ("tag1", rule1),
   ("tag2", rule2),
-  stop_eos=false,
-  stop_str=("abc", "def"),
   loop_after_dispatch=false,
-  excludes=()
+  excludes=("abc", "def")
 )))
 rule1 ::= (("a"))
 rule2 ::= (("b"))
@@ -44,8 +41,6 @@ rule2 ::= "b"
     let expected = r#"root ::= ((TagDispatch(
   ("tag1", rule1),
   ("tag2", rule2),
-  stop_eos=true,
-  stop_str=(),
   loop_after_dispatch=true,
   excludes=()
 )))
@@ -74,8 +69,6 @@ rule5 ::= "" | "g" rule5 "h"
   ("tag3", rule3),
   ("tag4", rule4),
   ("tag5", rule5),
-  stop_eos=true,
-  stop_str=(),
   loop_after_dispatch=true,
   excludes=()
 )
@@ -87,7 +80,8 @@ rule5 ::= ("" | ("g" rule5 "h"))
 "#;
 
     let grammar = testing::ebnf_to_grammar_no_normalization(before, "root");
-    let grammar = Grammar::from_ebnf(&grammar.to_string_ebnf(), "root").unwrap();
+    let grammar =
+        Grammar::from_ebnf(&grammar.to_string_ebnf(), "root").unwrap();
     let after = grammar.to_string_ebnf();
     assert_eq!(after, expected);
 }
@@ -104,8 +98,6 @@ rule3 ::= "c"
   ("tag1", rule1),
   ("tag2", rule2),
   ("tag3", rule3),
-  stop_eos=true,
-  stop_str=(),
   loop_after_dispatch=true,
   excludes=()
 )
@@ -130,8 +122,6 @@ rule3 ::= "c"
   ("tag1", rule1),
   ("tag2", rule2),
   ("tag3", rule3),
-  stop_eos=true,
-  stop_str=(),
   loop_after_dispatch=true,
   excludes=()
 )
@@ -141,24 +131,18 @@ rule3 ::= (("c"))
 rule1_1 ::= TagDispatch(
   ("tag1", rule2),
   ("tag2", rule3),
-  stop_eos=true,
-  stop_str=(),
   loop_after_dispatch=true,
   excludes=()
 )
 rule2_1 ::= TagDispatch(
   ("tag1", rule2),
   ("tag2", rule3),
-  stop_eos=true,
-  stop_str=(),
   loop_after_dispatch=true,
   excludes=()
 )
 rule2_2 ::= TagDispatch(
   ("tag3", rule2),
   ("tag4", rule3),
-  stop_eos=true,
-  stop_str=(),
   loop_after_dispatch=true,
   excludes=()
 )
@@ -176,8 +160,6 @@ fn test_e2e_tag_dispatch_roundtrip() {
   ("tag1", rule1),
   ("tag2", rule2),
   ("tag3", rule3),
-  stop_eos=true,
-  stop_str=(),
   loop_after_dispatch=false,
   excludes=()
 )
@@ -211,19 +193,21 @@ rule1 ::= "a""#,
             r#"root ::= TagDispatch("tag1", rule1)"#,
             "Each tag dispatch element must be a tuple",
         ),
-        (
-            r#"root ::= TagDispatch(("tag1" rule1))"#,
-            "Expect , or ) in tuple",
-        ),
+        (r#"root ::= TagDispatch(("tag1" rule1))"#, "Expect , or ) in tuple"),
         (
             r#"root ::= TagDispatch(("tag1", rule1), stop_str=true)
 rule1 ::= "a""#,
-            "Stop strings must be a tuple",
+            "Unknown named argument for TagDispatch: stop_str",
         ),
         (
             r#"root ::= TagDispatch(("tag1", rule1), stop_eos=false)
 rule1 ::= "a""#,
-            "The TagDispatch must have stop_eos=true or stop_str is not empty",
+            "Unknown named argument for TagDispatch: stop_eos",
+        ),
+        (
+            r#"root ::= TagDispatch(("tag1", rule1), excludes=("tag1"))
+rule1 ::= "a""#,
+            "Exclude string must not be a prefix of trigger string: tag1",
         ),
     ];
 
@@ -237,5 +221,3 @@ rule1 ::= "a""#,
         );
     }
 }
-
-

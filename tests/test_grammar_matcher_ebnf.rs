@@ -31,8 +31,10 @@ fn matcher_from_grammar(grammar: &Grammar) -> GrammarMatcher {
     let empty_vocab: Vec<&str> = vec![];
     let stop_ids: Option<Box<[i32]>> = None;
     let tokenizer_info =
-        TokenizerInfo::new(&empty_vocab, VocabType::RAW, &stop_ids, false).unwrap();
-    let mut compiler = GrammarCompiler::new(&tokenizer_info, 1, false, -1).unwrap();
+        TokenizerInfo::new(&empty_vocab, VocabType::RAW, &stop_ids, false)
+            .unwrap();
+    let mut compiler =
+        GrammarCompiler::new(&tokenizer_info, 1, false, -1).unwrap();
     let compiled = compiler.compile_grammar(grammar).unwrap();
     GrammarMatcher::new(&compiled, None, true, -1).unwrap()
 }
@@ -137,7 +139,8 @@ escape ::= ["\\/bfnrt] | "u" [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9]
 basic_object ::= "{" ("" | ws basic_string ws ":" ws basic_any ( ws "," ws basic_string ws ":" ws basic_any)*) ws "}"
 ws ::= [ \n\t]*
 "#;
-    let grammar = Grammar::from_ebnf(json_grammar_simple_ebnf, "basic_string").unwrap();
+    let grammar =
+        Grammar::from_ebnf(json_grammar_simple_ebnf, "basic_string").unwrap();
     assert!(is_grammar_accept_string(&grammar, r#""abc\r\n""#));
     assert!(!is_grammar_accept_string(&grammar, r#"{"name": "John" }"#));
 }
@@ -594,12 +597,12 @@ fn test_fill_next_token_bitmask_unicode_char_class() {
     let tokenizer_path = "meta-llama/Llama-2-7b-chat-hf";
     // Input: "aбя中" - ASCII 'a', Cyrillic 'б' (2 bytes), 'я' (2 bytes), CJK '中' (3 bytes)
     let input_str = "aбя中";
-    let expected_rejected_sizes = [
-        22129, 22128, 31984, 22128, 31984, 22128, 31992, 31936, 22128,
-    ];
+    let expected_rejected_sizes =
+        [22129, 22128, 31984, 22128, 31984, 22128, 31992, 31936, 22128];
 
     let tokenizer_info = make_hf_tokenizer_info(tokenizer_path);
-    let mut compiler = GrammarCompiler::new(&tokenizer_info, 1, false, -1).unwrap();
+    let mut compiler =
+        GrammarCompiler::new(&tokenizer_info, 1, false, -1).unwrap();
 
     // Grammar with mixed UTF-8 character class (ASCII + Cyrillic + CJK)
     let ebnf_grammar_str = "root ::= [a-zа-я一-龥]+";
@@ -622,8 +625,10 @@ fn test_fill_next_token_bitmask_unicode_char_class() {
         matcher.fill_next_token_bitmask(&mut tensor, 0, false);
 
         // 2. Correctness verification
-        let rejected_token_ids =
-            get_masked_tokens_from_bitmask(&token_bitmask, tokenizer_info.vocab_size());
+        let rejected_token_ids = get_masked_tokens_from_bitmask(
+            &token_bitmask,
+            tokenizer_info.vocab_size(),
+        );
         assert_eq!(
             rejected_token_ids.len(),
             expected_rejected_sizes[i],
@@ -635,16 +640,17 @@ fn test_fill_next_token_bitmask_unicode_char_class() {
         );
 
         // 3. accept_string
-        let s = unsafe {
-            std::str::from_utf8_unchecked(std::slice::from_ref(c))
-        };
+        let s =
+            unsafe { std::str::from_utf8_unchecked(std::slice::from_ref(c)) };
         assert!(matcher.accept_string(s, false));
     }
 
     // 5. Final correctness verification
     matcher.fill_next_token_bitmask(&mut tensor, 0, false);
-    let rejected_token_ids =
-        get_masked_tokens_from_bitmask(&token_bitmask, tokenizer_info.vocab_size());
+    let rejected_token_ids = get_masked_tokens_from_bitmask(
+        &token_bitmask,
+        tokenizer_info.vocab_size(),
+    );
     assert_eq!(
         rejected_token_ids.len(),
         expected_rejected_sizes[expected_rejected_sizes.len() - 1],
@@ -692,14 +698,20 @@ fn test_positive_utf8_character_class_with_quantifier() {
 #[cfg(feature = "hf")]
 fn test_not_neighbour_character_class() {
     let raw_grammar = r#"root ::= [a-cx-z]*"#;
-    let tokenizer_info = make_hf_tokenizer_info("meta-llama/Llama-2-7b-chat-hf");
+    let tokenizer_info =
+        make_hf_tokenizer_info("meta-llama/Llama-2-7b-chat-hf");
     let grammar = Grammar::from_ebnf(raw_grammar, "root").unwrap();
-    let mut compiler = GrammarCompiler::new(&tokenizer_info, 1, false, -1).unwrap();
+    let mut compiler =
+        GrammarCompiler::new(&tokenizer_info, 1, false, -1).unwrap();
     let compiled = compiler.compile_grammar(&grammar).unwrap();
     let mut matcher = GrammarMatcher::new(&compiled, None, true, -1).unwrap();
 
-    let mut bitmask_data = allocate_token_bitmask(1, tokenizer_info.vocab_size());
-    let (mut tensor, _shape, _strides) =
-        create_bitmask_dltensor(&mut bitmask_data, 1, tokenizer_info.vocab_size());
+    let mut bitmask_data =
+        allocate_token_bitmask(1, tokenizer_info.vocab_size());
+    let (mut tensor, _shape, _strides) = create_bitmask_dltensor(
+        &mut bitmask_data,
+        1,
+        tokenizer_info.vocab_size(),
+    );
     matcher.fill_next_token_bitmask(&mut tensor, 0, false);
 }

@@ -226,7 +226,8 @@ fn test_fill_next_token_bitmask() {
         let tokenizer_info = make_hf_tokenizer_info(tokenizer_path);
         let mut grammar_compiler =
             GrammarCompiler::new(&tokenizer_info, 8, false, -1).unwrap();
-        let compiled_grammar = grammar_compiler.compile_builtin_json_grammar().unwrap();
+        let compiled_grammar =
+            grammar_compiler.compile_builtin_json_grammar().unwrap();
         let mut matcher =
             GrammarMatcher::new(&compiled_grammar, None, false, -1).unwrap();
 

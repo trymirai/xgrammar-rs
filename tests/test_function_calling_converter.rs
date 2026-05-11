@@ -9,8 +9,10 @@ fn matcher_from_grammar(grammar: &Grammar) -> GrammarMatcher {
     let empty_vocab: Vec<&str> = vec![];
     let stop_ids: Option<Box<[i32]>> = None;
     let tokenizer_info =
-        TokenizerInfo::new(&empty_vocab, VocabType::RAW, &stop_ids, false).unwrap();
-    let mut compiler = GrammarCompiler::new(&tokenizer_info, 1, false, -1).unwrap();
+        TokenizerInfo::new(&empty_vocab, VocabType::RAW, &stop_ids, false)
+            .unwrap();
+    let mut compiler =
+        GrammarCompiler::new(&tokenizer_info, 1, false, -1).unwrap();
     let compiled = compiler.compile_grammar(grammar).unwrap();
     GrammarMatcher::new(&compiled, None, true, -1).unwrap()
 }
@@ -50,7 +52,7 @@ fn test_string_schema() {
         ),
         (
             "<parameter=name>Bob</parameter><parameter=age>100</parameter>\t\t",
-            false,
+            true,
         ),
     ];
 
@@ -285,25 +287,17 @@ fn test_string_format_length_schema() {
 
 #[test]
 #[serial]
-fn test_invalid_function_calling_schema() {
-    use std::panic;
+fn test_non_object_function_calling_schemas() {
+    for schema in ["{}", r#"{"type":"string"}"#] {
+        let ebnf = qwen_xml_tool_calling_to_ebnf(schema);
+        assert!(!ebnf.is_empty(), "schema should produce EBNF: {schema}");
+        Grammar::from_ebnf(&ebnf, "root").unwrap();
+    }
+}
 
-    // Empty schema should fail
-    let result = panic::catch_unwind(|| {
-        qwen_xml_tool_calling_to_ebnf("{}")
-    });
-    assert!(result.is_err() || {
-        // If it doesn't panic, we need to check the result produces invalid grammar
-        let ebnf = qwen_xml_tool_calling_to_ebnf("{}");
-        Grammar::from_ebnf(&ebnf, "root").is_err()
-    });
-
-    // Non-object schema (type: string) should fail
-    let result = panic::catch_unwind(|| {
-        qwen_xml_tool_calling_to_ebnf(r#"{"type":"string"}"#)
-    });
-    assert!(result.is_err() || {
-        let ebnf = qwen_xml_tool_calling_to_ebnf(r#"{"type":"string"}"#);
-        Grammar::from_ebnf(&ebnf, "root").is_err()
-    });
+#[test]
+#[serial]
+fn test_invalid_function_calling_json() {
+    let ebnf = qwen_xml_tool_calling_to_ebnf("{");
+    assert!(ebnf.is_empty() || Grammar::from_ebnf(&ebnf, "root").is_err());
 }

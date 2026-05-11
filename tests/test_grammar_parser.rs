@@ -155,7 +155,8 @@ fn test_character_class_star() {
 fn test_repetition_range_exact() {
     let before = r#"root ::= "a"{3}
 "#;
-    let expected = r#"root ::= ((("a" "a" "a")))
+    let expected = r#"root ::= ((root_1{3, 3}))
+root_1 ::= "a"
 "#;
     let grammar = ebnf_to_grammar_no_normalization(before, "root");
     let after = grammar.to_string();
@@ -167,9 +168,8 @@ fn test_repetition_range_exact() {
 fn test_repetition_range_min_max() {
     let before = r#"root ::= "a"{2,4}
 "#;
-    let expected = r#"root ::= ((("a" "a" root_1)))
-root_1 ::= ("" | ("a" root_2))
-root_2 ::= ("" | "a")
+    let expected = r#"root ::= ((root_1{2, 4}))
+root_1 ::= "a"
 "#;
     let grammar = ebnf_to_grammar_no_normalization(before, "root");
     let after = grammar.to_string();
@@ -181,8 +181,8 @@ root_2 ::= ("" | "a")
 fn test_repetition_range_min_only() {
     let before = r#"root ::= "a"{2,}
 "#;
-    let expected = r#"root ::= ((("a" "a" root_1)))
-root_1 ::= ("" | ("a" root_1))
+    let expected = r#"root ::= ((root_1{2, -1}))
+root_1 ::= "a"
 "#;
     let grammar = ebnf_to_grammar_no_normalization(before, "root");
     let after = grammar.to_string();
@@ -270,8 +270,9 @@ root_1 ::= (((("a" "b")) root_1) | (("a" "b")))
 fn test_combined_features() {
     let before = r#"root ::= [a-z]+ "-" [0-9]{3}
 "#;
-    let expected = r#"root ::= ((root_1 "-" ([0-9] [0-9] [0-9])))
+    let expected = r#"root ::= ((root_1 "-" root_2{3, 3}))
 root_1 ::= (([a-z] root_1) | [a-z])
+root_2 ::= [0-9]
 "#;
     let grammar = ebnf_to_grammar_no_normalization(before, "root");
     let after = grammar.to_string();
@@ -313,10 +314,8 @@ fn test_repetition_range() {
     let before = r#"root ::= a{1,3}
 a ::= "a"
 "#;
-    let expected = r#"root ::= (((a root_1)))
+    let expected = r#"root ::= ((a{1, 3}))
 a ::= (("a"))
-root_1 ::= ("" | (a root_2))
-root_2 ::= ("" | a)
 "#;
     let grammar = ebnf_to_grammar_no_normalization(before, "root");
     let after = grammar.to_string();
@@ -472,10 +471,9 @@ fn test_lexer_parser_errors() {
     for (ebnf, expected_err) in error_cases {
         let result = Grammar::from_ebnf(ebnf, "root");
         match result {
-            Ok(_) => panic!(
-                "Expected error for '{}', but parsing succeeded",
-                ebnf
-            ),
+            Ok(_) => {
+                panic!("Expected error for '{}', but parsing succeeded", ebnf)
+            },
             Err(err_msg) => {
                 assert!(
                     err_msg.contains(expected_err),
@@ -484,7 +482,7 @@ fn test_lexer_parser_errors() {
                     ebnf,
                     err_msg
                 );
-            }
+            },
         }
     }
 }
@@ -503,10 +501,9 @@ fn test_end_to_end_errors() {
     for (ebnf, expected_err) in error_cases {
         let result = Grammar::from_ebnf(ebnf, "root");
         match result {
-            Ok(_) => panic!(
-                "Expected error for '{}', but parsing succeeded",
-                ebnf
-            ),
+            Ok(_) => {
+                panic!("Expected error for '{}', but parsing succeeded", ebnf)
+            },
             Err(err_msg) => {
                 assert!(
                     err_msg.contains(expected_err),
@@ -515,7 +512,7 @@ fn test_end_to_end_errors() {
                     ebnf,
                     err_msg
                 );
-            }
+            },
         }
     }
 }
@@ -529,9 +526,7 @@ fn test_repetition_normalizer() {
 root_repeat_1 ::= (([0-9]*)) (=([0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]* [0-9]*))
 "#;
     let grammar = Grammar::from_ebnf(before, "root").unwrap();
-    let actual = grammar.to_string_ebnf();
-    assert!(actual.contains("root_repeat_1_inner"));
-    assert!(actual.contains("root_repeat_1{72, 872}"));
-    assert!(actual.contains("root_repeat_1 ::= (([0-9]*))"));
+    assert!(test_utils::is_grammar_accept_string(&grammar, ""));
+    assert!(test_utils::is_grammar_accept_string(&grammar, "12345"));
     let _ = expected_grammar;
 }

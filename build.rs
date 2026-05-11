@@ -238,23 +238,34 @@ fn maybe_clear_cmake_build_dir(
     let Ok(contents) = fs::read_to_string(&cache) else {
         return;
     };
-    let src =
+
+    let expected_source =
         source_dir.canonicalize().unwrap_or_else(|_| source_dir.to_path_buf());
+    let expected_build =
+        build_dir.canonicalize().unwrap_or_else(|_| build_dir.to_path_buf());
+
     for line in contents.lines() {
-        if !line.starts_with("CMAKE_HOME_DIRECTORY") {
+        let Some((key, value)) = line.split_once('=') else {
             continue;
-        }
-        let needs_cleanup = match line.split('=').next_back() {
-            Some(cmake_home) => fs::canonicalize(cmake_home)
-                .ok()
-                .map(|cmake_home| cmake_home != src)
-                .unwrap_or(true),
-            None => true,
         };
+
+        let expected = if key.starts_with("CMAKE_HOME_DIRECTORY:") {
+            &expected_source
+        } else if key.starts_with("CMAKE_CACHEFILE_DIR:") {
+            &expected_build
+        } else {
+            continue;
+        };
+
+        let needs_cleanup = fs::canonicalize(value)
+            .ok()
+            .map(|path| path.as_path() != expected.as_path())
+            .unwrap_or(true);
+
         if needs_cleanup {
             let _ = fs::remove_dir_all(build_dir);
+            break;
         }
-        break;
     }
 }
 

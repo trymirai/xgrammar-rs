@@ -5,7 +5,7 @@ use test_utils::*;
 
 use xgrammar::{
     Grammar, GrammarCompiler, GrammarMatcher, TokenizerInfo, VocabType,
-    allocate_token_bitmask, testing,
+    allocate_token_bitmask, c_void, testing,
 };
 
 fn create_i32_1d_dltensor(
@@ -14,7 +14,7 @@ fn create_i32_1d_dltensor(
     let mut shape = vec![data.len() as i64];
     let mut strides = vec![1i64];
     let tensor = xgrammar::DLTensor {
-        data: data.as_mut_ptr() as *mut std::ffi::c_void,
+        data: data.as_mut_ptr() as *mut c_void,
         device: xgrammar::DLDevice {
             device_type: xgrammar::DLDeviceType::kDLCPU,
             device_id: 0,

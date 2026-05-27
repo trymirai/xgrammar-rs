@@ -5,6 +5,8 @@
 
 namespace cxx_utils {
 
+using c_void = void;
+
 /**
  * Makes a `std::unique_ptr` from rvalue.
  * Unlike `std::make_unique`, the template argument is deduced.

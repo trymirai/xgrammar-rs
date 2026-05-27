@@ -186,6 +186,34 @@ inline std::unique_ptr<xgrammar::Grammar> grammar_from_structural_tag(
   return make_unique(std::get<xgrammar::Grammar>(std::move(result)));
 }
 
+inline std::unique_ptr<std::string> grammar_to_string(
+    const xgrammar::Grammar& self
+) {
+  return make_unique(self.ToString());
+}
+
+inline std::unique_ptr<xgrammar::Grammar> grammar_builtin_json_grammar() {
+  return make_unique(xgrammar::Grammar::BuiltinJSONGrammar());
+}
+
+inline std::unique_ptr<xgrammar::Grammar> grammar_union(
+    const std::vector<xgrammar::Grammar>& grammars
+) {
+  return make_unique(xgrammar::Grammar::Union(grammars));
+}
+
+inline std::unique_ptr<xgrammar::Grammar> grammar_concat(
+    const std::vector<xgrammar::Grammar>& grammars
+) {
+  return make_unique(xgrammar::Grammar::Concat(grammars));
+}
+
+inline std::unique_ptr<std::string> grammar_serialize_json(
+    const xgrammar::Grammar& self
+) {
+  return make_unique(self.SerializeJSON());
+}
+
 } // namespace cxx_utils
 
 #endif // XGRAMMAR_RS_CXX_UTILS_GRAMMAR_H_

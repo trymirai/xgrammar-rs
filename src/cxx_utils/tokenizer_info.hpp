@@ -67,6 +67,28 @@ inline std::unique_ptr<xgrammar::TokenizerInfo> make_tokenizer_info(
 }
 
 inline std::unique_ptr<xgrammar::TokenizerInfo>
+tokenizer_info_from_vocab_and_metadata(
+    const std::vector<std::string>& encoded_vocab,
+    const std::string& metadata
+) {
+  return make_unique(
+      xgrammar::TokenizerInfo::FromVocabAndMetadata(encoded_vocab, metadata)
+  );
+}
+
+inline std::unique_ptr<std::string> tokenizer_info_serialize_json(
+    const xgrammar::TokenizerInfo& self
+) {
+  return make_unique(self.SerializeJSON());
+}
+
+inline std::unique_ptr<std::string> tokenizer_info_dump_metadata(
+    const xgrammar::TokenizerInfo& self
+) {
+  return make_unique(self.DumpMetadata());
+}
+
+inline std::unique_ptr<xgrammar::TokenizerInfo>
 tokenizer_info_deserialize_json_or_error(
     const std::string& json_string,
     std::string* error_out

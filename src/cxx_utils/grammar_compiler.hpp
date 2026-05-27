@@ -17,9 +17,9 @@ namespace cxx_utils {
 
 inline std::unique_ptr<xgrammar::GrammarCompiler> make_grammar_compiler(
     const xgrammar::TokenizerInfo& tokenizer_info,
-    int max_threads,
+    int32_t max_threads,
     bool cache_enabled,
-    long long cache_limit_bytes,
+    int64_t cache_limit_bytes,
     std::string* error_out
 ) {
   try {
@@ -51,13 +51,13 @@ inline std::unique_ptr<xgrammar::CompiledGrammar> compiler_compile_json_schema(
     const std::string& schema,
     bool any_whitespace,
     bool has_indent,
-    int indent,
+    int32_t indent,
     bool has_separators,
     const std::string& separator_comma,
     const std::string& separator_colon,
     bool strict_mode,
     bool has_max_whitespace_cnt,
-    int max_whitespace_cnt,
+    int32_t max_whitespace_cnt,
     std::string* error_out
 ) {
   try {

@@ -1,9 +1,7 @@
-use autocxx::prelude::*;
-
 use crate::{
-    CxxUniquePtr, FFIGrammarCompiler,
+    CxxUniquePtr,
     compiler::CompiledGrammar,
-    cxx_int, cxx_longlong, cxx_utils,
+    ffi,
     grammar::{self, StructuralTagItem},
     tokenizer_info::TokenizerInfo,
 };
@@ -14,7 +12,7 @@ use crate::{
 /// with the tokenizer info. It allows parallel compilation with multiple threads, and has a cache
 /// to store the compilation result, avoiding compiling the same grammar multiple times.
 pub struct GrammarCompiler {
-    inner: CxxUniquePtr<FFIGrammarCompiler>,
+    inner: CxxUniquePtr<ffi::GrammarCompiler>,
 }
 
 impl GrammarCompiler {
@@ -39,11 +37,11 @@ impl GrammarCompiler {
     ) -> Result<Self, String> {
         cxx::let_cxx_string!(error_out_cxx = "");
         let inner = unsafe {
-            cxx_utils::make_grammar_compiler(
+            ffi::make_grammar_compiler(
                 tokenizer_info.ffi_ref(),
-                cxx_int(max_threads),
+                max_threads,
                 cache_enabled,
-                cxx_longlong(cache_limit_bytes as i64),
+                cache_limit_bytes as i64,
                 error_out_cxx.as_mut().get_unchecked_mut(),
             )
         };
@@ -106,18 +104,18 @@ impl GrammarCompiler {
 
         cxx::let_cxx_string!(error_out_cxx = "");
         let unique_ptr = unsafe {
-            cxx_utils::compiler_compile_json_schema(
+            ffi::compiler_compile_json_schema(
                 self.inner.as_mut().expect("GrammarCompiler inner is null"),
                 &schema_cxx,
                 any_whitespace,
                 has_indent,
-                cxx_int(indent_i32),
+                indent_i32,
                 has_separators,
                 &sep_comma_cxx,
                 &sep_colon_cxx,
                 strict_mode,
                 max_whitespace_cnt.is_some(),
-                cxx_int(max_whitespace_cnt.unwrap_or(0)),
+                max_whitespace_cnt.unwrap_or(0),
                 error_out_cxx.as_mut().get_unchecked_mut(),
             )
         };
@@ -141,7 +139,7 @@ impl GrammarCompiler {
     ) -> Result<CompiledGrammar, String> {
         cxx::let_cxx_string!(error_out_cxx = "");
         let unique_ptr = unsafe {
-            cxx_utils::compiler_compile_builtin_json(
+            ffi::compiler_compile_builtin_json(
                 self.inner.as_mut().expect("GrammarCompiler inner is null"),
                 error_out_cxx.as_mut().get_unchecked_mut(),
             )
@@ -172,7 +170,7 @@ impl GrammarCompiler {
         cxx::let_cxx_string!(regex_cxx = regex);
         cxx::let_cxx_string!(error_out_cxx = "");
         let unique_ptr = unsafe {
-            cxx_utils::compiler_compile_regex(
+            ffi::compiler_compile_regex(
                 self.inner.as_mut().expect("GrammarCompiler inner is null"),
                 &regex_cxx,
                 error_out_cxx.as_mut().get_unchecked_mut(),
@@ -238,7 +236,7 @@ impl GrammarCompiler {
         cxx::let_cxx_string!(structural_tag_str = structural_tag_json);
         cxx::let_cxx_string!(error_out_cxx = "");
         let unique_ptr = unsafe {
-            cxx_utils::compiler_compile_structural_tag(
+            ffi::compiler_compile_structural_tag(
                 self.inner.as_mut().expect("GrammarCompiler inner is null"),
                 &structural_tag_str,
                 error_out_cxx.as_mut().get_unchecked_mut(),
@@ -269,7 +267,7 @@ impl GrammarCompiler {
     ) -> Result<CompiledGrammar, String> {
         cxx::let_cxx_string!(error_out_cxx = "");
         let unique_ptr = unsafe {
-            cxx_utils::compiler_compile_grammar_or_error(
+            ffi::compiler_compile_grammar_or_error(
                 self.inner.as_mut().expect("GrammarCompiler inner is null"),
                 grammar.ffi_ref(),
                 error_out_cxx.as_mut().get_unchecked_mut(),
@@ -319,7 +317,6 @@ impl GrammarCompiler {
             .as_ref()
             .expect("GrammarCompiler inner is null")
             .GetCacheSizeBytes()
-            .into()
     }
 
     /// The maximum memory usage for the cache in bytes.
@@ -332,7 +329,6 @@ impl GrammarCompiler {
             .as_ref()
             .expect("GrammarCompiler inner is null")
             .CacheLimitBytes()
-            .into()
     }
 }
 

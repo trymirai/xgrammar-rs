@@ -1,9 +1,4 @@
-use autocxx::prelude::*;
-
-use crate::{
-    CxxUniquePtr,
-    ffi::{cxx_utils, xgrammar::Grammar as FFIGrammar},
-};
+use crate::{CxxUniquePtr, ffi};
 
 /// This class represents a grammar object in XGrammar, and can be used later in the
 /// grammar-guided generation.
@@ -15,7 +10,7 @@ use crate::{
 ///
 /// When formatted with Display, the grammar will be converted to GBNF format.
 pub struct Grammar {
-    inner: CxxUniquePtr<FFIGrammar>,
+    inner: CxxUniquePtr<ffi::Grammar>,
 }
 
 impl core::fmt::Display for Grammar {
@@ -23,7 +18,7 @@ impl core::fmt::Display for Grammar {
         &self,
         f: &mut core::fmt::Formatter<'_>,
     ) -> core::fmt::Result {
-        write!(f, "{}", self.inner.ToString().to_string())
+        write!(f, "{}", self.to_string_ebnf())
     }
 }
 
@@ -34,7 +29,7 @@ impl Grammar {
     ///
     /// The BNF grammar string.
     pub fn to_string_ebnf(&self) -> String {
-        self.inner.ToString().to_string()
+        ffi::grammar_to_string(&self.inner).to_string()
     }
 
     /// Construct a grammar from EBNF string. The EBNF string should follow the format
@@ -56,7 +51,7 @@ impl Grammar {
         cxx::let_cxx_string!(root_rule_name_cxx = root_rule_name);
         cxx::let_cxx_string!(error_out_cxx = "");
         let ffi_ptr = unsafe {
-            cxx_utils::grammar_from_ebnf(
+            ffi::grammar_from_ebnf(
                 &ebnf_cxx,
                 &root_rule_name_cxx,
                 error_out_cxx.as_mut().get_unchecked_mut(),
@@ -141,7 +136,7 @@ impl Grammar {
         cxx::let_cxx_string!(separator_colon_cxx = separator_colon.as_str());
         cxx::let_cxx_string!(error_out_cxx = "");
         let ffi_ptr = unsafe {
-            cxx_utils::grammar_from_json_schema(
+            ffi::grammar_from_json_schema(
                 &schema_cxx,
                 any_whitespace,
                 has_indent,
@@ -186,7 +181,7 @@ impl Grammar {
         cxx::let_cxx_string!(regex_cxx = regex_string);
         cxx::let_cxx_string!(error_out_cxx = "");
         let ffi_ptr = unsafe {
-            cxx_utils::grammar_from_regex(
+            ffi::grammar_from_regex(
                 &regex_cxx,
                 print_converted_ebnf,
                 error_out_cxx.as_mut().get_unchecked_mut(),
@@ -221,7 +216,7 @@ impl Grammar {
         cxx::let_cxx_string!(json_cxx = structural_tag_json);
         cxx::let_cxx_string!(error_out_cxx = "");
         let unique_ptr = unsafe {
-            cxx_utils::grammar_from_structural_tag(
+            ffi::grammar_from_structural_tag(
                 &json_cxx,
                 error_out_cxx.as_mut().get_unchecked_mut(),
             )
@@ -241,7 +236,7 @@ impl Grammar {
     ///
     /// The JSON grammar.
     pub fn builtin_json_grammar() -> Self {
-        let ffi_ptr = FFIGrammar::BuiltinJSONGrammar().within_unique_ptr();
+        let ffi_ptr = ffi::grammar_builtin_json_grammar();
         Self {
             inner: ffi_ptr,
         }
@@ -259,19 +254,15 @@ impl Grammar {
     /// The concatenation of the grammars.
     pub fn concat(grammars: &[Grammar]) -> Self {
         assert!(!grammars.is_empty(), "concat requires at least one grammar");
-        let mut vec = cxx_utils::new_grammar_vector();
+        let mut vec = ffi::new_grammar_vector();
         {
             let mut vec_pin = vec.pin_mut();
-            cxx_utils::grammar_vec_reserve(vec_pin.as_mut(), grammars.len());
+            ffi::grammar_vec_reserve(vec_pin.as_mut(), grammars.len());
             for grammar in grammars {
-                cxx_utils::grammar_vec_push(
-                    vec_pin.as_mut(),
-                    grammar.ffi_ref(),
-                );
+                ffi::grammar_vec_push(vec_pin.as_mut(), grammar.ffi_ref());
             }
         }
-        let ffi_ptr =
-            FFIGrammar::Concat(vec.as_ref().unwrap()).within_unique_ptr();
+        let ffi_ptr = ffi::grammar_concat(vec.as_ref().unwrap());
         Self {
             inner: ffi_ptr,
         }
@@ -289,16 +280,15 @@ impl Grammar {
     /// The union of the grammars.
     pub fn union(grammars: &[Grammar]) -> Self {
         assert!(!grammars.is_empty(), "union requires at least one grammar");
-        let mut vec = cxx_utils::new_grammar_vector();
+        let mut vec = ffi::new_grammar_vector();
         {
             let mut vec_pin = vec.pin_mut();
-            cxx_utils::grammar_vec_reserve(vec_pin.as_mut(), grammars.len());
+            ffi::grammar_vec_reserve(vec_pin.as_mut(), grammars.len());
             for g in grammars {
-                cxx_utils::grammar_vec_push(vec_pin.as_mut(), g.ffi_ref());
+                ffi::grammar_vec_push(vec_pin.as_mut(), g.ffi_ref());
             }
         }
-        let ffi_ptr =
-            FFIGrammar::Union(vec.as_ref().unwrap()).within_unique_ptr();
+        let ffi_ptr = ffi::grammar_union(vec.as_ref().unwrap());
         Self {
             inner: ffi_ptr,
         }
@@ -310,11 +300,10 @@ impl Grammar {
     ///
     /// The JSON string.
     pub fn serialize_json(&self) -> String {
-        self.inner
-            .as_ref()
-            .expect("FFIGrammar UniquePtr was null")
-            .SerializeJSON()
-            .to_string()
+        ffi::grammar_serialize_json(
+            self.inner.as_ref().expect("ffi::Grammar UniquePtr was null"),
+        )
+        .to_string()
     }
 
     /// Deserialize a grammar from a JSON string.
@@ -336,7 +325,7 @@ impl Grammar {
         cxx::let_cxx_string!(json_cxx = json_string);
         cxx::let_cxx_string!(error_out_cxx = "");
         let unique_ptr = unsafe {
-            cxx_utils::grammar_deserialize_json_or_error(
+            ffi::grammar_deserialize_json_or_error(
                 &json_cxx,
                 error_out_cxx.as_mut().get_unchecked_mut(),
             )
@@ -349,11 +338,11 @@ impl Grammar {
         })
     }
 
-    pub(crate) fn ffi_ref(&self) -> &FFIGrammar {
-        self.inner.as_ref().expect("FFIGrammar UniquePtr was null")
+    pub(crate) fn ffi_ref(&self) -> &ffi::Grammar {
+        self.inner.as_ref().expect("ffi::Grammar UniquePtr was null")
     }
 
-    pub(crate) fn from_unique_ptr(inner: cxx::UniquePtr<FFIGrammar>) -> Self {
+    pub(crate) fn from_unique_ptr(inner: cxx::UniquePtr<ffi::Grammar>) -> Self {
         Self {
             inner,
         }

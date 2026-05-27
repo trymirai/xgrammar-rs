@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use xgrammar::{
     DLDataType, DLDataTypeCode, DLDevice, DLDeviceType, DLTensor, Grammar,
     GrammarCompiler, GrammarMatcher, TokenizerInfo, VocabType,
-    allocate_token_bitmask, get_bitmask_shape,
+    allocate_token_bitmask, c_void, get_bitmask_shape,
 };
 
 #[cfg(feature = "hf")]
@@ -172,7 +172,7 @@ pub fn create_bitmask_dltensor(
     let mut strides = vec![bitmask_size as i64, 1];
 
     let tensor = DLTensor {
-        data: bitmask_data.as_mut_ptr() as *mut std::ffi::c_void,
+        data: bitmask_data.as_mut_ptr() as *mut c_void,
         device: DLDevice {
             device_type: DLDeviceType::kDLCPU,
             device_id: 0,
@@ -198,7 +198,7 @@ pub fn create_i64_1d_dltensor(
     let mut shape = vec![data.len() as i64];
     let mut strides = vec![1i64];
     let tensor = DLTensor {
-        data: data.as_mut_ptr() as *mut std::ffi::c_void,
+        data: data.as_mut_ptr() as *mut c_void,
         device: DLDevice {
             device_type: DLDeviceType::kDLCPU,
             device_id: 0,
@@ -223,7 +223,7 @@ pub fn create_f32_1d_dltensor(
     let mut shape = vec![data.len() as i64];
     let mut strides = vec![1i64];
     let tensor = DLTensor {
-        data: data.as_mut_ptr() as *mut std::ffi::c_void,
+        data: data.as_mut_ptr() as *mut c_void,
         device: DLDevice {
             device_type: DLDeviceType::kDLCPU,
             device_id: 0,
@@ -252,7 +252,7 @@ pub fn create_f32_2d_dltensor(
     let mut shape = vec![rows as i64, cols as i64];
     let mut strides = vec![stride0, stride1];
     let tensor = DLTensor {
-        data: data.as_mut_ptr() as *mut std::ffi::c_void,
+        data: data.as_mut_ptr() as *mut c_void,
         device: DLDevice {
             device_type: DLDeviceType::kDLCPU,
             device_id: 0,

@@ -1,6 +1,6 @@
 use std::{
     env,
-    fs::{self, copy, create_dir_all},
+    fs::{self, create_dir_all},
     path::{Path, PathBuf},
 };
 
@@ -64,19 +64,4 @@ pub fn find_xgrammar_lib_dir(root: &Path) -> Option<PathBuf> {
     }
 
     None
-}
-
-pub fn copy_if_changed(
-    src: &Path,
-    dst: &Path,
-) {
-    if let (Ok(src_bytes), Ok(dst_bytes)) = (fs::read(src), fs::read(dst)) {
-        if src_bytes == dst_bytes {
-            return;
-        }
-    }
-    if let Some(parent) = dst.parent() {
-        create_dir_all(parent).ok();
-    }
-    let _ = copy(src, dst);
 }

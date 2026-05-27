@@ -62,9 +62,9 @@ pub fn apply_token_bitmask_inplace_cpu(
     };
     cxx::let_cxx_string!(error_out_cxx = "");
     let ok = unsafe {
-        crate::cxx_utils::apply_token_bitmask_inplace_cpu(
-            logits as *mut _,
-            bitmask as *const _,
+        crate::ffi::apply_token_bitmask_inplace_cpu(
+            &mut logits.ffi() as *mut _,
+            &bitmask.ffi() as *const _,
             vocab_size_i32,
             has_indices,
             indices_ptr,

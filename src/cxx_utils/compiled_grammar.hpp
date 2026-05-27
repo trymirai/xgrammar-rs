@@ -29,6 +29,23 @@ compiled_grammar_deserialize_json_or_error(
   return make_unique(std::get<xgrammar::CompiledGrammar>(std::move(result)));
 }
 
+inline std::unique_ptr<xgrammar::Grammar> compiled_grammar_get_grammar(
+    const xgrammar::CompiledGrammar& self
+) {
+  return make_unique(self.GetGrammar());
+}
+
+inline std::unique_ptr<xgrammar::TokenizerInfo>
+compiled_grammar_get_tokenizer_info(const xgrammar::CompiledGrammar& self) {
+  return make_unique(self.GetTokenizerInfo());
+}
+
+inline std::unique_ptr<std::string> compiled_grammar_serialize_json(
+    const xgrammar::CompiledGrammar& self
+) {
+  return make_unique(self.SerializeJSON());
+}
+
 } // namespace cxx_utils
 
 #endif // XGRAMMAR_RS_CXX_UTILS_COMPILED_GRAMMAR_H_

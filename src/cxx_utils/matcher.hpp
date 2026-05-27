@@ -10,6 +10,9 @@
 
 #include "xgrammar/xgrammar.h"
 
+#include "common.hpp"
+#include "dlpack.hpp"
+
 namespace cxx_utils {
 
 inline std::unique_ptr<xgrammar::GrammarMatcher> make_grammar_matcher(
@@ -18,7 +21,7 @@ inline std::unique_ptr<xgrammar::GrammarMatcher> make_grammar_matcher(
     const int32_t* override_stop_tokens_ptr,
     size_t override_stop_tokens_len,
     bool terminate_without_stop_token,
-    int max_rollback_tokens,
+    int32_t max_rollback_tokens,
     std::string* error_out
 ) {
   try {
@@ -100,7 +103,7 @@ inline void grammar_matcher_vec_push(
 inline void batch_matcher_batch_fill_next_token_bitmask(
     xgrammar::BatchGrammarMatcher& batch_matcher,
     std::vector<xgrammar::GrammarMatcher>* matchers,
-    DLTensor* bitmask,
+    DLTensor_Rust* bitmask_r,
     bool has_indices,
     const int32_t* indices_ptr,
     size_t indices_len,
@@ -112,13 +115,19 @@ inline void batch_matcher_batch_fill_next_token_bitmask(
       std::vector<int32_t> tmp(indices_ptr, indices_ptr + indices_len);
       indices_opt = std::move(tmp);
     }
-    batch_matcher
-        .BatchFillNextTokenBitmask(matchers, bitmask, indices_opt, debug_print);
+    auto bitmask = rust_tensor_to_tensor(*bitmask_r);
+    batch_matcher.BatchFillNextTokenBitmask(
+        matchers,
+        &bitmask,
+        indices_opt,
+        debug_print
+    );
+    *bitmask_r = tensor_to_rust_tensor(bitmask);
   } catch (...) {
   }
 }
 
-inline std::vector<uint8_t> batch_accept_token(
+inline std::unique_ptr<std::vector<uint8_t>> batch_accept_token(
     std::vector<xgrammar::GrammarMatcher>* matchers,
     const int32_t* token_ids_ptr,
     size_t token_ids_len,
@@ -129,35 +138,63 @@ inline std::vector<uint8_t> batch_accept_token(
         token_ids_ptr,
         token_ids_ptr + token_ids_len
     );
-    return xgrammar::BatchGrammarMatcher::BatchAcceptToken(
-        matchers,
-        token_ids,
-        debug_print
+    return make_unique(
+        xgrammar::BatchGrammarMatcher::BatchAcceptToken(
+            matchers,
+            token_ids,
+            debug_print
+        )
     );
   } catch (...) {
-    return std::vector<uint8_t>(token_ids_len, 0);
+    return std::make_unique<std::vector<uint8_t>>(token_ids_len, 0);
   }
 }
 
-inline std::vector<uint8_t> batch_accept_string(
+inline std::unique_ptr<std::vector<uint8_t>> batch_accept_string(
     std::vector<xgrammar::GrammarMatcher>* matchers,
     const std::vector<std::string>& strings,
     bool debug_print
 ) {
   try {
-    return xgrammar::BatchGrammarMatcher::BatchAcceptString(
-        matchers,
-        strings,
-        debug_print
+    return make_unique(
+        xgrammar::BatchGrammarMatcher::BatchAcceptString(
+            matchers,
+            strings,
+            debug_print
+        )
     );
   } catch (...) {
-    return std::vector<uint8_t>(strings.size(), 0);
+    return std::make_unique<std::vector<uint8_t>>(strings.size(), 0);
   }
 }
 
+inline std::unique_ptr<std::string> grammar_matcher_find_jump_forward_string(
+    xgrammar::GrammarMatcher& self
+) {
+  return make_unique(self.FindJumpForwardString());
+}
+
+inline std::unique_ptr<std::string> grammar_matcher_debug_print_internal_state(
+    const xgrammar::GrammarMatcher& self
+) {
+  return make_unique(self._DebugPrintInternalState());
+}
+
+inline bool grammar_matcher_fill_next_token_bitmask(
+    xgrammar::GrammarMatcher& self,
+    DLTensor_Rust* next_token_bitmask_r,
+    int32_t next,
+    bool debug_print
+) {
+  auto next_token_bitmask = rust_tensor_to_tensor(*next_token_bitmask_r);
+  bool res = self.FillNextTokenBitmask(&next_token_bitmask, next, debug_print);
+  *next_token_bitmask_r = tensor_to_rust_tensor(next_token_bitmask);
+  return res;
+}
+
 inline bool apply_token_bitmask_inplace_cpu(
-    DLTensor* logits,
-    const DLTensor* bitmask,
+    DLTensor_Rust* logits_r,
+    const DLTensor_Rust* bitmask_r,
     int32_t vocab_size,
     bool has_indices,
     const int32_t* indices_ptr,
@@ -177,12 +214,15 @@ inline bool apply_token_bitmask_inplace_cpu(
       }
       indices_opt = std::move(tmp);
     }
+    auto logits = rust_tensor_to_tensor(*logits_r);
+    const auto bitmask = rust_tensor_to_tensor(*bitmask_r);
     xgrammar::ApplyTokenBitmaskInplaceCPU(
-        logits,
-        *bitmask,
+        &logits,
+        bitmask,
         static_cast<int>(vocab_size),
         indices_opt
     );
+    *logits_r = tensor_to_rust_tensor(logits);
     return true;
   } catch (const std::exception& e) {
     if (error_out) {

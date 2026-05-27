@@ -1,6 +1,4 @@
-use autocxx::c_int;
-
-use crate::ffi::xgrammar::{
+use crate::ffi::{
     GetMaxRecursionDepth as FFIGetMaxRecursionDepth,
     GetSerializationVersion as FFIGetSerializationVersion,
     SetMaxRecursionDepth as FFISetMaxRecursionDepth,
@@ -29,7 +27,7 @@ pub fn get_serialization_version() -> String {
 /// max_recursion_depth : int
 ///     The maximum allowed recursion depth.
 pub fn get_max_recursion_depth() -> i32 {
-    FFIGetMaxRecursionDepth().0
+    FFIGetMaxRecursionDepth()
 }
 
 /// Set the maximum allowed recursion depth. The depth is shared per process.
@@ -40,5 +38,5 @@ pub fn get_max_recursion_depth() -> i32 {
 /// max_recursion_depth : int
 ///     The maximum allowed recursion depth.
 pub fn set_max_recursion_depth(max_recursion_depth: i32) {
-    FFISetMaxRecursionDepth(c_int(max_recursion_depth))
+    FFISetMaxRecursionDepth(max_recursion_depth)
 }

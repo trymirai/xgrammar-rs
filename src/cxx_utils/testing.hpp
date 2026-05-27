@@ -9,6 +9,8 @@
 #include "cpp/json_schema_converter.h"
 #include "cpp/regex_converter.h"
 
+#include "common.hpp"
+
 namespace cxx_utils {
 
 inline std::string json_schema_to_ebnf(
@@ -59,7 +61,7 @@ inline std::unique_ptr<xgrammar::Grammar> ebnf_to_grammar_no_normalization(
     const std::string& root_rule_name
 ) {
   try {
-    return std::make_unique<xgrammar::Grammar>(
+    return make_unique(
         xgrammar::_EBNFToGrammarNoNormalization(ebnf_string, root_rule_name)
     );
   } catch (...) {

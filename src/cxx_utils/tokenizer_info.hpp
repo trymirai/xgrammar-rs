@@ -11,6 +11,8 @@
 
 #include "xgrammar/xgrammar.h"
 
+#include "common.hpp"
+
 namespace cxx_utils {
 
 inline std::unique_ptr<xgrammar::TokenizerInfo> make_tokenizer_info(
@@ -78,9 +80,7 @@ tokenizer_info_deserialize_json_or_error(
       }
       return nullptr;
     }
-    return std::make_unique<xgrammar::TokenizerInfo>(
-        std::get<xgrammar::TokenizerInfo>(std::move(result))
-    );
+    return make_unique(std::get<xgrammar::TokenizerInfo>(std::move(result)));
   } catch (const std::exception& e) {
     if (error_out) {
       *error_out = e.what();

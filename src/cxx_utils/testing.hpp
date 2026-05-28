@@ -151,8 +151,10 @@ inline std::string generate_range_regex(
     if (error_out) {
       error_out->clear();
     }
-    std::optional<int64_t> start_opt = has_start ? std::optional<int64_t>(start) : std::nullopt;
-    std::optional<int64_t> end_opt = has_end ? std::optional<int64_t>(end) : std::nullopt;
+    std::optional<int64_t> start_opt =
+        has_start ? std::optional<int64_t>(start) : std::nullopt;
+    std::optional<int64_t> end_opt =
+        has_end ? std::optional<int64_t>(end) : std::nullopt;
     std::string result = xgrammar::GenerateRangeRegex(start_opt, end_opt);
     result.erase(std::remove(result.begin(), result.end(), '\0'), result.end());
     return result;
@@ -180,8 +182,10 @@ inline std::string generate_float_range_regex(
     if (error_out) {
       error_out->clear();
     }
-    std::optional<double> start_opt = has_start ? std::optional<double>(start) : std::nullopt;
-    std::optional<double> end_opt = has_end ? std::optional<double>(end) : std::nullopt;
+    std::optional<double> start_opt =
+        has_start ? std::optional<double>(start) : std::nullopt;
+    std::optional<double> end_opt =
+        has_end ? std::optional<double>(end) : std::nullopt;
     std::string result = xgrammar::GenerateFloatRangeRegex(start_opt, end_opt);
     result.erase(std::remove(result.begin(), result.end(), '\0'), result.end());
     return result;

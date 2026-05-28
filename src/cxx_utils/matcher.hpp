@@ -58,10 +58,8 @@ inline std::unique_ptr<xgrammar::GrammarMatcher> make_grammar_matcher(
   }
 }
 
-inline std::unique_ptr<xgrammar::BatchGrammarMatcher> make_batch_grammar_matcher(
-    int32_t max_threads,
-    std::string* error_out
-) {
+inline std::unique_ptr<xgrammar::BatchGrammarMatcher>
+make_batch_grammar_matcher(int32_t max_threads, std::string* error_out) {
   try {
     if (error_out) {
       error_out->clear();
@@ -127,7 +125,10 @@ inline std::vector<uint8_t> batch_accept_token(
     bool debug_print
 ) {
   try {
-    std::vector<int32_t> token_ids(token_ids_ptr, token_ids_ptr + token_ids_len);
+    std::vector<int32_t> token_ids(
+        token_ids_ptr,
+        token_ids_ptr + token_ids_len
+    );
     return xgrammar::BatchGrammarMatcher::BatchAcceptToken(
         matchers,
         token_ids,

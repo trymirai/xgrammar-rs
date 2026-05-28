@@ -86,7 +86,8 @@ inline std::unique_ptr<xgrammar::Grammar> grammar_from_ebnf(
     if (error_out) {
       error_out->clear();
     }
-    xgrammar::Grammar g = xgrammar::Grammar::FromEBNF(ebnf_string, root_rule_name);
+    xgrammar::Grammar g =
+        xgrammar::Grammar::FromEBNF(ebnf_string, root_rule_name);
     if (g.IsNull()) {
       if (error_out) {
         *error_out = g.ToString();
@@ -116,7 +117,8 @@ inline std::unique_ptr<xgrammar::Grammar> grammar_from_regex(
     if (error_out) {
       error_out->clear();
     }
-    xgrammar::Grammar g = xgrammar::Grammar::FromRegex(regex_string, print_converted_ebnf);
+    xgrammar::Grammar g =
+        xgrammar::Grammar::FromRegex(regex_string, print_converted_ebnf);
     if (g.IsNull()) {
       if (error_out) {
         *error_out = g.ToString();

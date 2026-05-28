@@ -103,7 +103,8 @@ inline bool detect_metadata_from_hf(
     if (error_out) {
       error_out->clear();
     }
-    std::string result = xgrammar::TokenizerInfo::DetectMetadataFromHF(backend_str);
+    std::string result =
+        xgrammar::TokenizerInfo::DetectMetadataFromHF(backend_str);
     if (metadata_out) {
       *metadata_out = std::move(result);
     }

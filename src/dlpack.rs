@@ -1,5 +1,5 @@
-use crate::ffi;
 use crate::utils::tie_enum_with_ffi;
+use crate::{DLDataType, c_void, ffi};
 
 /// DLPack data type code enum (`DLDataTypeCode`)
 #[derive(PartialEq, Eq, Clone, Debug, Hash)]
@@ -94,28 +94,31 @@ impl From<DLDevice> for ffi::DLDevice {
     }
 }
 
-/// DLPack tensor view (`DLTensor`) (does not own memory).
-pub struct DLTensor {
-    pub data: *mut ffi::c_void,
-    pub device: DLDevice,
-    pub ndim: i32,
-    pub dtype: ffi::DLDataType,
-    pub shape: *mut i64,
-    pub strides: *mut i64,
-    pub byte_offset: u64,
-}
-
-impl DLTensor {
-    pub(crate) fn ffi(&self) -> ffi::DLTensor_Rust {
-        ffi::DLTensor_Rust {
-            data: self.data,
-            _unused: 0 as *mut ffi::c_void,
-            device: self.device.clone().into(),
-            ndim: self.ndim,
-            dtype: self.dtype.clone(),
-            shape: self.shape,
-            strides: self.strides,
-            byte_offset: self.byte_offset,
+impl ffi::DLTensor {
+    /// # Safety
+    ///
+    /// Pointers must point to valid memory and be consistent with
+    /// other fields.
+    pub unsafe fn new(
+        data: *mut c_void,
+        device: DLDevice,
+        dim: i32,
+        dtype: DLDataType,
+        shape: *mut i64,
+        strides: *mut i64,
+        byte_offset: u64,
+    ) -> crate::CxxUniquePtr<Self> {
+        // SAFETY: the invariants are up to the caller to uphold
+        unsafe {
+            ffi::make_tensor(
+                data,
+                device.into(),
+                dim,
+                dtype,
+                shape,
+                strides,
+                byte_offset,
+            )
         }
     }
 }

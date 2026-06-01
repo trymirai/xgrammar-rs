@@ -84,16 +84,15 @@ inline std::unique_ptr<std::string> qwen_xml_tool_calling_to_ebnf(
 }
 
 inline std::unique_ptr<std::vector<int32_t>> get_masked_tokens_from_bitmask(
-    const DLTensor_Rust* bitmask_r,
+    const DLTensor* bitmask,
     int32_t vocab_size,
     int32_t index
 ) {
   try {
     std::vector<int> result;
-    const auto bitmask = rust_tensor_to_tensor(*bitmask_r);
     xgrammar::_DebugGetMaskedTokensFromBitmask(
         &result,
-        bitmask,
+        *bitmask,
         vocab_size,
         index
     );
@@ -114,13 +113,12 @@ struct SingleTokenResult {
 };
 
 inline std::unique_ptr<SingleTokenResult> is_single_token_bitmask(
-    const DLTensor_Rust* bitmask_r,
+    const DLTensor* bitmask,
     int32_t vocab_size,
     int32_t index
 ) {
   try {
-    const auto bitmask = rust_tensor_to_tensor(*bitmask_r);
-    auto pair = xgrammar::_IsSingleTokenBitmask(bitmask, vocab_size, index);
+    auto pair = xgrammar::_IsSingleTokenBitmask(*bitmask, vocab_size, index);
     return make_unique(SingleTokenResult{pair.first, pair.second});
   } catch (...) {
     return make_unique(SingleTokenResult{false, -1});
@@ -235,31 +233,24 @@ inline std::unique_ptr<std::string> print_grammar_fsms(
 }
 
 inline bool traverse_draft_tree(
-    const DLTensor_Rust* retrieve_next_token_r,
-    const DLTensor_Rust* retrieve_next_sibling_r,
-    const DLTensor_Rust* draft_tokens_r,
+    const DLTensor* retrieve_next_token,
+    const DLTensor* retrieve_next_sibling,
+    const DLTensor* draft_tokens,
     xgrammar::GrammarMatcher& matcher,
-    DLTensor_Rust* bitmask_r,
+    DLTensor* bitmask,
     std::string* error_out
 ) {
   try {
     if (error_out) {
       error_out->clear();
     }
-    const auto retrieve_next_token =
-        rust_tensor_to_tensor(*retrieve_next_token_r);
-    const auto retrieve_next_sibling =
-        rust_tensor_to_tensor(*retrieve_next_sibling_r);
-    const auto draft_tokens = rust_tensor_to_tensor(*draft_tokens_r);
-    auto bitmask = rust_tensor_to_tensor(*bitmask_r);
     xgrammar::TraverseDraftTree(
-        &retrieve_next_token,
-        &retrieve_next_sibling,
-        &draft_tokens,
+        retrieve_next_token,
+        retrieve_next_sibling,
+        draft_tokens,
         matcher,
-        &bitmask
+        bitmask
     );
-    *bitmask_r = tensor_to_rust_tensor(bitmask);
     return true;
   } catch (const std::exception& e) {
     if (error_out) {

@@ -187,14 +187,14 @@ impl GrammarMatcher {
     /// If the bitmask is invalid (not on CPU, not int32, shape mismatch).
     pub fn fill_next_token_bitmask(
         &mut self,
-        bitmask: &mut DLTensor,
+        bitmask: &mut CxxUniquePtr<DLTensor>,
         index: i32,
         debug_print: bool,
     ) -> bool {
         unsafe {
             ffi::grammar_matcher_fill_next_token_bitmask(
                 self.inner.as_mut().expect("GrammarMatcher inner is null"),
-                &mut bitmask.ffi() as *mut _,
+                bitmask.as_mut_ptr(),
                 index,
                 debug_print,
             )

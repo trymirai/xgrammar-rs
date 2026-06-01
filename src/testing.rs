@@ -1,4 +1,6 @@
-use crate::{DLTensor, ffi, grammar::Grammar, matcher::GrammarMatcher};
+use crate::{
+    CxxUniquePtr, DLTensor, ffi, grammar::Grammar, matcher::GrammarMatcher,
+};
 
 /// Convert EBNF to Grammar without normalization.
 ///
@@ -110,7 +112,7 @@ pub fn get_masked_tokens_from_bitmask(
 ) -> Box<[i32]> {
     unsafe {
         let result = ffi::get_masked_tokens_from_bitmask(
-            &bitmask.ffi() as *const _,
+            bitmask as *const _,
             vocab_size,
             index,
         );
@@ -136,7 +138,7 @@ pub fn is_single_token_bitmask(
 ) -> (bool, i32) {
     unsafe {
         let result = ffi::is_single_token_bitmask(
-            &bitmask.ffi() as *const _,
+            bitmask as *const _,
             vocab_size,
             index,
         );
@@ -169,16 +171,16 @@ pub fn traverse_draft_tree(
     retrieve_next_sibling: &DLTensor,
     draft_tokens: &DLTensor,
     matcher: &mut GrammarMatcher,
-    bitmask: &mut DLTensor,
+    bitmask: &mut CxxUniquePtr<DLTensor>,
 ) -> Result<(), String> {
     cxx::let_cxx_string!(error_out_cxx = "");
     let ok = unsafe {
         ffi::traverse_draft_tree(
-            &retrieve_next_token.ffi() as *const _,
-            &retrieve_next_sibling.ffi() as *const _,
-            &draft_tokens.ffi() as *const _,
+            retrieve_next_token as *const _,
+            retrieve_next_sibling as *const _,
+            draft_tokens as *const _,
             matcher.ffi_mut(),
-            &mut bitmask.ffi() as *mut _,
+            bitmask.as_mut_ptr(),
             error_out_cxx.as_mut().get_unchecked_mut(),
         )
     };

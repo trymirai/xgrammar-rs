@@ -103,7 +103,7 @@ inline void grammar_matcher_vec_push(
 inline void batch_matcher_batch_fill_next_token_bitmask(
     xgrammar::BatchGrammarMatcher& batch_matcher,
     std::vector<xgrammar::GrammarMatcher>* matchers,
-    DLTensor_Rust* bitmask_r,
+    DLTensor* bitmask,
     bool has_indices,
     const int32_t* indices_ptr,
     size_t indices_len,
@@ -115,14 +115,12 @@ inline void batch_matcher_batch_fill_next_token_bitmask(
       std::vector<int32_t> tmp(indices_ptr, indices_ptr + indices_len);
       indices_opt = std::move(tmp);
     }
-    auto bitmask = rust_tensor_to_tensor(*bitmask_r);
     batch_matcher.BatchFillNextTokenBitmask(
         matchers,
-        &bitmask,
+        bitmask,
         indices_opt,
         debug_print
     );
-    *bitmask_r = tensor_to_rust_tensor(bitmask);
   } catch (...) {
   }
 }
@@ -182,19 +180,16 @@ inline std::unique_ptr<std::string> grammar_matcher_debug_print_internal_state(
 
 inline bool grammar_matcher_fill_next_token_bitmask(
     xgrammar::GrammarMatcher& self,
-    DLTensor_Rust* next_token_bitmask_r,
+    DLTensor* next_token_bitmask,
     int32_t next,
     bool debug_print
 ) {
-  auto next_token_bitmask = rust_tensor_to_tensor(*next_token_bitmask_r);
-  bool res = self.FillNextTokenBitmask(&next_token_bitmask, next, debug_print);
-  *next_token_bitmask_r = tensor_to_rust_tensor(next_token_bitmask);
-  return res;
+  return self.FillNextTokenBitmask(next_token_bitmask, next, debug_print);
 }
 
 inline bool apply_token_bitmask_inplace_cpu(
-    DLTensor_Rust* logits_r,
-    const DLTensor_Rust* bitmask_r,
+    DLTensor* logits,
+    const DLTensor* bitmask,
     int32_t vocab_size,
     bool has_indices,
     const int32_t* indices_ptr,
@@ -214,15 +209,12 @@ inline bool apply_token_bitmask_inplace_cpu(
       }
       indices_opt = std::move(tmp);
     }
-    auto logits = rust_tensor_to_tensor(*logits_r);
-    const auto bitmask = rust_tensor_to_tensor(*bitmask_r);
     xgrammar::ApplyTokenBitmaskInplaceCPU(
-        &logits,
-        bitmask,
+        logits,
+        *bitmask,
         static_cast<int>(vocab_size),
         indices_opt
     );
-    *logits_r = tensor_to_rust_tensor(logits);
     return true;
   } catch (const std::exception& e) {
     if (error_out) {

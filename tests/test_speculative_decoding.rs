@@ -4,30 +4,32 @@ use serial_test::serial;
 use test_utils::*;
 
 use xgrammar::{
-    Grammar, GrammarCompiler, GrammarMatcher, TokenizerInfo, VocabType,
-    allocate_token_bitmask, c_void, testing,
+    CxxUniquePtr, Grammar, GrammarCompiler, GrammarMatcher, TokenizerInfo,
+    VocabType, allocate_token_bitmask, c_void, testing,
 };
 
 fn create_i32_1d_dltensor(
     data: &mut [i32]
-) -> (xgrammar::DLTensor, Vec<i64>, Vec<i64>) {
+) -> (CxxUniquePtr<xgrammar::DLTensor>, Vec<i64>, Vec<i64>) {
     let mut shape = vec![data.len() as i64];
     let mut strides = vec![1i64];
-    let tensor = xgrammar::DLTensor {
-        data: data.as_mut_ptr() as *mut c_void,
-        device: xgrammar::DLDevice {
-            device_type: xgrammar::DLDeviceType::kDLCPU,
-            device_id: 0,
-        },
-        ndim: 1,
-        dtype: xgrammar::DLDataType {
-            code: xgrammar::DLDataTypeCode::kDLInt as u8,
-            bits: 32,
-            lanes: 1,
-        },
-        shape: shape.as_mut_ptr(),
-        strides: strides.as_mut_ptr(),
-        byte_offset: 0,
+    let tensor = unsafe {
+        xgrammar::DLTensor::new(
+            data.as_mut_ptr() as *mut c_void,
+            xgrammar::DLDevice {
+                device_type: xgrammar::DLDeviceType::kDLCPU,
+                device_id: 0,
+            },
+            1,
+            xgrammar::DLDataType {
+                code: xgrammar::DLDataTypeCode::kDLInt as u8,
+                bits: 32,
+                lanes: 1,
+            },
+            shape.as_mut_ptr(),
+            strides.as_mut_ptr(),
+            0,
+        )
     };
     (tensor, shape, strides)
 }

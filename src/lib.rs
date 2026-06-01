@@ -68,6 +68,7 @@ mod ffi {
         pub type DLDeviceType;
 
         // Opaque types
+        pub type DLTensor;
         pub type DLManagedTensor;
     }
 
@@ -75,19 +76,6 @@ mod ffi {
     // on wasm32 because `void *data` is too small and implicit padding
     // is added.
     // Instead, using this wrapper declared in `cxx_utils`.
-    #[namespace = "cxx_utils"]
-    #[safe_shared_extern]
-    #[derive(Clone, Debug, Hash)]
-    pub struct DLTensor_Rust {
-        pub data: *mut c_void,
-        pub _unused: *mut c_void,
-        pub device: DLDevice,
-        pub ndim: i32,
-        pub dtype: DLDataType,
-        pub shape: *mut i64,
-        pub strides: *mut i64,
-        pub byte_offset: u64,
-    }
 
     /// Not a Rust enum, but a C++ enum, i.e., can hold any value that
     /// fits into `i32`. The Rust enum is defined in tokenizer_info.rs.
@@ -398,7 +386,7 @@ mod ffi {
 
         pub unsafe fn grammar_matcher_fill_next_token_bitmask(
             self_: Pin<&mut GrammarMatcher>,
-            next_token_bitmask_r: *mut DLTensor_Rust,
+            next_token_bitmask_r: *mut DLTensor,
             next: i32,
             debug_print: bool,
         ) -> bool;
@@ -419,7 +407,7 @@ mod ffi {
         pub unsafe fn batch_matcher_batch_fill_next_token_bitmask(
             batch_matcher: Pin<&mut BatchGrammarMatcher>,
             matchers: *mut CxxVector<GrammarMatcher>,
-            bitmask_r: *mut DLTensor_Rust,
+            bitmask_r: *mut DLTensor,
             has_indices: bool,
             indices_ptr: *const i32,
             indices_len: usize,
@@ -440,8 +428,8 @@ mod ffi {
         ) -> UniquePtr<CxxVector<u8>>;
 
         pub unsafe fn apply_token_bitmask_inplace_cpu(
-            logits_r: *mut DLTensor_Rust,
-            bitmask_r: *const DLTensor_Rust,
+            logits_r: *mut DLTensor,
+            bitmask_r: *const DLTensor,
             vocab_size: i32,
             has_indices: bool,
             indices_ptr: *const i32,
@@ -452,6 +440,17 @@ mod ffi {
         // cxx_utils/config.hpp
 
         pub fn GetSerializationVersion() -> UniquePtr<CxxString>;
+
+        // cxx_utils/dlpack.hpp
+        pub unsafe fn make_tensor(
+            data: *mut c_void,
+            device: DLDevice,
+            dim: i32,
+            dtype: DLDataType,
+            shape: *mut i64,
+            strides: *mut i64,
+            byte_offset: u64,
+        ) -> UniquePtr<DLTensor>;
 
     }
 
@@ -483,14 +482,14 @@ mod ffi {
         ) -> UniquePtr<CxxString>;
 
         pub unsafe fn get_masked_tokens_from_bitmask(
-            bitmask_r: *const DLTensor_Rust,
+            bitmask_r: *const DLTensor,
             vocab_size: i32,
             index: i32,
         ) -> UniquePtr<CxxVector<i32>>;
 
         pub type SingleTokenResult;
         pub unsafe fn is_single_token_bitmask(
-            bitmask_r: *const DLTensor_Rust,
+            bitmask_r: *const DLTensor,
             vocab_size: i32,
             index: i32,
         ) -> UniquePtr<SingleTokenResult>;
@@ -525,11 +524,11 @@ mod ffi {
         ) -> UniquePtr<CxxString>;
 
         pub unsafe fn traverse_draft_tree(
-            retrieve_next_token_r: *const DLTensor_Rust,
-            retrieve_next_sibling_r: *const DLTensor_Rust,
-            draft_tokens_r: *const DLTensor_Rust,
+            retrieve_next_token_r: *const DLTensor,
+            retrieve_next_sibling_r: *const DLTensor,
+            draft_tokens_r: *const DLTensor,
             matcher: Pin<&mut GrammarMatcher>,
-            bitmask_r: *mut DLTensor_Rust,
+            bitmask_r: *mut DLTensor,
             error_out: *mut CxxString,
         ) -> bool;
     }
@@ -544,6 +543,8 @@ mod ffi {
 pub use ffi::DLDataType;
 /// DLPack managed tensor (`DLManagedTensor`) (owns tensor + deleter).
 pub use ffi::DLManagedTensor;
+/// DLPack tensor view (`DLTensor`) (does not own memory).
+pub use ffi::DLTensor;
 /// Opaque type representing C/C++'s `void`
 pub use ffi::c_void;
 // TODO: doc?
@@ -565,7 +566,7 @@ pub use config::{
     get_max_recursion_depth, get_serialization_version, set_max_recursion_depth,
 };
 pub use cxx::UniquePtr as CxxUniquePtr;
-pub use dlpack::{DLDataTypeCode, DLDevice, DLDeviceType, DLTensor};
+pub use dlpack::{DLDataTypeCode, DLDevice, DLDeviceType};
 pub use grammar::{Grammar, StructuralTagItem};
 pub use matcher::{
     BatchGrammarMatcher, GrammarMatcher, allocate_token_bitmask,

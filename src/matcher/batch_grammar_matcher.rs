@@ -64,7 +64,7 @@ impl BatchGrammarMatcher {
     pub fn batch_fill_next_token_bitmask(
         &mut self,
         matchers: &[GrammarMatcher],
-        bitmask: &mut DLTensor,
+        bitmask: &mut CxxUniquePtr<DLTensor>,
         indices: Option<&[i32]>,
         debug_print: bool,
     ) {
@@ -91,7 +91,7 @@ impl BatchGrammarMatcher {
             ffi::batch_matcher_batch_fill_next_token_bitmask(
                 self.inner.as_mut().expect("BatchGrammarMatcher inner is null"),
                 ffi_matcher_vec.as_mut().unwrap().get_unchecked_mut(),
-                &mut bitmask.ffi() as *mut _,
+                bitmask.as_mut_ptr(),
                 has_indices,
                 indices_ptr,
                 indices_len,

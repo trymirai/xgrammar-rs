@@ -10,6 +10,9 @@
 
 #include "xgrammar/xgrammar.h"
 
+#include "common.hpp"
+#include "dlpack.hpp"
+
 namespace cxx_utils {
 
 inline std::unique_ptr<xgrammar::GrammarMatcher> make_grammar_matcher(
@@ -18,7 +21,7 @@ inline std::unique_ptr<xgrammar::GrammarMatcher> make_grammar_matcher(
     const int32_t* override_stop_tokens_ptr,
     size_t override_stop_tokens_len,
     bool terminate_without_stop_token,
-    int max_rollback_tokens,
+    int32_t max_rollback_tokens,
     std::string* error_out
 ) {
   try {
@@ -58,10 +61,8 @@ inline std::unique_ptr<xgrammar::GrammarMatcher> make_grammar_matcher(
   }
 }
 
-inline std::unique_ptr<xgrammar::BatchGrammarMatcher> make_batch_grammar_matcher(
-    int32_t max_threads,
-    std::string* error_out
-) {
+inline std::unique_ptr<xgrammar::BatchGrammarMatcher>
+make_batch_grammar_matcher(int32_t max_threads, std::string* error_out) {
   try {
     if (error_out) {
       error_out->clear();
@@ -114,44 +115,76 @@ inline void batch_matcher_batch_fill_next_token_bitmask(
       std::vector<int32_t> tmp(indices_ptr, indices_ptr + indices_len);
       indices_opt = std::move(tmp);
     }
-    batch_matcher
-        .BatchFillNextTokenBitmask(matchers, bitmask, indices_opt, debug_print);
+    batch_matcher.BatchFillNextTokenBitmask(
+        matchers,
+        bitmask,
+        indices_opt,
+        debug_print
+    );
   } catch (...) {
   }
 }
 
-inline std::vector<uint8_t> batch_accept_token(
+inline std::unique_ptr<std::vector<uint8_t>> batch_accept_token(
     std::vector<xgrammar::GrammarMatcher>* matchers,
     const int32_t* token_ids_ptr,
     size_t token_ids_len,
     bool debug_print
 ) {
   try {
-    std::vector<int32_t> token_ids(token_ids_ptr, token_ids_ptr + token_ids_len);
-    return xgrammar::BatchGrammarMatcher::BatchAcceptToken(
-        matchers,
-        token_ids,
-        debug_print
+    std::vector<int32_t> token_ids(
+        token_ids_ptr,
+        token_ids_ptr + token_ids_len
+    );
+    return make_unique(
+        xgrammar::BatchGrammarMatcher::BatchAcceptToken(
+            matchers,
+            token_ids,
+            debug_print
+        )
     );
   } catch (...) {
-    return std::vector<uint8_t>(token_ids_len, 0);
+    return std::make_unique<std::vector<uint8_t>>(token_ids_len, 0);
   }
 }
 
-inline std::vector<uint8_t> batch_accept_string(
+inline std::unique_ptr<std::vector<uint8_t>> batch_accept_string(
     std::vector<xgrammar::GrammarMatcher>* matchers,
     const std::vector<std::string>& strings,
     bool debug_print
 ) {
   try {
-    return xgrammar::BatchGrammarMatcher::BatchAcceptString(
-        matchers,
-        strings,
-        debug_print
+    return make_unique(
+        xgrammar::BatchGrammarMatcher::BatchAcceptString(
+            matchers,
+            strings,
+            debug_print
+        )
     );
   } catch (...) {
-    return std::vector<uint8_t>(strings.size(), 0);
+    return std::make_unique<std::vector<uint8_t>>(strings.size(), 0);
   }
+}
+
+inline std::unique_ptr<std::string> grammar_matcher_find_jump_forward_string(
+    xgrammar::GrammarMatcher& self
+) {
+  return make_unique(self.FindJumpForwardString());
+}
+
+inline std::unique_ptr<std::string> grammar_matcher_debug_print_internal_state(
+    const xgrammar::GrammarMatcher& self
+) {
+  return make_unique(self._DebugPrintInternalState());
+}
+
+inline bool grammar_matcher_fill_next_token_bitmask(
+    xgrammar::GrammarMatcher& self,
+    DLTensor* next_token_bitmask,
+    int32_t next,
+    bool debug_print
+) {
+  return self.FillNextTokenBitmask(next_token_bitmask, next, debug_print);
 }
 
 inline bool apply_token_bitmask_inplace_cpu(

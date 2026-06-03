@@ -1,6 +1,8 @@
 //! Match the output of the LLM to the specified grammar, then generate the mask for the next
 //! token.
 
+use crate::{CxxUniquePtr, DLTensor};
+
 mod batch_grammar_matcher;
 mod grammar_matcher;
 
@@ -50,8 +52,8 @@ pub fn reset_token_bitmask(bitmask: &mut [i32]) {
 }
 
 pub fn apply_token_bitmask_inplace_cpu(
-    logits: &mut crate::DLTensor,
-    bitmask: &crate::DLTensor,
+    logits: &mut CxxUniquePtr<DLTensor>,
+    bitmask: &DLTensor,
     vocab_size: Option<i32>,
     indices: Option<&[i32]>,
 ) -> Result<(), String> {
@@ -62,8 +64,8 @@ pub fn apply_token_bitmask_inplace_cpu(
     };
     cxx::let_cxx_string!(error_out_cxx = "");
     let ok = unsafe {
-        crate::cxx_utils::apply_token_bitmask_inplace_cpu(
-            logits as *mut _,
+        crate::ffi::apply_token_bitmask_inplace_cpu(
+            logits.as_mut_ptr(),
             bitmask as *const _,
             vocab_size_i32,
             has_indices,

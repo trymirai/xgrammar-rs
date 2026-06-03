@@ -1,11 +1,19 @@
-use autocxx::prelude::*;
-
-use crate::{
-    CxxUniquePtr, FFITokenizerInfo, VocabType, cxx_utils,
-    utils::bytes_as_c_char_ptr,
-};
+use crate::utils::tie_enum_with_ffi;
+use crate::{CxxUniquePtr, ffi, utils::bytes_as_c_char_ptr};
 
 type StopTokenIds = Option<Box<[i32]>>;
+
+// Rust enum that corresponds to `ffi::VocabType`
+#[derive(PartialEq, Eq, Clone, Debug, Hash)]
+#[repr(i32)]
+#[allow(non_camel_case_types, clippy::upper_case_acronyms)]
+pub enum VocabType {
+    RAW = 0,
+    BYTE_FALLBACK = 1,
+    BYTE_LEVEL = 2,
+}
+
+tie_enum_with_ffi!(VocabType, i32, RAW, BYTE_FALLBACK, BYTE_LEVEL);
 
 #[derive(Clone)]
 pub struct HfMetadata {
@@ -20,7 +28,7 @@ pub fn detect_metadata_from_hf(
     cxx::let_cxx_string!(metadata_out_cxx = "");
     cxx::let_cxx_string!(error_out_cxx = "");
     let ok = unsafe {
-        cxx_utils::detect_metadata_from_hf(
+        ffi::detect_metadata_from_hf(
             &backend_cxx,
             metadata_out_cxx.as_mut().get_unchecked_mut(),
             error_out_cxx.as_mut().get_unchecked_mut(),
@@ -63,7 +71,7 @@ pub fn detect_metadata_from_hf(
 /// Please pass the model's vocab_size to the `vocab_size` parameter in the constructor, because
 /// this information is used to determine the size of the token mask.
 pub struct TokenizerInfo {
-    inner: CxxUniquePtr<FFITokenizerInfo>,
+    inner: CxxUniquePtr<ffi::TokenizerInfo>,
 }
 
 impl TokenizerInfo {
@@ -119,17 +127,14 @@ impl TokenizerInfo {
         stop_token_ids: &StopTokenIds,
         add_prefix_space: bool,
     ) -> Result<Self, String> {
-        let mut cxx_vec = cxx_utils::new_string_vector();
+        let mut cxx_vec = ffi::new_string_vector();
         {
             let mut cxx_vec_pin = cxx_vec.pin_mut();
-            cxx_utils::string_vec_reserve(
-                cxx_vec_pin.as_mut(),
-                encoded_vocab.len(),
-            );
+            ffi::string_vec_reserve(cxx_vec_pin.as_mut(), encoded_vocab.len());
             for string in encoded_vocab.iter() {
                 let bytes = string.as_ref().as_bytes();
                 unsafe {
-                    cxx_utils::string_vec_push_bytes(
+                    ffi::string_vec_push_bytes(
                         cxx_vec_pin.as_mut(),
                         bytes_as_c_char_ptr(bytes),
                         bytes.len(),
@@ -151,9 +156,9 @@ impl TokenizerInfo {
 
         cxx::let_cxx_string!(error_out_cxx = "");
         let ffi_obj = unsafe {
-            cxx_utils::make_tokenizer_info(
+            ffi::make_tokenizer_info(
                 cxx_vec.as_ref().unwrap(),
-                vocab_type,
+                vocab_type.into(),
                 has_vocab_size,
                 vocab_size_i32,
                 has_stop_ids,
@@ -187,13 +192,13 @@ impl TokenizerInfo {
         I: IntoIterator<Item = B>,
         B: AsRef<[u8]>,
     {
-        let mut cxx_vec = cxx_utils::new_string_vector();
+        let mut cxx_vec = ffi::new_string_vector();
         {
             let mut cxx_vec_pin = cxx_vec.pin_mut();
             for string in encoded_vocab.into_iter() {
                 let bytes = string.as_ref();
                 unsafe {
-                    cxx_utils::string_vec_push_bytes(
+                    ffi::string_vec_push_bytes(
                         cxx_vec_pin.as_mut(),
                         bytes_as_c_char_ptr(bytes),
                         bytes.len(),
@@ -203,11 +208,10 @@ impl TokenizerInfo {
         }
 
         cxx::let_cxx_string!(metadata_cxx = metadata);
-        let ffi_ptr = FFITokenizerInfo::FromVocabAndMetadata(
+        let ffi_ptr = ffi::tokenizer_info_from_vocab_and_metadata(
             cxx_vec.as_ref().unwrap(),
             &metadata_cxx,
-        )
-        .within_unique_ptr();
+        );
         Self {
             inner: ffi_ptr,
         }
@@ -215,33 +219,20 @@ impl TokenizerInfo {
 
     /// The type of the vocabulary.
     pub fn vocab_type(&self) -> VocabType {
-        self.inner
-            .as_ref()
-            .expect("FFITokenizerInfo UniquePtr was null")
-            .GetVocabType()
+        self.inner.as_ref().expect("UniquePtr was null").GetVocabType().into()
     }
 
     /// The size of the vocabulary.
     pub fn vocab_size(&self) -> usize {
-        let sz = usize::try_from(
-            self.inner
-                .as_ref()
-                .expect("FFITokenizerInfo UniquePtr was null")
-                .GetVocabSize()
-                .0,
+        usize::try_from(
+            self.inner.as_ref().expect("UniquePtr was null").GetVocabSize(),
         )
-        .expect("GetVocabSize returned a negative value");
-        sz
+        .expect("GetVocabSize returned a negative value")
     }
 
     /// Whether the tokenizer will prepend a space before the text in the tokenization process.
     pub fn add_prefix_space(&self) -> bool {
-        let val = self
-            .inner
-            .as_ref()
-            .expect("FFITokenizerInfo UniquePtr was null")
-            .GetAddPrefixSpace();
-        val
+        self.inner.as_ref().expect("UniquePtr was null").GetAddPrefixSpace()
     }
 
     /// The decoded vocabulary of the tokenizer. This converts the tokens in the LLM's
@@ -268,7 +259,7 @@ impl TokenizerInfo {
         let cxx_vec = self
             .inner
             .as_ref()
-            .expect("FFITokenizerInfo UniquePtr was null")
+            .expect("UniquePtr was null")
             .GetSpecialTokenIds();
         cxx_vec.iter().copied().collect::<Vec<_>>().into_boxed_slice()
     }
@@ -276,11 +267,10 @@ impl TokenizerInfo {
     /// Dump the metadata of the tokenizer to a JSON string. It can be used to construct the
     /// tokenizer info from the vocabulary and the metadata string.
     pub fn dump_metadata(&self) -> String {
-        self.inner
-            .as_ref()
-            .expect("FFITokenizerInfo UniquePtr was null")
-            .DumpMetadata()
-            .to_string()
+        ffi::tokenizer_info_dump_metadata(
+            self.inner.as_ref().expect("UniquePtr was null"),
+        )
+        .to_string()
     }
 
     /// Serialize the tokenizer info to a JSON string.
@@ -289,11 +279,10 @@ impl TokenizerInfo {
     ///
     /// The JSON string.
     pub fn serialize_json(&self) -> String {
-        self.inner
-            .as_ref()
-            .expect("FFITokenizerInfo UniquePtr was null")
-            .SerializeJSON()
-            .to_string()
+        ffi::tokenizer_info_serialize_json(
+            self.inner.as_ref().expect("UniquePtr was null"),
+        )
+        .to_string()
     }
 
     /// Deserialize a tokenizer info from a JSON string.
@@ -315,7 +304,7 @@ impl TokenizerInfo {
         cxx::let_cxx_string!(json_cxx = json);
         cxx::let_cxx_string!(error_out_cxx = "");
         let uptr = unsafe {
-            cxx_utils::tokenizer_info_deserialize_json_or_error(
+            ffi::tokenizer_info_deserialize_json_or_error(
                 &json_cxx,
                 error_out_cxx.as_mut().get_unchecked_mut(),
             )
@@ -328,12 +317,12 @@ impl TokenizerInfo {
         })
     }
 
-    pub(crate) fn ffi_ref(&self) -> &FFITokenizerInfo {
-        self.inner.as_ref().expect("FFITokenizerInfo UniquePtr was null")
+    pub(crate) fn ffi_ref(&self) -> &ffi::TokenizerInfo {
+        self.inner.as_ref().expect("UniquePtr was null")
     }
 
     pub(crate) fn from_unique_ptr(
-        inner: cxx::UniquePtr<FFITokenizerInfo>
+        inner: cxx::UniquePtr<ffi::TokenizerInfo>
     ) -> Self {
         Self {
             inner,

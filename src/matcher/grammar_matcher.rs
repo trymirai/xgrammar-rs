@@ -1,11 +1,6 @@
 use std::pin::Pin;
 
-use autocxx::prelude::*;
-
-use crate::{
-    CxxUniquePtr, DLTensor, FFIGrammarMatcher, compiler::CompiledGrammar,
-    cxx_int, cxx_utils,
-};
+use crate::{CxxUniquePtr, DLTensor, compiler::CompiledGrammar, ffi};
 
 /// Match the output of the LLM to the specified grammar, then generate the mask for the next
 /// token. This is the core class in the grammar-guided generation.
@@ -23,7 +18,7 @@ use crate::{
 /// Under the hood, it utilizes a pushdown automaton with backtracking to match the grammar,
 /// with optimizations specific to LLM token mask generation.
 pub struct GrammarMatcher {
-    inner: CxxUniquePtr<FFIGrammarMatcher>,
+    inner: CxxUniquePtr<ffi::GrammarMatcher>,
     stored_stop_token_ids: Box<[i32]>,
 }
 
@@ -63,13 +58,13 @@ impl GrammarMatcher {
 
         cxx::let_cxx_string!(error_out_cxx = "");
         let unique_ptr = unsafe {
-            cxx_utils::make_grammar_matcher(
+            ffi::make_grammar_matcher(
                 compiled_grammar.ffi_ref(),
                 has_override,
                 ptr,
                 len,
                 terminate_without_stop_token,
-                cxx_int(max_rollback_tokens),
+                max_rollback_tokens,
                 error_out_cxx.as_mut().get_unchecked_mut(),
             )
         };
@@ -192,19 +187,17 @@ impl GrammarMatcher {
     /// If the bitmask is invalid (not on CPU, not int32, shape mismatch).
     pub fn fill_next_token_bitmask(
         &mut self,
-        bitmask: &mut DLTensor,
+        bitmask: &mut CxxUniquePtr<DLTensor>,
         index: i32,
         debug_print: bool,
     ) -> bool {
         unsafe {
-            self.inner
-                .as_mut()
-                .expect("GrammarMatcher inner is null")
-                .FillNextTokenBitmask(
-                    bitmask as *mut _,
-                    cxx_int(index),
-                    debug_print,
-                )
+            ffi::grammar_matcher_fill_next_token_bitmask(
+                self.inner.as_mut().expect("GrammarMatcher inner is null"),
+                bitmask.as_mut_ptr(),
+                index,
+                debug_print,
+            )
         }
     }
 
@@ -218,11 +211,10 @@ impl GrammarMatcher {
     ///
     /// The jump-forward string.
     pub fn find_jump_forward_string(&mut self) -> String {
-        self.inner
-            .as_mut()
-            .expect("GrammarMatcher inner is null")
-            .FindJumpForwardString()
-            .to_string()
+        ffi::grammar_matcher_find_jump_forward_string(
+            self.inner.as_mut().expect("GrammarMatcher inner is null"),
+        )
+        .to_string()
     }
 
     /// Rollback the matcher to a previous state by several tokens.
@@ -238,7 +230,7 @@ impl GrammarMatcher {
         self.inner
             .as_mut()
             .expect("GrammarMatcher inner is null")
-            .Rollback(cxx_int(num_tokens));
+            .Rollback(num_tokens);
     }
 
     /// Check if the matcher has terminated. If `terminate_without_stop_token` is false, the
@@ -288,18 +280,17 @@ impl GrammarMatcher {
     ///
     /// The internal state of the matcher.
     pub fn debug_print_internal_state(&self) -> String {
-        self.inner
-            .as_ref()
-            .expect("GrammarMatcher inner is null")
-            ._DebugPrintInternalState()
-            .to_string()
+        ffi::grammar_matcher_debug_print_internal_state(
+            self.inner.as_ref().expect("GrammarMatcher inner is null"),
+        )
+        .to_string()
     }
 
-    pub(crate) fn ffi_mut(&mut self) -> Pin<&mut FFIGrammarMatcher> {
+    pub(crate) fn ffi_mut(&mut self) -> Pin<&mut ffi::GrammarMatcher> {
         self.inner.as_mut().expect("GrammarMatcher inner is null")
     }
 
-    pub(crate) fn ffi_ref(&self) -> &FFIGrammarMatcher {
+    pub(crate) fn ffi_ref(&self) -> &ffi::GrammarMatcher {
         self.inner.as_ref().expect("GrammarMatcher inner is null")
     }
 }

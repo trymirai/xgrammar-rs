@@ -11,13 +11,15 @@
 
 #include "xgrammar/xgrammar.h"
 
+#include "common.hpp"
+
 namespace cxx_utils {
 
 inline std::unique_ptr<xgrammar::GrammarCompiler> make_grammar_compiler(
     const xgrammar::TokenizerInfo& tokenizer_info,
-    int max_threads,
+    int32_t max_threads,
     bool cache_enabled,
-    long long cache_limit_bytes,
+    int64_t cache_limit_bytes,
     std::string* error_out
 ) {
   try {
@@ -49,13 +51,13 @@ inline std::unique_ptr<xgrammar::CompiledGrammar> compiler_compile_json_schema(
     const std::string& schema,
     bool any_whitespace,
     bool has_indent,
-    int indent,
+    int32_t indent,
     bool has_separators,
     const std::string& separator_comma,
     const std::string& separator_colon,
     bool strict_mode,
     bool has_max_whitespace_cnt,
-    int max_whitespace_cnt,
+    int32_t max_whitespace_cnt,
     std::string* error_out
 ) {
   try {
@@ -80,7 +82,7 @@ inline std::unique_ptr<xgrammar::CompiledGrammar> compiler_compile_json_schema(
         strict_mode,
         max_whitespace_cnt_opt
     );
-    return std::make_unique<xgrammar::CompiledGrammar>(std::move(result));
+    return make_unique(std::move(result));
   } catch (const std::exception& e) {
     if (error_out) {
       *error_out = e.what();
@@ -103,7 +105,7 @@ inline std::unique_ptr<xgrammar::CompiledGrammar> compiler_compile_builtin_json(
       error_out->clear();
     }
     auto result = compiler.CompileBuiltinJSONGrammar();
-    return std::make_unique<xgrammar::CompiledGrammar>(std::move(result));
+    return make_unique(std::move(result));
   } catch (const std::exception& e) {
     if (error_out) {
       *error_out = e.what();
@@ -127,7 +129,7 @@ inline std::unique_ptr<xgrammar::CompiledGrammar> compiler_compile_regex(
       error_out->clear();
     }
     auto result = compiler.CompileRegex(regex);
-    return std::make_unique<xgrammar::CompiledGrammar>(std::move(result));
+    return make_unique(std::move(result));
   } catch (const std::exception& e) {
     if (error_out) {
       *error_out = e.what();
@@ -152,7 +154,7 @@ compiler_compile_structural_tag(
       error_out->clear();
     }
     auto result = compiler.CompileStructuralTag(structural_tag_json);
-    return std::make_unique<xgrammar::CompiledGrammar>(std::move(result));
+    return make_unique(std::move(result));
   } catch (const std::exception& e) {
     if (error_out) {
       *error_out = e.what();
@@ -173,9 +175,7 @@ compiler_compile_grammar_or_error(
     std::string* error_out
 ) {
   try {
-    return std::make_unique<xgrammar::CompiledGrammar>(
-        compiler.CompileGrammar(grammar)
-    );
+    return make_unique(compiler.CompileGrammar(grammar));
   } catch (const std::exception& e) {
     if (error_out) {
       *error_out = e.what();

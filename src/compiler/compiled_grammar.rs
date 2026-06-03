@@ -1,11 +1,6 @@
 use std::pin::Pin;
 
-use autocxx::prelude::*;
-
-use crate::{
-    CxxUniquePtr, FFICompiledGrammar, Grammar, TokenizerInfo, cxx_ulong,
-    cxx_ulonglong, cxx_utils,
-};
+use crate::{CxxUniquePtr, Grammar, TokenizerInfo, ffi};
 
 /// This is the primary object to store compiled grammar.
 ///
@@ -16,7 +11,7 @@ use crate::{
 ///
 /// Do not construct this class directly, instead use `GrammarCompiler` to construct the object.
 pub struct CompiledGrammar {
-    inner: CxxUniquePtr<FFICompiledGrammar>,
+    inner: CxxUniquePtr<ffi::CompiledGrammar>,
 }
 
 impl CompiledGrammar {
@@ -24,7 +19,7 @@ impl CompiledGrammar {
     pub fn grammar(&self) -> Grammar {
         let inner_ref =
             self.inner.as_ref().expect("CompiledGrammar inner is null");
-        Grammar::from_unique_ptr(inner_ref.GetGrammar().within_unique_ptr())
+        Grammar::from_unique_ptr(ffi::compiled_grammar_get_grammar(inner_ref))
     }
 
     /// The tokenizer info associated with the compiled grammar.
@@ -32,7 +27,7 @@ impl CompiledGrammar {
         let inner_ref =
             self.inner.as_ref().expect("CompiledGrammar inner is null");
         TokenizerInfo::from_unique_ptr(
-            inner_ref.GetTokenizerInfo().within_unique_ptr(),
+            ffi::compiled_grammar_get_tokenizer_info(inner_ref),
         )
     }
 
@@ -45,37 +40,6 @@ impl CompiledGrammar {
         impl ToUsize for usize {
             fn to_usize(self) -> usize {
                 self
-            }
-        }
-
-        #[cfg(target_os = "windows")]
-        impl ToUsize for cxx_ulong {
-            fn to_usize(self) -> usize {
-                self.0 as usize
-            }
-        }
-
-        #[cfg(not(target_os = "windows"))]
-        impl ToUsize for cxx_ulong {
-            fn to_usize(self) -> usize {
-                let val: u64 = self.into();
-                val as usize
-            }
-        }
-
-        #[cfg(target_os = "windows")]
-        impl ToUsize for cxx_ulonglong {
-            fn to_usize(self) -> usize {
-                let val: u64 = self.0.into();
-                val as usize
-            }
-        }
-
-        #[cfg(not(target_os = "windows"))]
-        impl ToUsize for cxx_ulonglong {
-            fn to_usize(self) -> usize {
-                let val: u64 = self.into();
-                val as usize
             }
         }
 
@@ -99,7 +63,7 @@ impl CompiledGrammar {
     pub fn serialize_json(&self) -> String {
         let inner_ref =
             self.inner.as_ref().expect("CompiledGrammar inner is null");
-        inner_ref.SerializeJSON().to_string()
+        ffi::compiled_grammar_serialize_json(inner_ref).to_string()
     }
 
     /// Deserialize the compiled grammar from a JSON string and associate it with the specified
@@ -132,7 +96,7 @@ impl CompiledGrammar {
         cxx::let_cxx_string!(json_cxx = json);
         cxx::let_cxx_string!(error_out_cxx = "");
         let unique_ptr = unsafe {
-            cxx_utils::compiled_grammar_deserialize_json_or_error(
+            ffi::compiled_grammar_deserialize_json_or_error(
                 &json_cxx,
                 tokenizer_info.ffi_ref(),
                 error_out_cxx.as_mut().get_unchecked_mut(),
@@ -147,14 +111,14 @@ impl CompiledGrammar {
     }
 
     pub(crate) fn from_unique_ptr(
-        inner: cxx::UniquePtr<FFICompiledGrammar>
+        inner: cxx::UniquePtr<ffi::CompiledGrammar>
     ) -> Self {
         Self {
             inner,
         }
     }
 
-    pub(crate) fn ffi_ref(&self) -> &FFICompiledGrammar {
+    pub(crate) fn ffi_ref(&self) -> &ffi::CompiledGrammar {
         self.inner.as_ref().expect("CompiledGrammar inner is null")
     }
 }

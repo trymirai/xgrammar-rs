@@ -11,6 +11,8 @@
 
 #include "xgrammar/xgrammar.h"
 
+#include "common.hpp"
+
 namespace cxx_utils {
 
 inline std::unique_ptr<xgrammar::TokenizerInfo> make_tokenizer_info(
@@ -65,6 +67,28 @@ inline std::unique_ptr<xgrammar::TokenizerInfo> make_tokenizer_info(
 }
 
 inline std::unique_ptr<xgrammar::TokenizerInfo>
+tokenizer_info_from_vocab_and_metadata(
+    const std::vector<std::string>& encoded_vocab,
+    const std::string& metadata
+) {
+  return make_unique(
+      xgrammar::TokenizerInfo::FromVocabAndMetadata(encoded_vocab, metadata)
+  );
+}
+
+inline std::unique_ptr<std::string> tokenizer_info_serialize_json(
+    const xgrammar::TokenizerInfo& self
+) {
+  return make_unique(self.SerializeJSON());
+}
+
+inline std::unique_ptr<std::string> tokenizer_info_dump_metadata(
+    const xgrammar::TokenizerInfo& self
+) {
+  return make_unique(self.DumpMetadata());
+}
+
+inline std::unique_ptr<xgrammar::TokenizerInfo>
 tokenizer_info_deserialize_json_or_error(
     const std::string& json_string,
     std::string* error_out
@@ -78,9 +102,7 @@ tokenizer_info_deserialize_json_or_error(
       }
       return nullptr;
     }
-    return std::make_unique<xgrammar::TokenizerInfo>(
-        std::get<xgrammar::TokenizerInfo>(std::move(result))
-    );
+    return make_unique(std::get<xgrammar::TokenizerInfo>(std::move(result)));
   } catch (const std::exception& e) {
     if (error_out) {
       *error_out = e.what();
@@ -103,7 +125,8 @@ inline bool detect_metadata_from_hf(
     if (error_out) {
       error_out->clear();
     }
-    std::string result = xgrammar::TokenizerInfo::DetectMetadataFromHF(backend_str);
+    std::string result =
+        xgrammar::TokenizerInfo::DetectMetadataFromHF(backend_str);
     if (metadata_out) {
       *metadata_out = std::move(result);
     }

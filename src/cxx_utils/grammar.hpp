@@ -11,6 +11,8 @@
 
 #include "xgrammar/grammar.h"
 
+#include "common.hpp"
+
 namespace cxx_utils {
 
 inline std::unique_ptr<xgrammar::Grammar> grammar_from_json_schema(
@@ -63,7 +65,7 @@ inline std::unique_ptr<xgrammar::Grammar> grammar_from_json_schema(
       }
       return nullptr;
     }
-    return std::make_unique<xgrammar::Grammar>(std::move(g));
+    return make_unique(std::move(g));
   } catch (const std::exception& e) {
     if (error_out) {
       *error_out = e.what();
@@ -86,14 +88,15 @@ inline std::unique_ptr<xgrammar::Grammar> grammar_from_ebnf(
     if (error_out) {
       error_out->clear();
     }
-    xgrammar::Grammar g = xgrammar::Grammar::FromEBNF(ebnf_string, root_rule_name);
+    xgrammar::Grammar g =
+        xgrammar::Grammar::FromEBNF(ebnf_string, root_rule_name);
     if (g.IsNull()) {
       if (error_out) {
         *error_out = g.ToString();
       }
       return nullptr;
     }
-    return std::make_unique<xgrammar::Grammar>(std::move(g));
+    return make_unique(std::move(g));
   } catch (const std::exception& e) {
     if (error_out) {
       *error_out = e.what();
@@ -116,14 +119,15 @@ inline std::unique_ptr<xgrammar::Grammar> grammar_from_regex(
     if (error_out) {
       error_out->clear();
     }
-    xgrammar::Grammar g = xgrammar::Grammar::FromRegex(regex_string, print_converted_ebnf);
+    xgrammar::Grammar g =
+        xgrammar::Grammar::FromRegex(regex_string, print_converted_ebnf);
     if (g.IsNull()) {
       if (error_out) {
         *error_out = g.ToString();
       }
       return nullptr;
     }
-    return std::make_unique<xgrammar::Grammar>(std::move(g));
+    return make_unique(std::move(g));
   } catch (const std::exception& e) {
     if (error_out) {
       *error_out = e.what();
@@ -164,9 +168,7 @@ inline std::unique_ptr<xgrammar::Grammar> grammar_deserialize_json_or_error(
     }
     return nullptr;
   }
-  return std::make_unique<xgrammar::Grammar>(
-      std::get<xgrammar::Grammar>(std::move(result))
-  );
+  return make_unique(std::get<xgrammar::Grammar>(std::move(result)));
 }
 
 inline std::unique_ptr<xgrammar::Grammar> grammar_from_structural_tag(
@@ -181,9 +183,35 @@ inline std::unique_ptr<xgrammar::Grammar> grammar_from_structural_tag(
     }
     return nullptr;
   }
-  return std::make_unique<xgrammar::Grammar>(
-      std::get<xgrammar::Grammar>(std::move(result))
-  );
+  return make_unique(std::get<xgrammar::Grammar>(std::move(result)));
+}
+
+inline std::unique_ptr<std::string> grammar_to_string(
+    const xgrammar::Grammar& self
+) {
+  return make_unique(self.ToString());
+}
+
+inline std::unique_ptr<xgrammar::Grammar> grammar_builtin_json_grammar() {
+  return make_unique(xgrammar::Grammar::BuiltinJSONGrammar());
+}
+
+inline std::unique_ptr<xgrammar::Grammar> grammar_union(
+    const std::vector<xgrammar::Grammar>& grammars
+) {
+  return make_unique(xgrammar::Grammar::Union(grammars));
+}
+
+inline std::unique_ptr<xgrammar::Grammar> grammar_concat(
+    const std::vector<xgrammar::Grammar>& grammars
+) {
+  return make_unique(xgrammar::Grammar::Concat(grammars));
+}
+
+inline std::unique_ptr<std::string> grammar_serialize_json(
+    const xgrammar::Grammar& self
+) {
+  return make_unique(self.SerializeJSON());
 }
 
 } // namespace cxx_utils

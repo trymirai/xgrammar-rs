@@ -1,13 +1,11 @@
-use autocxx::prelude::*;
-
 use super::GrammarMatcher;
-use crate::{CxxUniquePtr, DLTensor, cxx_utils, utils::bytes_as_c_char_ptr};
+use crate::{CxxUniquePtr, DLTensor, ffi, utils::bytes_as_c_char_ptr};
 
 /// A batch version of `GrammarMatcher` that can fill the next token bitmask for multiple
 /// matchers in parallel. It utilizes multiple threads to speed up the computation. It is
 /// especially useful when the batch size is large.
 pub struct BatchGrammarMatcher {
-    inner: CxxUniquePtr<crate::FFIBatchGrammarMatcher>,
+    inner: CxxUniquePtr<ffi::BatchGrammarMatcher>,
 }
 
 impl BatchGrammarMatcher {
@@ -24,7 +22,7 @@ impl BatchGrammarMatcher {
     pub fn new(max_threads: i32) -> Result<Self, String> {
         cxx::let_cxx_string!(error_out_cxx = "");
         let ffi_pin = unsafe {
-            cxx_utils::make_batch_grammar_matcher(
+            ffi::make_batch_grammar_matcher(
                 max_threads,
                 error_out_cxx.as_mut().get_unchecked_mut(),
             )
@@ -66,19 +64,16 @@ impl BatchGrammarMatcher {
     pub fn batch_fill_next_token_bitmask(
         &mut self,
         matchers: &[GrammarMatcher],
-        bitmask: &mut DLTensor,
+        bitmask: &mut CxxUniquePtr<DLTensor>,
         indices: Option<&[i32]>,
         debug_print: bool,
     ) {
-        let mut ffi_matcher_vec = cxx_utils::new_grammar_matcher_vector();
+        let mut ffi_matcher_vec = ffi::new_grammar_matcher_vector();
         {
             let mut vec_pin = ffi_matcher_vec.pin_mut();
-            cxx_utils::grammar_matcher_vec_reserve(
-                vec_pin.as_mut(),
-                matchers.len(),
-            );
+            ffi::grammar_matcher_vec_reserve(vec_pin.as_mut(), matchers.len());
             for matcher in matchers {
-                cxx_utils::grammar_matcher_vec_push(
+                ffi::grammar_matcher_vec_push(
                     vec_pin.as_mut(),
                     matcher.ffi_ref(),
                 );
@@ -93,10 +88,10 @@ impl BatchGrammarMatcher {
         };
 
         unsafe {
-            cxx_utils::batch_matcher_batch_fill_next_token_bitmask(
+            ffi::batch_matcher_batch_fill_next_token_bitmask(
                 self.inner.as_mut().expect("BatchGrammarMatcher inner is null"),
                 ffi_matcher_vec.as_mut().unwrap().get_unchecked_mut(),
-                bitmask as *mut _,
+                bitmask.as_mut_ptr(),
                 has_indices,
                 indices_ptr,
                 indices_len,
@@ -133,15 +128,12 @@ impl BatchGrammarMatcher {
             "matchers and tokens must have the same length"
         );
 
-        let mut ffi_matcher_vec = cxx_utils::new_grammar_matcher_vector();
+        let mut ffi_matcher_vec = ffi::new_grammar_matcher_vector();
         {
             let mut vec_pin = ffi_matcher_vec.pin_mut();
-            cxx_utils::grammar_matcher_vec_reserve(
-                vec_pin.as_mut(),
-                matchers.len(),
-            );
+            ffi::grammar_matcher_vec_reserve(vec_pin.as_mut(), matchers.len());
             for matcher in matchers {
-                cxx_utils::grammar_matcher_vec_push(
+                ffi::grammar_matcher_vec_push(
                     vec_pin.as_mut(),
                     matcher.ffi_ref(),
                 );
@@ -149,7 +141,7 @@ impl BatchGrammarMatcher {
         }
 
         let result = unsafe {
-            cxx_utils::batch_accept_token(
+            ffi::batch_accept_token(
                 ffi_matcher_vec.as_mut().unwrap().get_unchecked_mut(),
                 tokens.as_ptr(),
                 tokens.len(),
@@ -188,29 +180,26 @@ impl BatchGrammarMatcher {
             "matchers and strings must have the same length"
         );
 
-        let mut ffi_matcher_vec = cxx_utils::new_grammar_matcher_vector();
+        let mut ffi_matcher_vec = ffi::new_grammar_matcher_vector();
         {
             let mut vec_pin = ffi_matcher_vec.pin_mut();
-            cxx_utils::grammar_matcher_vec_reserve(
-                vec_pin.as_mut(),
-                matchers.len(),
-            );
+            ffi::grammar_matcher_vec_reserve(vec_pin.as_mut(), matchers.len());
             for matcher in matchers {
-                cxx_utils::grammar_matcher_vec_push(
+                ffi::grammar_matcher_vec_push(
                     vec_pin.as_mut(),
                     matcher.ffi_ref(),
                 );
             }
         }
 
-        let mut cxx_strings = cxx_utils::new_string_vector();
+        let mut cxx_strings = ffi::new_string_vector();
         {
             let mut cxx_vec_pin = cxx_strings.pin_mut();
-            cxx_utils::string_vec_reserve(cxx_vec_pin.as_mut(), strings.len());
+            ffi::string_vec_reserve(cxx_vec_pin.as_mut(), strings.len());
             for string in strings.iter() {
                 let bytes = string.as_ref().as_bytes();
                 unsafe {
-                    cxx_utils::string_vec_push_bytes(
+                    ffi::string_vec_push_bytes(
                         cxx_vec_pin.as_mut(),
                         bytes_as_c_char_ptr(bytes),
                         bytes.len(),
@@ -220,7 +209,7 @@ impl BatchGrammarMatcher {
         }
 
         let result = unsafe {
-            cxx_utils::batch_accept_string(
+            ffi::batch_accept_string(
                 ffi_matcher_vec.as_mut().unwrap().get_unchecked_mut(),
                 cxx_strings.as_ref().unwrap(),
                 debug_print,

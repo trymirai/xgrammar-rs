@@ -1,4 +1,3 @@
-pub mod autocxx;
 pub mod cmake;
 pub mod common;
 pub mod submodules;

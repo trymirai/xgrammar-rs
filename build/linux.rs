@@ -1,6 +1,6 @@
 use std::{
     collections::HashSet,
-    env, fs,
+    fs,
     path::{Path, PathBuf},
     process::Command,
 };
@@ -66,7 +66,7 @@ fn gcc_version() -> Option<String> {
 }
 
 fn probe_compiler_includes(
-    compiler: &str,
+    compiler: &Path,
     target: &str,
 ) -> Vec<String> {
     let mut args = vec!["-E", "-x", "c++", "-", "-v"];
@@ -75,7 +75,7 @@ fn probe_compiler_includes(
         args.push(target);
     }
 
-    let output = Command::new(compiler)
+    let output = Command::new(compiler.as_os_str())
         .args(&args)
         .stdin(std::process::Stdio::null())
         .stderr(std::process::Stdio::piped())
@@ -132,25 +132,18 @@ fn fallback_include_paths(target: &str) -> Vec<String> {
     paths
 }
 
-fn collect_system_include_args(target: &str) -> Vec<String> {
+fn collect_system_include_args(
+    target: &str,
+    compiler: &Path,
+) -> Vec<String> {
     let mut args = Vec::new();
     let mut seen = HashSet::new();
 
-    let mut compilers = vec!["clang++", "g++", "gcc", "c++", "cc"];
-    if let Ok(cxx) = env::var("CXX") {
-        compilers.insert(0, Box::leak(cxx.into_boxed_str()));
-    }
-
-    for compiler in compilers {
-        let includes = probe_compiler_includes(compiler, target);
-        if !includes.is_empty() {
-            for path in includes {
-                if seen.insert(path.clone()) {
-                    args.push(format!(
-                        "-isystem{}",
-                        normalize_include_path(&path)
-                    ));
-                }
+    let includes = probe_compiler_includes(compiler, target);
+    if !includes.is_empty() {
+        for path in includes {
+            if seen.insert(path.clone()) {
+                args.push(format!("-isystem{}", normalize_include_path(&path)));
             }
         }
     }
@@ -167,8 +160,11 @@ fn collect_system_include_args(target: &str) -> Vec<String> {
 }
 
 // Platform-specific args for Linux
-pub fn clang_include_args(target: &str) -> Vec<String> {
+pub fn clang_include_args(
+    target: &str,
+    compiler: &Path,
+) -> Vec<String> {
     let mut args = vec!["--sysroot=/".to_string()];
-    args.extend(collect_system_include_args(target));
+    args.extend(collect_system_include_args(target, compiler));
     args
 }

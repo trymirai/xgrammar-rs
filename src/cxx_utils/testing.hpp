@@ -5,13 +5,17 @@
 #include <exception>
 #include <optional>
 #include <algorithm>
+#include <memory>
 #include "cpp/testing.h"
 #include "cpp/json_schema_converter.h"
 #include "cpp/regex_converter.h"
 
+#include "common.hpp"
+#include "dlpack.hpp"
+
 namespace cxx_utils {
 
-inline std::string json_schema_to_ebnf(
+inline std::unique_ptr<std::string> json_schema_to_ebnf(
     const std::string& schema,
     bool any_whitespace,
     bool has_indent,
@@ -40,17 +44,19 @@ inline std::string json_schema_to_ebnf(
       max_whitespace_cnt_opt = static_cast<int>(max_whitespace_cnt);
     }
 
-    return xgrammar::JSONSchemaToEBNF(
-        schema,
-        any_whitespace,
-        indent_opt,
-        separators_opt,
-        strict_mode,
-        max_whitespace_cnt_opt,
-        xgrammar::JSONFormat::kJSON
+    return make_unique(
+        xgrammar::JSONSchemaToEBNF(
+            schema,
+            any_whitespace,
+            indent_opt,
+            separators_opt,
+            strict_mode,
+            max_whitespace_cnt_opt,
+            xgrammar::JSONFormat::kJSON
+        )
     );
   } catch (...) {
-    return std::string();
+    return make_unique(std::string());
   }
 }
 
@@ -59,7 +65,7 @@ inline std::unique_ptr<xgrammar::Grammar> ebnf_to_grammar_no_normalization(
     const std::string& root_rule_name
 ) {
   try {
-    return std::make_unique<xgrammar::Grammar>(
+    return make_unique(
         xgrammar::_EBNFToGrammarNoNormalization(ebnf_string, root_rule_name)
     );
   } catch (...) {
@@ -67,15 +73,17 @@ inline std::unique_ptr<xgrammar::Grammar> ebnf_to_grammar_no_normalization(
   }
 }
 
-inline std::string qwen_xml_tool_calling_to_ebnf(const std::string& schema) {
+inline std::unique_ptr<std::string> qwen_xml_tool_calling_to_ebnf(
+    const std::string& schema
+) {
   try {
-    return xgrammar::QwenXMLToolCallingToEBNF(schema);
+    return make_unique(xgrammar::QwenXMLToolCallingToEBNF(schema));
   } catch (...) {
-    return std::string();
+    return make_unique(std::string());
   }
 }
 
-inline std::vector<int32_t> get_masked_tokens_from_bitmask(
+inline std::unique_ptr<std::vector<int32_t>> get_masked_tokens_from_bitmask(
     const DLTensor* bitmask,
     int32_t vocab_size,
     int32_t index
@@ -90,9 +98,9 @@ inline std::vector<int32_t> get_masked_tokens_from_bitmask(
     );
     std::vector<int32_t> output;
     output.assign(result.begin(), result.end());
-    return output;
+    return make_unique(std::move(output));
   } catch (...) {
-    return std::vector<int32_t>();
+    return make_unique(std::vector<int32_t>());
   }
 }
 
@@ -104,20 +112,20 @@ struct SingleTokenResult {
   int32_t get_token_id() const { return token_id; }
 };
 
-inline SingleTokenResult is_single_token_bitmask(
+inline std::unique_ptr<SingleTokenResult> is_single_token_bitmask(
     const DLTensor* bitmask,
     int32_t vocab_size,
     int32_t index
 ) {
   try {
     auto pair = xgrammar::_IsSingleTokenBitmask(*bitmask, vocab_size, index);
-    return SingleTokenResult{pair.first, pair.second};
+    return make_unique(SingleTokenResult{pair.first, pair.second});
   } catch (...) {
-    return SingleTokenResult{false, -1};
+    return make_unique(SingleTokenResult{false, -1});
   }
 }
 
-inline std::string regex_to_ebnf(
+inline std::unique_ptr<std::string> regex_to_ebnf(
     const std::string& regex,
     bool with_rule_name,
     std::string* error_out
@@ -126,21 +134,21 @@ inline std::string regex_to_ebnf(
     if (error_out) {
       error_out->clear();
     }
-    return xgrammar::RegexToEBNF(regex, with_rule_name);
+    return make_unique(xgrammar::RegexToEBNF(regex, with_rule_name));
   } catch (const std::exception& e) {
     if (error_out) {
       *error_out = e.what();
     }
-    return std::string();
+    return make_unique(std::string());
   } catch (...) {
     if (error_out) {
       *error_out = "unknown C++ exception";
     }
-    return std::string();
+    return make_unique(std::string());
   }
 }
 
-inline std::string generate_range_regex(
+inline std::unique_ptr<std::string> generate_range_regex(
     bool has_start,
     int64_t start,
     bool has_end,
@@ -151,25 +159,27 @@ inline std::string generate_range_regex(
     if (error_out) {
       error_out->clear();
     }
-    std::optional<int64_t> start_opt = has_start ? std::optional<int64_t>(start) : std::nullopt;
-    std::optional<int64_t> end_opt = has_end ? std::optional<int64_t>(end) : std::nullopt;
+    std::optional<int64_t> start_opt =
+        has_start ? std::optional<int64_t>(start) : std::nullopt;
+    std::optional<int64_t> end_opt =
+        has_end ? std::optional<int64_t>(end) : std::nullopt;
     std::string result = xgrammar::GenerateRangeRegex(start_opt, end_opt);
     result.erase(std::remove(result.begin(), result.end(), '\0'), result.end());
-    return result;
+    return make_unique(std::move(result));
   } catch (const std::exception& e) {
     if (error_out) {
       *error_out = e.what();
     }
-    return std::string();
+    return make_unique(std::string());
   } catch (...) {
     if (error_out) {
       *error_out = "unknown C++ exception";
     }
-    return std::string();
+    return make_unique(std::string());
   }
 }
 
-inline std::string generate_float_range_regex(
+inline std::unique_ptr<std::string> generate_float_range_regex(
     bool has_start,
     double start,
     bool has_end,
@@ -180,25 +190,27 @@ inline std::string generate_float_range_regex(
     if (error_out) {
       error_out->clear();
     }
-    std::optional<double> start_opt = has_start ? std::optional<double>(start) : std::nullopt;
-    std::optional<double> end_opt = has_end ? std::optional<double>(end) : std::nullopt;
+    std::optional<double> start_opt =
+        has_start ? std::optional<double>(start) : std::nullopt;
+    std::optional<double> end_opt =
+        has_end ? std::optional<double>(end) : std::nullopt;
     std::string result = xgrammar::GenerateFloatRangeRegex(start_opt, end_opt);
     result.erase(std::remove(result.begin(), result.end(), '\0'), result.end());
-    return result;
+    return make_unique(std::move(result));
   } catch (const std::exception& e) {
     if (error_out) {
       *error_out = e.what();
     }
-    return std::string();
+    return make_unique(std::string());
   } catch (...) {
     if (error_out) {
       *error_out = "unknown C++ exception";
     }
-    return std::string();
+    return make_unique(std::string());
   }
 }
 
-inline std::string print_grammar_fsms(
+inline std::unique_ptr<std::string> print_grammar_fsms(
     const xgrammar::Grammar& grammar,
     std::string* error_out
 ) {
@@ -206,17 +218,17 @@ inline std::string print_grammar_fsms(
     if (error_out) {
       error_out->clear();
     }
-    return xgrammar::_PrintGrammarFSMs(grammar);
+    return make_unique(xgrammar::_PrintGrammarFSMs(grammar));
   } catch (const std::exception& e) {
     if (error_out) {
       *error_out = e.what();
     }
-    return std::string();
+    return make_unique(std::string());
   } catch (...) {
     if (error_out) {
       *error_out = "unknown C++ exception";
     }
-    return std::string();
+    return make_unique(std::string());
   }
 }
 

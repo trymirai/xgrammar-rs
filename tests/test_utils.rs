@@ -3,9 +3,9 @@ use hf_hub::{Repo, api::sync::ApiBuilder};
 #[cfg(feature = "hf")]
 use std::collections::HashMap;
 use xgrammar::{
-    DLDataType, DLDataTypeCode, DLDevice, DLDeviceType, DLTensor, Grammar,
-    GrammarCompiler, GrammarMatcher, TokenizerInfo, VocabType,
-    allocate_token_bitmask, get_bitmask_shape,
+    CxxUniquePtr, DLDataType, DLDataTypeCode, DLDevice, DLDeviceType, DLTensor,
+    Grammar, GrammarCompiler, GrammarMatcher, TokenizerInfo, VocabType,
+    allocate_token_bitmask, c_void, get_bitmask_shape,
 };
 
 #[cfg(feature = "hf")]
@@ -166,26 +166,28 @@ pub fn create_bitmask_dltensor(
     bitmask_data: &mut [i32],
     batch_size: usize,
     vocab_size: usize,
-) -> (DLTensor, Vec<i64>, Vec<i64>) {
+) -> (CxxUniquePtr<DLTensor>, Vec<i64>, Vec<i64>) {
     let (_, bitmask_size) = get_bitmask_shape(batch_size, vocab_size);
     let mut shape = vec![batch_size as i64, bitmask_size as i64];
     let mut strides = vec![bitmask_size as i64, 1];
 
-    let tensor = DLTensor {
-        data: bitmask_data.as_mut_ptr() as *mut std::ffi::c_void,
-        device: DLDevice {
-            device_type: DLDeviceType::kDLCPU,
-            device_id: 0,
-        },
-        ndim: 2,
-        dtype: DLDataType {
-            code: DLDataTypeCode::kDLInt as u8,
-            bits: 32,
-            lanes: 1,
-        },
-        shape: shape.as_mut_ptr(),
-        strides: strides.as_mut_ptr(),
-        byte_offset: 0,
+    let tensor = unsafe {
+        DLTensor::new(
+            bitmask_data.as_mut_ptr() as *mut c_void,
+            DLDevice {
+                device_type: DLDeviceType::kDLCPU,
+                device_id: 0,
+            },
+            2,
+            DLDataType {
+                code: DLDataTypeCode::kDLInt as u8,
+                bits: 32,
+                lanes: 1,
+            },
+            shape.as_mut_ptr(),
+            strides.as_mut_ptr(),
+            0,
+        )
     };
 
     (tensor, shape, strides)
@@ -194,24 +196,26 @@ pub fn create_bitmask_dltensor(
 #[allow(dead_code)]
 pub fn create_i64_1d_dltensor(
     data: &mut [i64]
-) -> (DLTensor, Vec<i64>, Vec<i64>) {
+) -> (CxxUniquePtr<DLTensor>, Vec<i64>, Vec<i64>) {
     let mut shape = vec![data.len() as i64];
     let mut strides = vec![1i64];
-    let tensor = DLTensor {
-        data: data.as_mut_ptr() as *mut std::ffi::c_void,
-        device: DLDevice {
-            device_type: DLDeviceType::kDLCPU,
-            device_id: 0,
-        },
-        ndim: 1,
-        dtype: DLDataType {
-            code: DLDataTypeCode::kDLInt as u8,
-            bits: 64,
-            lanes: 1,
-        },
-        shape: shape.as_mut_ptr(),
-        strides: strides.as_mut_ptr(),
-        byte_offset: 0,
+    let tensor = unsafe {
+        DLTensor::new(
+            data.as_mut_ptr() as *mut c_void,
+            DLDevice {
+                device_type: DLDeviceType::kDLCPU,
+                device_id: 0,
+            },
+            1,
+            DLDataType {
+                code: DLDataTypeCode::kDLInt as u8,
+                bits: 64,
+                lanes: 1,
+            },
+            shape.as_mut_ptr(),
+            strides.as_mut_ptr(),
+            0,
+        )
     };
     (tensor, shape, strides)
 }
@@ -219,24 +223,26 @@ pub fn create_i64_1d_dltensor(
 #[allow(dead_code)]
 pub fn create_f32_1d_dltensor(
     data: &mut [f32]
-) -> (DLTensor, Vec<i64>, Vec<i64>) {
+) -> (CxxUniquePtr<DLTensor>, Vec<i64>, Vec<i64>) {
     let mut shape = vec![data.len() as i64];
     let mut strides = vec![1i64];
-    let tensor = DLTensor {
-        data: data.as_mut_ptr() as *mut std::ffi::c_void,
-        device: DLDevice {
-            device_type: DLDeviceType::kDLCPU,
-            device_id: 0,
-        },
-        ndim: 1,
-        dtype: DLDataType {
-            code: DLDataTypeCode::kDLFloat as u8,
-            bits: 32,
-            lanes: 1,
-        },
-        shape: shape.as_mut_ptr(),
-        strides: strides.as_mut_ptr(),
-        byte_offset: 0,
+    let tensor = unsafe {
+        DLTensor::new(
+            data.as_mut_ptr() as *mut c_void,
+            DLDevice {
+                device_type: DLDeviceType::kDLCPU,
+                device_id: 0,
+            },
+            1,
+            DLDataType {
+                code: DLDataTypeCode::kDLFloat as u8,
+                bits: 32,
+                lanes: 1,
+            },
+            shape.as_mut_ptr(),
+            strides.as_mut_ptr(),
+            0,
+        )
     };
     (tensor, shape, strides)
 }
@@ -248,24 +254,26 @@ pub fn create_f32_2d_dltensor(
     cols: usize,
     stride0: i64,
     stride1: i64,
-) -> (DLTensor, Vec<i64>, Vec<i64>) {
+) -> (CxxUniquePtr<DLTensor>, Vec<i64>, Vec<i64>) {
     let mut shape = vec![rows as i64, cols as i64];
     let mut strides = vec![stride0, stride1];
-    let tensor = DLTensor {
-        data: data.as_mut_ptr() as *mut std::ffi::c_void,
-        device: DLDevice {
-            device_type: DLDeviceType::kDLCPU,
-            device_id: 0,
-        },
-        ndim: 2,
-        dtype: DLDataType {
-            code: DLDataTypeCode::kDLFloat as u8,
-            bits: 32,
-            lanes: 1,
-        },
-        shape: shape.as_mut_ptr(),
-        strides: strides.as_mut_ptr(),
-        byte_offset: 0,
+    let tensor = unsafe {
+        DLTensor::new(
+            data.as_mut_ptr() as *mut c_void,
+            DLDevice {
+                device_type: DLDeviceType::kDLCPU,
+                device_id: 0,
+            },
+            2,
+            DLDataType {
+                code: DLDataTypeCode::kDLFloat as u8,
+                bits: 32,
+                lanes: 1,
+            },
+            shape.as_mut_ptr(),
+            strides.as_mut_ptr(),
+            0,
+        )
     };
     (tensor, shape, strides)
 }

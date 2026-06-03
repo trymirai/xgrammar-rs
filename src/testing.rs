@@ -1,7 +1,5 @@
-use autocxx::prelude::*;
-
 use crate::{
-    DLTensor, cxx_utils, ffi, grammar::Grammar, matcher::GrammarMatcher,
+    CxxUniquePtr, DLTensor, ffi, grammar::Grammar, matcher::GrammarMatcher,
 };
 
 /// Convert EBNF to Grammar without normalization.
@@ -20,9 +18,9 @@ pub fn ebnf_to_grammar_no_normalization(
     ebnf_string: &str,
     root_rule_name: &str,
 ) -> Grammar {
-    let ebnf_cxx = ffi::make_string(ebnf_string);
-    let root_cxx = ffi::make_string(root_rule_name);
-    Grammar::from_unique_ptr(cxx_utils::ebnf_to_grammar_no_normalization(
+    cxx::let_cxx_string!(ebnf_cxx = ebnf_string);
+    cxx::let_cxx_string!(root_cxx = root_rule_name);
+    Grammar::from_unique_ptr(ffi::ebnf_to_grammar_no_normalization(
         &ebnf_cxx, &root_cxx,
     ))
 }
@@ -52,7 +50,7 @@ pub fn json_schema_to_ebnf(
     strict_mode: bool,
     max_whitespace_cnt: Option<i32>,
 ) -> String {
-    let schema_cxx = ffi::make_string(schema);
+    cxx::let_cxx_string!(schema_cxx = schema);
     let has_indent = indent.is_some();
     let indent_i32 = indent.unwrap_or(0);
     let has_separators = separators.is_some();
@@ -61,12 +59,12 @@ pub fn json_schema_to_ebnf(
     } else {
         (String::new(), String::new())
     };
-    let sep_comma_cxx = ffi::make_string(&sep_comma);
-    let sep_colon_cxx = ffi::make_string(&sep_colon);
+    cxx::let_cxx_string!(sep_comma_cxx = &sep_comma);
+    cxx::let_cxx_string!(sep_colon_cxx = &sep_colon);
     let has_max_whitespace_cnt = max_whitespace_cnt.is_some();
     let max_whitespace_cnt_i32 = max_whitespace_cnt.unwrap_or(0);
 
-    cxx_utils::json_schema_to_ebnf(
+    ffi::json_schema_to_ebnf(
         &schema_cxx,
         any_whitespace,
         has_indent,
@@ -91,8 +89,8 @@ pub fn json_schema_to_ebnf(
 ///
 /// The EBNF grammar string.
 pub fn qwen_xml_tool_calling_to_ebnf(schema_json: &str) -> String {
-    let schema_cxx = ffi::make_string(schema_json);
-    cxx_utils::qwen_xml_tool_calling_to_ebnf(&schema_cxx).to_string()
+    cxx::let_cxx_string!(schema_cxx = schema_json);
+    ffi::qwen_xml_tool_calling_to_ebnf(&schema_cxx).to_string()
 }
 
 /// Get the ids of the rejected tokens from the bitmask. Mainly for debug purposes.
@@ -113,7 +111,7 @@ pub fn get_masked_tokens_from_bitmask(
     index: i32,
 ) -> Box<[i32]> {
     unsafe {
-        let result = ffi::cxx_utils::get_masked_tokens_from_bitmask(
+        let result = ffi::get_masked_tokens_from_bitmask(
             bitmask as *const _,
             vocab_size,
             index,
@@ -139,12 +137,11 @@ pub fn is_single_token_bitmask(
     index: i32,
 ) -> (bool, i32) {
     unsafe {
-        let result = ffi::cxx_utils::is_single_token_bitmask(
+        let result = ffi::is_single_token_bitmask(
             bitmask as *const _,
             vocab_size,
             index,
-        )
-        .within_unique_ptr();
+        );
         (result.get_is_single(), result.get_token_id())
     }
 }
@@ -156,7 +153,7 @@ pub fn regex_to_ebnf(
     cxx::let_cxx_string!(regex_cxx = regex);
     cxx::let_cxx_string!(error_out_cxx = "");
     let out = unsafe {
-        cxx_utils::regex_to_ebnf(
+        ffi::regex_to_ebnf(
             &regex_cxx,
             with_rule_name,
             error_out_cxx.as_mut().get_unchecked_mut(),
@@ -174,16 +171,16 @@ pub fn traverse_draft_tree(
     retrieve_next_sibling: &DLTensor,
     draft_tokens: &DLTensor,
     matcher: &mut GrammarMatcher,
-    bitmask: &mut DLTensor,
+    bitmask: &mut CxxUniquePtr<DLTensor>,
 ) -> Result<(), String> {
     cxx::let_cxx_string!(error_out_cxx = "");
     let ok = unsafe {
-        cxx_utils::traverse_draft_tree(
+        ffi::traverse_draft_tree(
             retrieve_next_token as *const _,
             retrieve_next_sibling as *const _,
             draft_tokens as *const _,
             matcher.ffi_mut(),
-            bitmask as *mut _,
+            bitmask.as_mut_ptr(),
             error_out_cxx.as_mut().get_unchecked_mut(),
         )
     };
@@ -203,7 +200,7 @@ pub fn generate_range_regex(
     let end_val = end.unwrap_or(0);
     cxx::let_cxx_string!(error_out_cxx = "");
     let result = unsafe {
-        cxx_utils::generate_range_regex(
+        ffi::generate_range_regex(
             has_start,
             start_val,
             has_end,
@@ -228,7 +225,7 @@ pub fn generate_float_range_regex(
     let end_val = end.unwrap_or(0.0);
     cxx::let_cxx_string!(error_out_cxx = "");
     let result = unsafe {
-        cxx_utils::generate_float_range_regex(
+        ffi::generate_float_range_regex(
             has_start,
             start_val,
             has_end,
@@ -246,7 +243,7 @@ pub fn generate_float_range_regex(
 pub fn print_grammar_fsms(grammar: &Grammar) -> Result<String, String> {
     cxx::let_cxx_string!(error_out_cxx = "");
     let result = unsafe {
-        cxx_utils::print_grammar_fsms(
+        ffi::print_grammar_fsms(
             grammar.ffi_ref(),
             error_out_cxx.as_mut().get_unchecked_mut(),
         )

@@ -20,6 +20,7 @@ name = "xgrammar"
 [dependencies]
 # cxx = { version = "1", path = "../cxx", features = ["compile-builtins-at-bridge-stage"] }
 cxx = { version = "1", git = "https://github.com/trymirai/cxx.git", branch = "master" }
+tokenizers = { version = "0.22", optional = true }
 serde_json = "1.0"
 
 [build-dependencies]
@@ -28,6 +29,7 @@ cmake = "0.1"
 cxx-build = { version = "1", git = "https://github.com/trymirai/cxx.git", branch = "master" }
 
 [dev-dependencies]
+hf-hub = { version = "0.5" }
 schemars = "1.2"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
@@ -36,12 +38,4 @@ serial_test = "3.4"
 [features]
 default = []
 tokenizers = ["dep:tokenizers"]
-hf = ["tokenizers", "dep:hf-hub"]
-
-[dependencies.tokenizers]
-version = "0.22"
-optional = true
-
-[dependencies.hf-hub]
-version = "0.5"
-optional = true
+hf = ["tokenizers"] # `hf` only remains for compatibility, it is synonymous to `tokenizers`

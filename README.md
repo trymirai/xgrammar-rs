@@ -40,7 +40,7 @@ For HuggingFace tokenizer support:
 
 ```toml
 [dependencies]
-xgrammar-rs = { version = "0.1", features = ["hf"] } 
+xgrammar-rs = { version = "0.1", features = ["tokenizers"] }
 ```
 
 ## Quick Start

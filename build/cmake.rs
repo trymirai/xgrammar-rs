@@ -81,19 +81,20 @@ pub fn build_xgrammar_cmake(ctx: &BuildContext) -> PathBuf {
         cmake_config.cxxflag("/EHsc");
     }
 
-    let build_profile =
-        match env::var("PROFILE").unwrap_or_else(|_| "release".into()).as_str()
-        {
-            "debug" => "Debug",
-            "release" => "Release",
-            other => {
-                eprintln!(
-                    "Unknown cargo PROFILE '{}' -> using RelWithDebInfo",
-                    other
-                );
-                "RelWithDebInfo"
-            },
-        };
+    let build_profile = match env::var("PROFILE")
+        .unwrap_or_else(|_| "release".into())
+        .as_str()
+    {
+        "debug" => "Debug",
+        "release" => "Release",
+        other => {
+            println!(
+                "cargo:warning=Unknown cargo PROFILE '{}' -> using RelWithDebInfo",
+                other
+            );
+            "RelWithDebInfo"
+        },
+    };
     cmake_config.profile(build_profile);
 
     if !ctx.target.is_empty() {

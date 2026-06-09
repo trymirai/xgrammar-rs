@@ -1,8 +1,8 @@
 name: CI
 
 on:
+  push:
   pull_request:
-    branches: [main]
 
 env:
   CARGO_TERM_COLOR: always
@@ -13,7 +13,7 @@ jobs:
     runs-on: macos-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           submodules: recursive
 
@@ -24,24 +24,24 @@ jobs:
         run: brew install cmake
 
       - name: Cache cargo registry
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cargo/registry
           key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Cache cargo index
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cargo/git
           key: ${{ runner.os }}-cargo-git-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Run tests (without HF feature)
-        run: cargo test --verbose
+        run: cargo test --locked --verbose
 
       - name: Run tests (with HF feature)
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        run: cargo test --features hf --verbose
+        run: cargo test --locked --features hf --verbose
 
       - name: Build documentation
-        run: cargo doc --no-deps --features hf
+        run: cargo doc --locked --no-deps --features hf

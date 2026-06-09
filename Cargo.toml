@@ -19,15 +19,16 @@ categories = ["parsing", "text-processing"]
 name = "xgrammar"
 
 [dependencies]
-# cxx = { version = "1", path = "../cxx", features = ["compile-builtins-at-bridge-stage"] }
-cxx = { version = "1", git = "https://github.com/trymirai/cxx.git", branch = "master" }
+cxx = { version = "1", git = "https://github.com/trymirai/cxx.git", branch = "master", features = ["compile-builtins-at-bridge-stage"] }
 tokenizers = { version = "0.22", optional = true }
 serde_json = "1.0"
 
 [build-dependencies]
-walkdir = "2.5"
+cc = "1.2.62"
 cmake = "0.1"
 cxx-build = { version = "1", git = "https://github.com/trymirai/cxx.git", branch = "master" }
+walkdir = "2.5"
+which = "8"
 
 [dev-dependencies]
 hf-hub = { version = "0.5" }

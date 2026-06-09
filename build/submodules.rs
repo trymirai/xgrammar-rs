@@ -45,7 +45,7 @@ pub fn ensure_xgrammar_source_tree(manifest_dir: &Path) -> PathBuf {
 }
 
 pub fn collect_build_context() -> BuildContext {
-    println!("cargo:rerun-if-env-changed=XGRAMMAR_SRC_DIR");
+    println!("cargo::rerun-if-env-changed=XGRAMMAR_SRC_DIR");
 
     let manifest_dir = abs_path(
         env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set"),
@@ -53,23 +53,23 @@ pub fn collect_build_context() -> BuildContext {
     let out_dir = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR not set"));
 
     println!(
-        "cargo:rerun-if-changed={}",
+        "cargo::rerun-if-changed={}",
         manifest_dir.join(".gitmodules").display()
     );
 
     let xgrammar_src_dir = ensure_xgrammar_source_tree(&manifest_dir);
     println!(
-        "cargo:rerun-if-changed={}",
+        "cargo::rerun-if-changed={}",
         xgrammar_src_dir.join("include").display()
     );
-    println!("cargo:rerun-if-changed={}/cpp", xgrammar_src_dir.display());
-    println!("cargo:rerun-if-changed={}/3rdparty", xgrammar_src_dir.display());
+    println!("cargo::rerun-if-changed={}/cpp", xgrammar_src_dir.display());
+    println!("cargo::rerun-if-changed={}/3rdparty", xgrammar_src_dir.display());
     println!(
-        "cargo:rerun-if-changed={}",
+        "cargo::rerun-if-changed={}",
         xgrammar_src_dir.join("CMakeLists.txt").display()
     );
     println!(
-        "cargo:rerun-if-changed={}",
+        "cargo::rerun-if-changed={}",
         xgrammar_src_dir.join(".gitmodules").display()
     );
 

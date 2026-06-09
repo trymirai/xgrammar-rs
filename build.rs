@@ -2,8 +2,8 @@
 mod build;
 
 fn main() {
-    println!("cargo:rerun-if-changed=src/cxx_utils.hpp");
-    println!("cargo:rerun-if-changed=src/cxx_utils/");
+    println!("cargo::rerun-if-changed=src/cxx_utils.hpp");
+    println!("cargo::rerun-if-changed=src/cxx_utils/");
 
     #[cfg(target_os = "windows")]
     build::windows::configure_libclang();
@@ -29,7 +29,7 @@ fn main() {
 
     if build::common::is_truthy_env("XGRAMMAR_RS_DEBUG_INCLUDES") {
         println!(
-            "cargo:warning=xgrammar-rs: extra_clang_args={}",
+            "cargo::warning=xgrammar-rs: extra_clang_args={}",
             extra_clang_args.join(" "),
         );
     }

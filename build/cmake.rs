@@ -89,7 +89,7 @@ pub fn build_xgrammar_cmake(ctx: &BuildContext) -> PathBuf {
         "release" => "Release",
         other => {
             println!(
-                "cargo:warning=Unknown cargo PROFILE '{}' -> using RelWithDebInfo",
+                "cargo::warning=Unknown cargo PROFILE '{}' -> using RelWithDebInfo",
                 other
             );
             "RelWithDebInfo"
@@ -152,6 +152,6 @@ pub fn link_xgrammar_static(
     let lib_search_dir = find_xgrammar_lib_dir(&cmake_build_dir)
         .or_else(|| find_xgrammar_lib_dir(destination_path))
         .unwrap_or_else(|| destination_path.join("lib"));
-    println!("cargo:rustc-link-search=native={}", lib_search_dir.display());
-    println!("cargo:rustc-link-lib=static=xgrammar");
+    println!("cargo::rustc-link-search=native={}", lib_search_dir.display());
+    println!("cargo::rustc-link-lib=static=xgrammar");
 }

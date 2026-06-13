@@ -20,7 +20,7 @@ name = "xgrammar"
 
 [dependencies]
 cxx = { version = "1", git = "https://github.com/trymirai/cxx.git", branch = "master", features = ["compile-builtins-at-bridge-stage"] }
-tokenizers = { version = "0.22", optional = true }
+tokenizers = { version = "0.22", features = ["fancy-regex"], default-features = false, optional = true }
 serde_json = "1.0"
 
 [build-dependencies]

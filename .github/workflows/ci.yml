@@ -103,7 +103,7 @@ jobs:
           # The wasi-sdk sometimes fails spuriously with a No such file or directory
           # at cmake/wasi-wits.cmake (seems to only happen in CI).
           # Thus, retry the build once if it fails.
-          BUILD="cargo build --locked --target ${{ matrix.target }}"
+          BUILD="cargo build --locked --all-features --target ${{ matrix.target }}"
           if $BUILD; then
             echo Succeeded on the first attempt
           else

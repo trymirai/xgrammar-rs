@@ -157,14 +157,11 @@ This requires that the system system has:
 
 Building the sysroot might take a while.
 
-The user may also choose to provide their own wasi sysroot. If the `WASI_SYSROOT`
-environment variable is set, xgrammar-rs will skip the wasi-sdk building stage
-and use the provided sysroot. Note that the provided sysroot must be compiled with
-C++ exceptions support. For details, refer to wasi-sdk's README or your sysroot
-provider documentation.
-
-Note: as of now, the `tokenizers` feature is only supported when `WASI_SYSROOT`
-is provided by the user.
+The user may also choose to provide their own wasi sysroot (advanced).
+If the `WASI_SYSROOT` environment variable is set, xgrammar-rs will skip
+the wasi-sdk building stage and use the provided sysroot. Note that the provided
+sysroot must be compiled with C++ exceptions support. For details, refer to
+wasi-sdk's README or your sysroot provider documentation.
 
 ## License
 

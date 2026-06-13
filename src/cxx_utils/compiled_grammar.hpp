@@ -15,14 +15,18 @@ inline std::unique_ptr<xgrammar::CompiledGrammar>
 compiled_grammar_deserialize_json_or_error(
     const std::string& json_string,
     const xgrammar::TokenizerInfo& tokenizer_info,
+    int32_t* error_kind,
     std::string* error_out
 ) {
   auto result =
       xgrammar::CompiledGrammar::DeserializeJSON(json_string, tokenizer_info);
   if (std::holds_alternative<xgrammar::SerializationError>(result)) {
+    const auto& err = std::get<xgrammar::SerializationError>(result);
     if (error_out) {
-      const auto& err = std::get<xgrammar::SerializationError>(result);
       std::visit([&](const auto& e) { *error_out = e.what(); }, err);
+    }
+    if (error_kind) {
+      *error_kind = serialization_error_kind(err);
     }
     return nullptr;
   }

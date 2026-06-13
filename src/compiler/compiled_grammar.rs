@@ -1,6 +1,6 @@
 use std::pin::Pin;
 
-use crate::{CxxUniquePtr, Grammar, TokenizerInfo, ffi};
+use crate::{CxxUniquePtr, DeserializeError, Grammar, TokenizerInfo, ffi};
 
 /// This is the primary object to store compiled grammar.
 ///
@@ -92,18 +92,20 @@ impl CompiledGrammar {
     pub fn deserialize_json(
         json: &str,
         tokenizer_info: &TokenizerInfo,
-    ) -> Result<Self, String> {
+    ) -> Result<Self, DeserializeError> {
         cxx::let_cxx_string!(json_cxx = json);
         cxx::let_cxx_string!(error_out_cxx = "");
+        let mut error_kind: i32 = 0;
         let unique_ptr = unsafe {
             ffi::compiled_grammar_deserialize_json_or_error(
                 &json_cxx,
                 tokenizer_info.ffi_ref(),
+                &mut error_kind,
                 error_out_cxx.as_mut().get_unchecked_mut(),
             )
         };
         if unique_ptr.is_null() {
-            return Err(error_out_cxx.to_string());
+            return Err(DeserializeError::from_parts(error_kind, error_out_cxx.to_string()));
         }
         Ok(Self {
             inner: unique_ptr,

@@ -1,5 +1,5 @@
 use crate::utils::tie_enum_with_ffi;
-use crate::{CxxUniquePtr, ffi, utils::bytes_as_c_char_ptr};
+use crate::{CxxUniquePtr, DeserializeError, ffi, utils::bytes_as_c_char_ptr};
 
 type StopTokenIds = Option<Box<[i32]>>;
 
@@ -300,17 +300,19 @@ impl TokenizerInfo {
     /// - When the JSON string is invalid.
     /// - When the JSON string does not follow the serialization format of the tokenizer info.
     /// - When the `__VERSION__` field in the JSON string is not the same as the current version.
-    pub fn deserialize_json(json: &str) -> Result<Self, String> {
+    pub fn deserialize_json(json: &str) -> Result<Self, DeserializeError> {
         cxx::let_cxx_string!(json_cxx = json);
         cxx::let_cxx_string!(error_out_cxx = "");
+        let mut error_kind: i32 = 0;
         let uptr = unsafe {
             ffi::tokenizer_info_deserialize_json_or_error(
                 &json_cxx,
+                &mut error_kind,
                 error_out_cxx.as_mut().get_unchecked_mut(),
             )
         };
         if uptr.is_null() {
-            return Err(error_out_cxx.to_string());
+            return Err(DeserializeError::from_parts(error_kind, error_out_cxx.to_string()));
         }
         Ok(Self {
             inner: uptr,

@@ -166,6 +166,21 @@ inline std::unique_ptr<std::vector<uint8_t>> batch_accept_string(
   }
 }
 
+inline void batch_rollback(
+    std::vector<xgrammar::GrammarMatcher>* matchers,
+    const int32_t* num_tokens_ptr,
+    size_t num_tokens_len
+) {
+  try {
+    std::vector<int> num_tokens(
+        num_tokens_ptr,
+        num_tokens_ptr + num_tokens_len
+    );
+    xgrammar::BatchGrammarMatcher::BatchRollback(matchers, num_tokens);
+  } catch (...) {
+  }
+}
+
 inline std::unique_ptr<std::string> grammar_matcher_find_jump_forward_string(
     xgrammar::GrammarMatcher& self
 ) {
@@ -185,6 +200,45 @@ inline bool grammar_matcher_fill_next_token_bitmask(
     bool debug_print
 ) {
   return self.FillNextTokenBitmask(next_token_bitmask, next, debug_print);
+}
+
+inline std::unique_ptr<xgrammar::GrammarMatcher> grammar_matcher_fork(
+    const xgrammar::GrammarMatcher& self
+) {
+  return std::make_unique<xgrammar::GrammarMatcher>(self.Fork());
+}
+
+inline bool grammar_matcher_traverse_draft_tree(
+    xgrammar::GrammarMatcher& self,
+    const DLTensor* retrieve_next_token,
+    const DLTensor* retrieve_next_sibling,
+    const DLTensor* draft_tokens,
+    DLTensor* token_bitmask,
+    double time_threshold,
+    std::string* error_out
+) {
+  try {
+    if (error_out) {
+      error_out->clear();
+    }
+    return self.TraverseDraftTree(
+        retrieve_next_token,
+        retrieve_next_sibling,
+        draft_tokens,
+        token_bitmask,
+        time_threshold
+    );
+  } catch (const std::exception& e) {
+    if (error_out) {
+      *error_out = e.what();
+    }
+    return false;
+  } catch (...) {
+    if (error_out) {
+      *error_out = "unknown C++ exception";
+    }
+    return false;
+  }
 }
 
 inline bool apply_token_bitmask_inplace_cpu(

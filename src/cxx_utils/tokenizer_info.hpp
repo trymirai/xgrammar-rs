@@ -91,14 +91,18 @@ inline std::unique_ptr<std::string> tokenizer_info_dump_metadata(
 inline std::unique_ptr<xgrammar::TokenizerInfo>
 tokenizer_info_deserialize_json_or_error(
     const std::string& json_string,
+    int32_t* error_kind,
     std::string* error_out
 ) {
   try {
     auto result = xgrammar::TokenizerInfo::DeserializeJSON(json_string);
     if (std::holds_alternative<xgrammar::SerializationError>(result)) {
+      const auto& err = std::get<xgrammar::SerializationError>(result);
       if (error_out) {
-        const auto& err = std::get<xgrammar::SerializationError>(result);
         std::visit([&](const auto& e) { *error_out = e.what(); }, err);
+      }
+      if (error_kind) {
+        *error_kind = serialization_error_kind(err);
       }
       return nullptr;
     }
@@ -107,10 +111,16 @@ tokenizer_info_deserialize_json_or_error(
     if (error_out) {
       *error_out = e.what();
     }
+    if (error_kind) {
+      *error_kind = 0;
+    }
     return nullptr;
   } catch (...) {
     if (error_out) {
       *error_out = "unknown C++ exception";
+    }
+    if (error_kind) {
+      *error_kind = 0;
     }
     return nullptr;
   }

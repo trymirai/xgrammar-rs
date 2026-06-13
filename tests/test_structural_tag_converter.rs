@@ -718,7 +718,7 @@ fn test_structural_tag_json_format_errors() {
         match Grammar::from_structural_tag(json_input) {
             Ok(_) => panic!("expected error for '{json_input}'"),
             Err(err) => assert!(
-                err.contains(expected_error),
+                err.message().contains(expected_error),
                 "expected '{expected_error}' in '{err}'"
             ),
         }
@@ -819,7 +819,7 @@ fn test_structural_tag_error() {
         match Grammar::from_structural_tag(&structural_tag.to_string()) {
             Ok(_) => panic!("expected error for structural tag"),
             Err(err) => assert!(
-                err.contains("Invalid structural tag error"),
+                err.message().contains("Invalid structural tag error"),
                 "unexpected error: {err}"
             ),
         }
@@ -1165,7 +1165,7 @@ fn test_multiple_end_tokens_empty_array_error() {
     });
     match Grammar::from_structural_tag(&stag_format.to_string()) {
         Ok(_) => panic!("expected error for empty end array"),
-        Err(err) => assert!(err.to_lowercase().contains("empty"), "{err}"),
+        Err(err) => assert!(err.message().to_lowercase().contains("empty"), "{err}"),
     }
 }
 
@@ -1185,7 +1185,7 @@ fn test_multiple_end_tokens_unlimited_empty_error() {
     match Grammar::from_structural_tag(&stag_format.to_string()) {
         Ok(_) => panic!("expected error for empty end strings"),
         Err(err) => {
-            let err_lower = err.to_lowercase();
+            let err_lower = err.message().to_lowercase();
             assert!(
                 err_lower.contains("non-empty") || err_lower.contains("empty"),
                 "{err}"

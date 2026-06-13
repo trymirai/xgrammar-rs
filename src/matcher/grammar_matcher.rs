@@ -247,9 +247,57 @@ impl GrammarMatcher {
             .IsTerminated()
     }
 
+    /// Whether the accepted input forms a complete valid string (unlike `is_terminated`, no stop
+    /// token is required).
+    pub fn is_completed(&self) -> bool {
+        self.inner
+            .as_ref()
+            .expect("GrammarMatcher inner is null")
+            .IsCompleted()
+    }
+
     /// Reset the matcher to the initial state.
     pub fn reset(&mut self) {
         self.inner.as_mut().expect("GrammarMatcher inner is null").Reset();
+    }
+
+    /// Fork the matcher, returning a new matcher with an independent copy of the current state.
+    pub fn fork(&self) -> Self {
+        let inner = ffi::grammar_matcher_fork(self.inner.as_ref().expect("GrammarMatcher inner is null"));
+        Self {
+            inner,
+            stored_stop_token_ids: self.stored_stop_token_ids.clone(),
+        }
+    }
+
+    /// Traverse a draft token tree (DFS over the speculative-decoding tree), filling the token
+    /// bitmask for each node. Returns `false` on timeout; `time_threshold <= 0` disables it. Does
+    /// not change the matcher state.
+    pub fn traverse_draft_tree(
+        &mut self,
+        retrieve_next_token: &DLTensor,
+        retrieve_next_sibling: &DLTensor,
+        draft_tokens: &DLTensor,
+        token_bitmask: &mut CxxUniquePtr<DLTensor>,
+        time_threshold: f64,
+    ) -> Result<bool, String> {
+        cxx::let_cxx_string!(error_out_cxx = "");
+        let success = unsafe {
+            ffi::grammar_matcher_traverse_draft_tree(
+                self.inner.as_mut().expect("GrammarMatcher inner is null"),
+                retrieve_next_token as *const _,
+                retrieve_next_sibling as *const _,
+                draft_tokens as *const _,
+                token_bitmask.as_mut_ptr(),
+                time_threshold,
+                error_out_cxx.as_mut().get_unchecked_mut(),
+            )
+        };
+        let err = error_out_cxx.to_string();
+        if !err.is_empty() {
+            return Err(err);
+        }
+        Ok(success)
     }
 
     /// Get the maximum number of rollback tokens allowed.

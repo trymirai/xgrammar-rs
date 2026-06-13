@@ -126,6 +126,7 @@ mod ffi {
             num_tokens: i32,
         );
         pub fn IsTerminated(self: &GrammarMatcher) -> bool;
+        pub fn IsCompleted(self: &GrammarMatcher) -> bool;
         pub fn Reset(self: Pin<&mut GrammarMatcher>);
 
         pub type BatchGrammarMatcher;
@@ -204,6 +205,7 @@ mod ffi {
 
         pub unsafe fn tokenizer_info_deserialize_json_or_error(
             json_string: &CxxString,
+            error_kind: *mut i32,
             error_out: *mut CxxString,
         ) -> UniquePtr<TokenizerInfo>;
 
@@ -244,6 +246,8 @@ mod ffi {
 
         pub unsafe fn grammar_from_structural_tag(
             structural_tag_json: &CxxString,
+            tokenizer_info: *const TokenizerInfo,
+            error_kind: *mut i32,
             error_out: *mut CxxString,
         ) -> UniquePtr<Grammar>;
 
@@ -261,6 +265,7 @@ mod ffi {
 
         pub unsafe fn grammar_deserialize_json_or_error(
             json_string: &CxxString,
+            error_kind: *mut i32,
             error_out: *mut CxxString,
         ) -> UniquePtr<Grammar>;
 
@@ -283,6 +288,7 @@ mod ffi {
         pub unsafe fn compiled_grammar_deserialize_json_or_error(
             json_string: &CxxString,
             tokenizer_info: &TokenizerInfo,
+            error_kind: *mut i32,
             error_out: *mut CxxString,
         ) -> UniquePtr<CompiledGrammar>;
 
@@ -391,6 +397,20 @@ mod ffi {
             debug_print: bool,
         ) -> bool;
 
+        pub fn grammar_matcher_fork(
+            self_: &GrammarMatcher
+        ) -> UniquePtr<GrammarMatcher>;
+
+        pub unsafe fn grammar_matcher_traverse_draft_tree(
+            self_: Pin<&mut GrammarMatcher>,
+            retrieve_next_token_r: *const DLTensor,
+            retrieve_next_sibling_r: *const DLTensor,
+            draft_tokens_r: *const DLTensor,
+            token_bitmask_r: *mut DLTensor,
+            time_threshold: f64,
+            error_out: *mut CxxString,
+        ) -> bool;
+
         pub fn new_grammar_matcher_vector()
         -> UniquePtr<CxxVector<GrammarMatcher>>;
 
@@ -426,6 +446,12 @@ mod ffi {
             strings: &CxxVector<CxxString>,
             debug_print: bool,
         ) -> UniquePtr<CxxVector<u8>>;
+
+        pub unsafe fn batch_rollback(
+            matchers: *mut CxxVector<GrammarMatcher>,
+            num_tokens_ptr: *const i32,
+            num_tokens_len: usize,
+        );
 
         pub unsafe fn apply_token_bitmask_inplace_cpu(
             logits_r: *mut DLTensor,
@@ -554,6 +580,7 @@ pub use ffi::GetBitmaskSize as get_bitmask_size;
 mod compiler;
 mod config;
 mod dlpack;
+mod error;
 mod grammar;
 mod matcher;
 mod tokenizer_info;
@@ -567,6 +594,7 @@ pub use config::{
 };
 pub use cxx::UniquePtr as CxxUniquePtr;
 pub use dlpack::{DLDataTypeCode, DLDevice, DLDeviceType};
+pub use error::{DeserializeError, StructuralTagError};
 pub use grammar::{Grammar, StructuralTagItem};
 pub use matcher::{
     BatchGrammarMatcher, GrammarMatcher, allocate_token_bitmask,

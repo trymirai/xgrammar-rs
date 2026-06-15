@@ -2,7 +2,6 @@ mod test_utils;
 
 use serial_test::serial;
 use test_utils::*;
-
 use xgrammar::{Grammar, testing};
 #[cfg(feature = "hf")]
 use xgrammar::{

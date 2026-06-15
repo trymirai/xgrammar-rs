@@ -1,5 +1,4 @@
 use serial_test::serial;
-
 use xgrammar::{Grammar, testing};
 
 #[test]

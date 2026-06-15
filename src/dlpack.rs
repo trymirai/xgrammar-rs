@@ -1,5 +1,4 @@
-use crate::utils::tie_enum_with_ffi;
-use crate::{DLDataType, c_void, ffi};
+use crate::{DLDataType, c_void, ffi, utils::tie_enum_with_ffi};
 
 /// DLPack data type code enum (`DLDataTypeCode`)
 #[derive(PartialEq, Eq, Clone, Debug, Hash)]

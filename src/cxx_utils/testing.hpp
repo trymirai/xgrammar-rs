@@ -244,11 +244,10 @@ inline bool traverse_draft_tree(
     if (error_out) {
       error_out->clear();
     }
-    xgrammar::TraverseDraftTree(
+    matcher.TraverseDraftTree(
         retrieve_next_token,
         retrieve_next_sibling,
         draft_tokens,
-        matcher,
         bitmask
     );
     return true;

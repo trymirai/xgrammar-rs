@@ -1,7 +1,8 @@
 #[cfg(feature = "hf")]
-use hf_hub::{Repo, api::sync::ApiBuilder};
-#[cfg(feature = "hf")]
 use std::collections::HashMap;
+
+#[cfg(feature = "hf")]
+use hf_hub::{Repo, api::sync::ApiBuilder};
 use xgrammar::{
     CxxUniquePtr, DLDataType, DLDataTypeCode, DLDevice, DLDeviceType, DLTensor,
     Grammar, GrammarCompiler, GrammarMatcher, TokenizerInfo, VocabType,

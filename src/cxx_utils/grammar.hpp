@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "xgrammar/grammar.h"
+#include "xgrammar/tokenizer_info.h"
 
 #include "common.hpp"
 
@@ -158,13 +159,17 @@ inline void grammar_vec_push(
 
 inline std::unique_ptr<xgrammar::Grammar> grammar_deserialize_json_or_error(
     const std::string& json_string,
+    int32_t* error_kind,
     std::string* error_out
 ) {
   auto result = xgrammar::Grammar::DeserializeJSON(json_string);
   if (std::holds_alternative<xgrammar::SerializationError>(result)) {
+    const auto& err = std::get<xgrammar::SerializationError>(result);
     if (error_out) {
-      const auto& err = std::get<xgrammar::SerializationError>(result);
       std::visit([&](const auto& e) { *error_out = e.what(); }, err);
+    }
+    if (error_kind) {
+      *error_kind = serialization_error_kind(err);
     }
     return nullptr;
   }
@@ -173,13 +178,23 @@ inline std::unique_ptr<xgrammar::Grammar> grammar_deserialize_json_or_error(
 
 inline std::unique_ptr<xgrammar::Grammar> grammar_from_structural_tag(
     const std::string& structural_tag_json,
+    const xgrammar::TokenizerInfo* tokenizer_info,
+    int32_t* error_kind,
     std::string* error_out
 ) {
-  auto result = xgrammar::Grammar::FromStructuralTag(structural_tag_json);
+  std::optional<xgrammar::TokenizerInfo> tokenizer_info_opt = std::nullopt;
+  if (tokenizer_info) {
+    tokenizer_info_opt = *tokenizer_info;
+  }
+  auto result =
+      xgrammar::Grammar::FromStructuralTag(structural_tag_json, tokenizer_info_opt);
   if (std::holds_alternative<xgrammar::StructuralTagError>(result)) {
+    const auto& err = std::get<xgrammar::StructuralTagError>(result);
     if (error_out) {
-      const auto& err = std::get<xgrammar::StructuralTagError>(result);
       std::visit([&](const auto& e) { *error_out = e.what(); }, err);
+    }
+    if (error_kind) {
+      *error_kind = structural_tag_error_kind(err);
     }
     return nullptr;
   }

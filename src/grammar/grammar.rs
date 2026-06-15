@@ -1,4 +1,6 @@
-use crate::{CxxUniquePtr, ffi};
+use crate::{
+    CxxUniquePtr, DeserializeError, StructuralTagError, TokenizerInfo, ffi,
+};
 
 /// This class represents a grammar object in XGrammar, and can be used later in the
 /// grammar-guided generation.
@@ -212,17 +214,42 @@ impl Grammar {
     /// - When the structural tag is not valid.
     pub fn from_structural_tag(
         structural_tag_json: &str
-    ) -> Result<Self, String> {
+    ) -> Result<Self, StructuralTagError> {
+        Self::from_structural_tag_impl(structural_tag_json, std::ptr::null())
+    }
+
+    /// Tokenizer-aware variant of [`Self::from_structural_tag`] that resolves token-based formats
+    /// against the given tokenizer info.
+    pub fn from_structural_tag_with_tokenizer_info(
+        structural_tag_json: &str,
+        tokenizer_info: &TokenizerInfo,
+    ) -> Result<Self, StructuralTagError> {
+        Self::from_structural_tag_impl(
+            structural_tag_json,
+            tokenizer_info.ffi_ref() as *const _,
+        )
+    }
+
+    fn from_structural_tag_impl(
+        structural_tag_json: &str,
+        tokenizer_info: *const ffi::TokenizerInfo,
+    ) -> Result<Self, StructuralTagError> {
         cxx::let_cxx_string!(json_cxx = structural_tag_json);
         cxx::let_cxx_string!(error_out_cxx = "");
+        let mut error_kind: i32 = 0;
         let unique_ptr = unsafe {
             ffi::grammar_from_structural_tag(
                 &json_cxx,
+                tokenizer_info,
+                &mut error_kind,
                 error_out_cxx.as_mut().get_unchecked_mut(),
             )
         };
         if unique_ptr.is_null() {
-            return Err(error_out_cxx.to_string());
+            return Err(StructuralTagError::from_parts(
+                error_kind,
+                error_out_cxx.to_string(),
+            ));
         }
         Ok(Self {
             inner: unique_ptr,
@@ -321,17 +348,24 @@ impl Grammar {
     /// - When the JSON string is invalid.
     /// - When the JSON string does not follow the serialization format of the grammar.
     /// - When the `__VERSION__` field in the JSON string is not the same as the current version.
-    pub fn deserialize_json(json_string: &str) -> Result<Self, String> {
+    pub fn deserialize_json(
+        json_string: &str
+    ) -> Result<Self, DeserializeError> {
         cxx::let_cxx_string!(json_cxx = json_string);
         cxx::let_cxx_string!(error_out_cxx = "");
+        let mut error_kind: i32 = 0;
         let unique_ptr = unsafe {
             ffi::grammar_deserialize_json_or_error(
                 &json_cxx,
+                &mut error_kind,
                 error_out_cxx.as_mut().get_unchecked_mut(),
             )
         };
         if unique_ptr.is_null() {
-            return Err(error_out_cxx.to_string());
+            return Err(DeserializeError::from_parts(
+                error_kind,
+                error_out_cxx.to_string(),
+            ));
         }
         Ok(Self {
             inner: unique_ptr,

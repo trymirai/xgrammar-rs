@@ -218,4 +218,37 @@ impl BatchGrammarMatcher {
 
         result.iter().map(|&b| b != 0).collect::<Vec<_>>().into_boxed_slice()
     }
+
+    /// Roll back each matcher by the corresponding number of tokens. Panics if the slice lengths
+    /// differ.
+    pub fn batch_rollback(
+        matchers: &[GrammarMatcher],
+        num_tokens: &[i32],
+    ) {
+        assert_eq!(
+            matchers.len(),
+            num_tokens.len(),
+            "matchers and num_tokens must have the same length"
+        );
+
+        let mut ffi_matcher_vec = ffi::new_grammar_matcher_vector();
+        {
+            let mut vec_pin = ffi_matcher_vec.pin_mut();
+            ffi::grammar_matcher_vec_reserve(vec_pin.as_mut(), matchers.len());
+            for matcher in matchers {
+                ffi::grammar_matcher_vec_push(
+                    vec_pin.as_mut(),
+                    matcher.ffi_ref(),
+                );
+            }
+        }
+
+        unsafe {
+            ffi::batch_rollback(
+                ffi_matcher_vec.as_mut().unwrap().get_unchecked_mut(),
+                num_tokens.as_ptr(),
+                num_tokens.len(),
+            );
+        }
+    }
 }

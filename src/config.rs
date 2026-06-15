@@ -4,7 +4,7 @@ use crate::ffi::{
     SetMaxRecursionDepth as FFISetMaxRecursionDepth,
 };
 
-/// Get the serialization version number. The current version is "v11".
+/// Get the serialization version number. The current version is "v13".
 ///
 /// Returns
 /// -------

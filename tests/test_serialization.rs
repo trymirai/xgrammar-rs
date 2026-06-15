@@ -54,7 +54,7 @@ fn test_serialize_grammar_roundtrip() {
 #[test]
 #[serial]
 fn test_get_serialization_version() {
-    assert_eq!(xgrammar::get_serialization_version(), "v11");
+    assert_eq!(xgrammar::get_serialization_version(), "v13");
 }
 
 #[test]

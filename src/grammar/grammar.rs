@@ -1,4 +1,6 @@
-use crate::{CxxUniquePtr, DeserializeError, StructuralTagError, TokenizerInfo, ffi};
+use crate::{
+    CxxUniquePtr, DeserializeError, StructuralTagError, TokenizerInfo, ffi,
+};
 
 /// This class represents a grammar object in XGrammar, and can be used later in the
 /// grammar-guided generation.
@@ -222,7 +224,10 @@ impl Grammar {
         structural_tag_json: &str,
         tokenizer_info: &TokenizerInfo,
     ) -> Result<Self, StructuralTagError> {
-        Self::from_structural_tag_impl(structural_tag_json, tokenizer_info.ffi_ref() as *const _)
+        Self::from_structural_tag_impl(
+            structural_tag_json,
+            tokenizer_info.ffi_ref() as *const _,
+        )
     }
 
     fn from_structural_tag_impl(
@@ -241,7 +246,10 @@ impl Grammar {
             )
         };
         if unique_ptr.is_null() {
-            return Err(StructuralTagError::from_parts(error_kind, error_out_cxx.to_string()));
+            return Err(StructuralTagError::from_parts(
+                error_kind,
+                error_out_cxx.to_string(),
+            ));
         }
         Ok(Self {
             inner: unique_ptr,
@@ -340,7 +348,9 @@ impl Grammar {
     /// - When the JSON string is invalid.
     /// - When the JSON string does not follow the serialization format of the grammar.
     /// - When the `__VERSION__` field in the JSON string is not the same as the current version.
-    pub fn deserialize_json(json_string: &str) -> Result<Self, DeserializeError> {
+    pub fn deserialize_json(
+        json_string: &str
+    ) -> Result<Self, DeserializeError> {
         cxx::let_cxx_string!(json_cxx = json_string);
         cxx::let_cxx_string!(error_out_cxx = "");
         let mut error_kind: i32 = 0;
@@ -352,7 +362,10 @@ impl Grammar {
             )
         };
         if unique_ptr.is_null() {
-            return Err(DeserializeError::from_parts(error_kind, error_out_cxx.to_string()));
+            return Err(DeserializeError::from_parts(
+                error_kind,
+                error_out_cxx.to_string(),
+            ));
         }
         Ok(Self {
             inner: unique_ptr,

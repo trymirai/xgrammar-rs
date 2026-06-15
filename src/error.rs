@@ -31,7 +31,10 @@ impl DeserializeError {
     /// The underlying error message.
     pub fn message(&self) -> &str {
         match self {
-            Self::VersionMismatch(m) | Self::InvalidJson(m) | Self::Format(m) | Self::Other(m) => m,
+            Self::VersionMismatch(m)
+            | Self::InvalidJson(m)
+            | Self::Format(m)
+            | Self::Other(m) => m,
         }
     }
 }
@@ -76,7 +79,10 @@ impl StructuralTagError {
     /// The underlying error message.
     pub fn message(&self) -> &str {
         match self {
-            Self::InvalidJson(m) | Self::InvalidSchema(m) | Self::Invalid(m) | Self::Other(m) => m,
+            Self::InvalidJson(m)
+            | Self::InvalidSchema(m)
+            | Self::Invalid(m)
+            | Self::Other(m) => m,
         }
     }
 }

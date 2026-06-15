@@ -5,9 +5,11 @@ mod test_utils;
 use serde_json::{Value, json};
 use serial_test::serial;
 use test_utils::*;
-use xgrammar::Grammar;
-use xgrammar::testing::{
-    generate_float_range_regex, generate_range_regex, json_schema_to_ebnf,
+use xgrammar::{
+    Grammar,
+    testing::{
+        generate_float_range_regex, generate_range_regex, json_schema_to_ebnf,
+    },
 };
 #[cfg(feature = "hf")]
 use xgrammar::{GrammarCompiler, GrammarMatcher, TokenizerInfo, VocabType};

@@ -250,10 +250,7 @@ impl GrammarMatcher {
     /// Whether the accepted input forms a complete valid string (unlike `is_terminated`, no stop
     /// token is required).
     pub fn is_completed(&self) -> bool {
-        self.inner
-            .as_ref()
-            .expect("GrammarMatcher inner is null")
-            .IsCompleted()
+        self.inner.as_ref().expect("GrammarMatcher inner is null").IsCompleted()
     }
 
     /// Reset the matcher to the initial state.
@@ -263,7 +260,9 @@ impl GrammarMatcher {
 
     /// Fork the matcher, returning a new matcher with an independent copy of the current state.
     pub fn fork(&self) -> Self {
-        let inner = ffi::grammar_matcher_fork(self.inner.as_ref().expect("GrammarMatcher inner is null"));
+        let inner = ffi::grammar_matcher_fork(
+            self.inner.as_ref().expect("GrammarMatcher inner is null"),
+        );
         Self {
             inner,
             stored_stop_token_ids: self.stored_stop_token_ids.clone(),

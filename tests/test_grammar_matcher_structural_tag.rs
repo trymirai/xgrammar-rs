@@ -1,9 +1,8 @@
 mod test_utils;
 
+use serde_json::json;
 use serial_test::serial;
 use test_utils::*;
-
-use serde_json::json;
 use xgrammar::{
     Grammar, GrammarCompiler, GrammarMatcher, StructuralTagItem, TokenizerInfo,
     VocabType,

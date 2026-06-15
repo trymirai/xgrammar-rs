@@ -3,8 +3,10 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use super::BuildContext;
-use super::common::{abs_path, looks_like_xgrammar_repo_root};
+use super::{
+    BuildContext,
+    common::{abs_path, looks_like_xgrammar_repo_root},
+};
 
 pub fn ensure_xgrammar_source_tree(manifest_dir: &Path) -> PathBuf {
     let source_dir = if let Ok(p) = env::var("XGRAMMAR_SRC_DIR") {

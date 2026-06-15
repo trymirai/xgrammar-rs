@@ -1120,7 +1120,9 @@ fn test_multiple_end_tokens_empty_array_error() {
     });
     match Grammar::from_structural_tag(&stag_format.to_string()) {
         Ok(_) => panic!("expected error for empty end array"),
-        Err(err) => assert!(err.message().to_lowercase().contains("empty"), "{err}"),
+        Err(err) => {
+            assert!(err.message().to_lowercase().contains("empty"), "{err}")
+        },
     }
 }
 

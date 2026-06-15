@@ -1,5 +1,7 @@
-use crate::utils::tie_enum_with_ffi;
-use crate::{CxxUniquePtr, DeserializeError, ffi, utils::bytes_as_c_char_ptr};
+use crate::{
+    CxxUniquePtr, DeserializeError, ffi,
+    utils::{bytes_as_c_char_ptr, tie_enum_with_ffi},
+};
 
 type StopTokenIds = Option<Box<[i32]>>;
 
@@ -312,7 +314,10 @@ impl TokenizerInfo {
             )
         };
         if uptr.is_null() {
-            return Err(DeserializeError::from_parts(error_kind, error_out_cxx.to_string()));
+            return Err(DeserializeError::from_parts(
+                error_kind,
+                error_out_cxx.to_string(),
+            ));
         }
         Ok(Self {
             inner: uptr,

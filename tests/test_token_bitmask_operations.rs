@@ -4,7 +4,6 @@ mod test_utils;
 
 use serial_test::serial;
 use test_utils::*;
-
 use xgrammar::{
     allocate_token_bitmask, apply_token_bitmask_inplace_cpu, get_bitmask_shape,
     reset_token_bitmask, testing,

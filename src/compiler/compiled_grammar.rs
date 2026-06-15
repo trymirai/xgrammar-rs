@@ -105,7 +105,10 @@ impl CompiledGrammar {
             )
         };
         if unique_ptr.is_null() {
-            return Err(DeserializeError::from_parts(error_kind, error_out_cxx.to_string()));
+            return Err(DeserializeError::from_parts(
+                error_kind,
+                error_out_cxx.to_string(),
+            ));
         }
         Ok(Self {
             inner: unique_ptr,

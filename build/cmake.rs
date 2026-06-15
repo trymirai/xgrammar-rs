@@ -6,8 +6,10 @@ use std::{
 
 use cmake::Config as CMakeConfig;
 
-use super::BuildContext;
-use super::common::{find_xgrammar_lib_dir, write_if_changed};
+use super::{
+    BuildContext,
+    common::{find_xgrammar_lib_dir, write_if_changed},
+};
 
 fn maybe_clear_cmake_build_dir(
     build_dir: &Path,

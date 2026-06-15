@@ -571,12 +571,12 @@ pub use ffi::DLDataType;
 pub use ffi::DLManagedTensor;
 /// DLPack tensor view (`DLTensor`) (does not own memory).
 pub use ffi::DLTensor;
-/// Opaque type representing C/C++'s `void`
-pub use ffi::c_void;
 // TODO: doc?
 pub use ffi::GetBitmaskDLType as get_bitmask_dltype;
 // TODO: doc?
 pub use ffi::GetBitmaskSize as get_bitmask_size;
+/// Opaque type representing C/C++'s `void`
+pub use ffi::c_void;
 mod compiler;
 mod config;
 mod dlpack;

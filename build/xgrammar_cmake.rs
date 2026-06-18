@@ -48,7 +48,10 @@ fn maybe_clear_cmake_build_dir(
     }
 }
 
-pub fn build_xgrammar_cmake(ctx: &BuildContext) -> PathBuf {
+pub fn build_xgrammar_cmake(
+    ctx: &BuildContext,
+    extra_c_cxx_flags: &[&str],
+) -> PathBuf {
     let cmake_build_dir = ctx.out_dir.join("build");
     maybe_clear_cmake_build_dir(&cmake_build_dir, &ctx.xgrammar_src_dir);
     create_dir_all(&cmake_build_dir).ok();
@@ -73,6 +76,11 @@ pub fn build_xgrammar_cmake(ctx: &BuildContext) -> PathBuf {
 
     cmake_config.define("CMAKE_INTERPROCEDURAL_OPTIMIZATION", "OFF");
 
+    for flag in extra_c_cxx_flags {
+        cmake_config.cflag(flag);
+        cmake_config.cxxflag(flag);
+    }
+
     let is_msvc = ctx.target.contains("msvc");
     if !is_msvc {
         cmake_config.cflag("-fno-lto");
@@ -81,19 +89,20 @@ pub fn build_xgrammar_cmake(ctx: &BuildContext) -> PathBuf {
         cmake_config.cxxflag("/EHsc");
     }
 
-    let build_profile =
-        match env::var("PROFILE").unwrap_or_else(|_| "release".into()).as_str()
-        {
-            "debug" => "Debug",
-            "release" => "Release",
-            other => {
-                eprintln!(
-                    "Unknown cargo PROFILE '{}' -> using RelWithDebInfo",
-                    other
-                );
-                "RelWithDebInfo"
-            },
-        };
+    let build_profile = match env::var("PROFILE")
+        .unwrap_or_else(|_| "release".into())
+        .as_str()
+    {
+        "debug" => "Debug",
+        "release" => "Release",
+        other => {
+            println!(
+                "cargo::warning=Unknown cargo PROFILE '{}' -> using RelWithDebInfo",
+                other
+            );
+            "RelWithDebInfo"
+        },
+    };
     cmake_config.profile(build_profile);
 
     if !ctx.target.is_empty() {
@@ -151,6 +160,6 @@ pub fn link_xgrammar_static(
     let lib_search_dir = find_xgrammar_lib_dir(&cmake_build_dir)
         .or_else(|| find_xgrammar_lib_dir(destination_path))
         .unwrap_or_else(|| destination_path.join("lib"));
-    println!("cargo:rustc-link-search=native={}", lib_search_dir.display());
-    println!("cargo:rustc-link-lib=static=xgrammar");
+    println!("cargo::rustc-link-search=native={}", lib_search_dir.display());
+    println!("cargo::rustc-link-lib=static=xgrammar");
 }

@@ -1,3 +1,6 @@
 [submodule "xgrammar"]
 	path = xgrammar
 	url = https://github.com/mlc-ai/xgrammar.git
+[submodule "build/wasi-sdk"]
+	path = build/wasi-sdk
+	url = https://github.com/WebAssembly/wasi-sdk.git

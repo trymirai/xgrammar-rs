@@ -1,47 +1,111 @@
 name: CI
 
 on:
+  push:
   pull_request:
-    branches: [main]
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
   test:
-    name: Test on macOS
-    runs-on: macos-latest
+    name: Test
+    strategy:
+      fail-fast: false
+      matrix:
+        # TODO: test wasi builds on MacOS, too
+        os: [ubuntu-latest]
+        # TODO: add wasm32-wasip1-threads when supported
+        target: [native, wasm32-wasip1, wasm32-wasip2]
+        include:
+          - os: macos-latest
+            target: native
+
+    runs-on: ${{ matrix.os }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           submodules: recursive
 
+      - name: Ensure wasi-sdk has tags
+        if: startsWith(matrix.target, 'wasm32-wasi')
+        run: |
+          # We need tags for `git describe` to work in wasi-sdk build.
+          # `actions/checkout` does not handle this very well.
+          # The `--depth 1` works fine as long as the wasi-sdk submodule is at a tagged commit.
+          cd build/wasi-sdk/
+          git fetch --tags --depth 1
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip1,wasm32-wasip1-threads,wasm32-wasip2
 
       - name: Install CMake
+        if: startsWith(matrix.os, 'macos-')
         run: brew install cmake
 
+      - name: Install llvm clang with wasm support
+        if: startsWith(matrix.os, 'ubuntu-')
+        run: |
+          wget https://apt.llvm.org/llvm.sh
+          chmod +x ./llvm.sh
+          sudo ./llvm.sh
+          sudo apt install libclang-rt-22-dev-wasm32
+
+          # The following snippet fixes what seems to be a Ubuntu/LLVM packaging bug:
+          # `wasm-ld` is looking for libclang_rt under a different name.
+          for target in wasm32-unknown-wasi{p1,p1-threads,p2}; do
+            sudo mkdir -p /usr/lib/llvm-22/lib/clang/22/lib/"$target"/
+            sudo ln -s ../wasi/libclang_rt.builtins-wasm32.a /usr/lib/llvm-22/lib/clang/22/lib/"$target"/libclang_rt.builtins.a
+          done
+
+          echo CC=clang-22 >> "$GITHUB_ENV"
+          echo CXX=clang++-22 >> "$GITHUB_ENV"
+
+      - name: Install wasm-component-ld
+        if: startsWith(matrix.target, 'wasm32')
+        run: |
+          cargo install wasm-component-ld
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
       - name: Cache cargo registry
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cargo/registry
-          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ matrix.os }}_${{ matrix.target }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Cache cargo index
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cargo/git
-          key: ${{ runner.os }}-cargo-git-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ matrix.os }}_${{ matrix.target }}-cargo-git-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Run tests (without HF feature)
-        run: cargo test --verbose
+        if: matrix.target == 'native'
+        run: cargo test --locked --verbose
 
       - name: Run tests (with HF feature)
+        if: matrix.target == 'native'
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        run: cargo test --features hf --verbose
+        run: cargo test --locked --features hf --verbose
 
       - name: Build documentation
-        run: cargo doc --no-deps --features hf
+        if: matrix.target == 'native'
+        run: cargo doc --locked --no-deps --features hf
+
+      - name: Build for ${{ matrix.target }}
+        if: matrix.target != 'native'
+        run: |
+          export RUST_BACKTRACE=1
+          # The wasi-sdk sometimes fails spuriously with a No such file or directory
+          # at cmake/wasi-wits.cmake (seems to only happen in CI).
+          # Thus, retry the build once if it fails.
+          BUILD="cargo build --locked --all-features --target ${{ matrix.target }}"
+          if $BUILD; then
+            echo Succeeded on the first attempt
+          else
+            $BUILD && echo Succeeded on the second attempt
+          fi

@@ -40,7 +40,7 @@ For HuggingFace tokenizer support:
 
 ```toml
 [dependencies]
-xgrammar-rs = { version = "0.1", features = ["hf"] } 
+xgrammar-rs = { version = "0.1", features = ["tokenizers"] }
 ```
 
 ## Quick Start
@@ -144,6 +144,24 @@ assert!(matcher.is_terminated());
 ## API Documentation
 
 For detailed API documentation, visit [docs.rs/xgrammar-rs](https://docs.rs/xgrammar-rs).
+
+## WebAssembly support
+
+The library supports Rust's wasm32-wasi* targets. When compiling for wasi targets,
+a wasi sysroot is required, and the default build process of xgrammar-rs will compile
+[wasi-sdk](https://github.com/WebAssembly/wasi-sdk) and use it as a WASI sysroot.
+This requires that the system system has:
+- clang compiler version 22 or newer, supporting the target the corresponding wasi target
+  (including the "compiler runtime libraries for clang" for WASI, aka wasi-compiler-rt);
+- [wasm-component-ld](https://github.com/bytecodealliance/wasm-component-ld).
+
+Building the sysroot might take a while.
+
+The user may also choose to provide their own wasi sysroot (advanced).
+If the `WASI_SYSROOT` environment variable is set, xgrammar-rs will skip
+the wasi-sdk building stage and use the provided sysroot. Note that the provided
+sysroot must be compiled with C++ exceptions support. For details, refer to
+wasi-sdk's README or your sysroot provider documentation.
 
 ## License
 

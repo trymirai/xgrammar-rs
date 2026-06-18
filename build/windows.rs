@@ -76,7 +76,7 @@ pub fn configure_libclang() {
 
             // SAFETY: The function is always safe to call on Windows.
             unsafe { env::set_var("LIBCLANG_PATH", &chosen) };
-            println!("cargo:rustc-env=LIBCLANG_PATH={}", chosen.display());
+            println!("cargo::rustc-env=LIBCLANG_PATH={}", chosen.display());
         }
     }
 }

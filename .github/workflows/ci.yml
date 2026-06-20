@@ -16,7 +16,7 @@ jobs:
         # TODO: test wasi builds on MacOS, too
         os: [ubuntu-latest]
         # TODO: add wasm32-wasip1-threads when supported
-        target: [native, wasm32-wasip1, wasm32-wasip2]
+        target: [native, wasm32-wasip1, wasm32-wasip1-threads, wasm32-wasip2]
         include:
           - os: macos-latest
             target: native

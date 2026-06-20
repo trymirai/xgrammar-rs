@@ -96,7 +96,7 @@ jobs:
         if: matrix.target == 'native'
         run: cargo doc --locked --no-deps --features hf
 
-      - name: Build for ${{ matrix.target }}
+      - name: "Cross-compile for: ${{ matrix.target }}"
         if: matrix.target != 'native'
         run: |
           export RUST_BACKTRACE=1

@@ -16,7 +16,7 @@ jobs:
         # TODO: test wasi builds on MacOS, too
         os: [ubuntu-latest]
         # TODO: add wasm32-wasip1-threads when supported
-        target: [native, wasm32-wasip1, wasm32-wasip2]
+        target: [native, wasm32-wasip1, wasm32-wasip1-threads, wasm32-wasip2]
         include:
           - os: macos-latest
             target: native
@@ -96,7 +96,7 @@ jobs:
         if: matrix.target == 'native'
         run: cargo doc --locked --no-deps --features hf
 
-      - name: Build for ${{ matrix.target }}
+      - name: "Cross-compile for: ${{ matrix.target }}"
         if: matrix.target != 'native'
         run: |
           export RUST_BACKTRACE=1

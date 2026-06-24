@@ -35,6 +35,18 @@ fn from_ebnf(ebnf: &str) -> String {
     Grammar::from_ebnf(ebnf, "root").unwrap().to_string()
 }
 
+/// The (lexer or parser) error message from parsing `ebnf` without normalization.
+fn parse_err(ebnf: &str) -> String {
+    ebnf_to_grammar_no_normalization(ebnf, "root")
+        .unwrap_err()
+        .to_string()
+}
+
+/// The error message from `Grammar::from_ebnf` on `ebnf`.
+fn from_ebnf_err(ebnf: &str) -> String {
+    Grammar::from_ebnf(ebnf, "root").unwrap_err().to_string()
+}
+
 #[test]
 fn test_basic_string_literal() {
     assert_eq!(
@@ -421,4 +433,49 @@ number_2 ::= (([0-9] number_2) | [0-9])
 number_3 ::= ("" | (("." number_2)))
 "#;
     assert_eq!(no_norm(before), expected);
+}
+
+#[test]
+fn test_lexer_parser_errors() {
+    assert!(parse_err(r#"root ::= "a" ""#)
+        .contains(r#"EBNF lexer error at line 1, column 15: Expect " in string literal"#));
+    assert!(parse_err("root ::= [a\n]").contains(
+        "EBNF lexer error at line 1, column 12: Character class should not contain newline"
+    ));
+    assert!(parse_err(r#"root ::= "\@""#)
+        .contains("EBNF lexer error at line 1, column 11: Invalid escape sequence"));
+    assert!(parse_err(r#"root ::= "\uFF""#)
+        .contains("EBNF lexer error at line 1, column 11: Invalid escape sequence"));
+    assert!(parse_err(r#"::= "a""#)
+        .contains("EBNF lexer error at line 1, column 1: Assign should not be the first token"));
+    assert!(parse_err("root ::= a b")
+        .contains(r#"EBNF parser error at line 1, column 10: Rule "a" is not defined"#));
+    assert!(parse_err(r#"root ::= "a" |"#)
+        .contains("EBNF parser error at line 1, column 15: Expect element"));
+    assert!(parse_err("root ::= [Z-A]").contains(
+        "EBNF parser error at line 1, column 11: Invalid character class: lower bound is larger than upper bound"
+    ));
+    assert!(parse_err("root ::= \"a\"\nroot ::= \"b\"")
+        .contains(r#"EBNF parser error at line 2, column 1: Rule "root" is defined multiple times"#));
+    assert!(parse_err(r#"a ::= "a""#).contains(
+        r#"EBNF parser error at line 1, column 1: The root rule with name "root" is not found"#
+    ));
+    assert!(parse_err(r#"root ::= "a" (="a") (="b")"#)
+        .contains("EBNF parser error at line 1, column 21: Expect rule name"));
+}
+
+#[test]
+#[should_panic(expected = "Choices in lookahead assertion are not supported")]
+fn test_end_to_end_errors() {
+    let _ = Grammar::from_ebnf(r#"root ::= "a" (=("a" | "b"))"#, "root");
+}
+
+#[test]
+fn test_error_consecutive_quantifiers() {
+    assert!(from_ebnf_err(r#"root ::= "a"{1,3}{1,3}"#)
+        .contains("EBNF parser error at line 1, column 18: Expect element, but got {"));
+    assert!(from_ebnf_err(r#"root ::= "a"++"#)
+        .contains("EBNF parser error at line 1, column 14: Expect element, but got +"));
+    assert!(from_ebnf_err(r#"root ::= "a"??"#)
+        .contains("EBNF parser error at line 1, column 14: Expect element, but got ?"));
 }

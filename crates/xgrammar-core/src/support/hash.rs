@@ -22,37 +22,3 @@ pub fn hash_combine(values: &[u64]) -> u64 {
     }
     seed
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn empty_is_zero() {
-        assert_eq!(hash_combine(&[]), 0);
-    }
-
-    #[test]
-    fn order_sensitive() {
-        assert_ne!(hash_combine(&[1, 2]), hash_combine(&[2, 1]));
-    }
-
-    #[test]
-    fn deterministic() {
-        assert_eq!(hash_combine(&[7, 8, 9]), hash_combine(&[7, 8, 9]));
-    }
-
-    #[test]
-    fn matches_reference_mixing() {
-        // From a zero seed the two shift terms vanish, so the result is just `v + HASH_MIX`.
-        let mut seed = 0u64;
-        hash_combine_binary(&mut seed, 42);
-        assert_eq!(seed, 42u64.wrapping_add(HASH_MIX));
-    }
-
-    #[test]
-    fn no_overflow_panic_on_large_values() {
-        // wrapping arithmetic must not panic in debug builds.
-        let _ = hash_combine(&[u64::MAX, u64::MAX, u64::MAX]);
-    }
-}

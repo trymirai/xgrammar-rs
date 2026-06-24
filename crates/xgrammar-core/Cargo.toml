@@ -18,8 +18,5 @@ thiserror = { workspace = true }
 ahash = { workspace = true }
 smallvec = { workspace = true }
 
-[dev-dependencies]
-serial_test = "3"
-
 [lints]
 workspace = true

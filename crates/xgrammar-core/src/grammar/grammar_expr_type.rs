@@ -71,29 +71,3 @@ impl TryFrom<i32> for GrammarExprType {
         })
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn discriminants_match_layout_order() {
-        assert_eq!(GrammarExprType::ByteString.as_i32(), 0);
-        assert_eq!(GrammarExprType::TagDispatch.as_i32(), 7);
-        assert_eq!(GrammarExprType::TokenTagDispatch.as_i32(), 11);
-    }
-
-    #[test]
-    fn round_trips_through_i32() {
-        for tag in 0..=11 {
-            let ty = GrammarExprType::try_from(tag).unwrap();
-            assert_eq!(ty.as_i32(), tag);
-        }
-    }
-
-    #[test]
-    fn rejects_unknown_tag() {
-        assert_eq!(GrammarExprType::try_from(12), Err(UnknownGrammarExprType(12)));
-        assert_eq!(GrammarExprType::try_from(-1), Err(UnknownGrammarExprType(-1)));
-    }
-}

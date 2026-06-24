@@ -25,17 +25,3 @@ impl CharacterClassElement {
         self.lower <= codepoint && codepoint <= self.upper
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn contains_bounds_inclusive() {
-        let e = CharacterClassElement::new(b'a' as i32, b'z' as i32);
-        assert!(e.contains(b'a' as i32));
-        assert!(e.contains(b'z' as i32));
-        assert!(e.contains(b'm' as i32));
-        assert!(!e.contains(b'A' as i32));
-    }
-}

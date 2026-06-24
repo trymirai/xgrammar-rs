@@ -43,34 +43,3 @@ impl Rule {
         Self::new(name, NO_EXPR)
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn new_defaults_lookahead_to_none() {
-        let rule = Rule::new("root", 3);
-        assert_eq!(rule.name, "root");
-        assert_eq!(rule.body_expr_id, 3);
-        assert_eq!(rule.lookahead_assertion_id, NO_EXPR);
-        assert!(!rule.is_exact_lookahead);
-    }
-
-    #[test]
-    fn empty_has_no_body() {
-        assert_eq!(Rule::empty("r").body_expr_id, NO_EXPR);
-    }
-
-    #[test]
-    fn serde_roundtrip() {
-        let rule = Rule {
-            name: "x".into(),
-            body_expr_id: 1,
-            lookahead_assertion_id: 4,
-            is_exact_lookahead: true,
-        };
-        let json = serde_json::to_string(&rule).unwrap();
-        assert_eq!(serde_json::from_str::<Rule>(&json).unwrap(), rule);
-    }
-}

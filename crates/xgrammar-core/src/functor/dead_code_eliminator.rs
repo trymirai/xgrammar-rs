@@ -21,7 +21,8 @@ pub fn dead_code_eliminator(grammar: &Grammar) -> Grammar {
     };
     // Recreate the surviving rules (in ascending old-id order), recording old → new ids.
     for &old_id in &used {
-        let new_id = state.builder.add_empty_rule(grammar.rule(old_id).name.clone());
+        let new_id =
+            state.builder.add_empty_rule(grammar.rule(old_id).name.clone());
         pass.rule_id_map.insert(old_id, new_id);
     }
     for &old_id in &used {
@@ -45,12 +46,22 @@ struct DeadCodeEliminator {
 }
 
 impl GrammarMutator for DeadCodeEliminator {
-    fn visit_rule_ref(&mut self, state: &mut MutatorState, _ty: GrammarExprType, data: &[i32]) -> i32 {
+    fn visit_rule_ref(
+        &mut self,
+        state: &mut MutatorState,
+        _ty: GrammarExprType,
+        data: &[i32],
+    ) -> i32 {
         let new_id = self.rule_id_map[&data[0]];
         state.builder.add_rule_ref(new_id)
     }
 
-    fn visit_repeat(&mut self, state: &mut MutatorState, _ty: GrammarExprType, data: &[i32]) -> i32 {
+    fn visit_repeat(
+        &mut self,
+        state: &mut MutatorState,
+        _ty: GrammarExprType,
+        data: &[i32],
+    ) -> i32 {
         let new_id = self.rule_id_map[&data[0]];
         state.builder.add_repeat(new_id, data[1], data[2])
     }
@@ -78,28 +89,36 @@ fn used_rules(grammar: &Grammar) -> Vec<i32> {
 }
 
 /// Pushes every rule referenced (directly or via nested sequence/choices) by `expr_id`.
-fn collect_rule_refs(grammar: &Grammar, expr_id: i32, queue: &mut VecDeque<i32>) {
+fn collect_rule_refs(
+    grammar: &Grammar,
+    expr_id: i32,
+    queue: &mut VecDeque<i32>,
+) {
     let (ty, data) = {
         let expr = grammar.expr(expr_id);
         (expr.ty, expr.data.to_vec())
     };
     match ty {
-        GrammarExprType::RuleRef | GrammarExprType::Repeat => queue.push_back(data[0]),
+        GrammarExprType::RuleRef | GrammarExprType::Repeat => {
+            queue.push_back(data[0])
+        },
         GrammarExprType::Sequence | GrammarExprType::Choices => {
             for &child in &data {
                 collect_rule_refs(grammar, child, queue);
             }
-        }
+        },
         GrammarExprType::TagDispatch => {
             for (_, rule_id) in grammar.tag_dispatch(expr_id).tag_rule_pairs {
                 queue.push_back(rule_id);
             }
-        }
+        },
         GrammarExprType::TokenTagDispatch => {
-            for (_, rule_id) in grammar.token_tag_dispatch(expr_id).trigger_rule_pairs {
+            for (_, rule_id) in
+                grammar.token_tag_dispatch(expr_id).trigger_rule_pairs
+            {
                 queue.push_back(rule_id);
             }
-        }
-        _ => {}
+        },
+        _ => {},
     }
 }

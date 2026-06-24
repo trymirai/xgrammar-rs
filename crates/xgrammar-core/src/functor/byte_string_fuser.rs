@@ -17,7 +17,11 @@ pub fn byte_string_fuser(grammar: &Grammar) -> Grammar {
 struct ByteStringFuser;
 
 impl GrammarMutator for ByteStringFuser {
-    fn visit_sequence(&mut self, state: &mut MutatorState, data: &[i32]) -> i32 {
+    fn visit_sequence(
+        &mut self,
+        state: &mut MutatorState,
+        data: &[i32],
+    ) -> i32 {
         let mut new_ids = Vec::new();
         let mut cur_byte_string: Vec<i32> = Vec::new();
         for &child in data {
@@ -29,7 +33,9 @@ impl GrammarMutator for ByteStringFuser {
                 cur_byte_string.extend_from_slice(&edata);
             } else {
                 if !cur_byte_string.is_empty() {
-                    new_ids.push(state.builder.add_byte_string_bytes(&cur_byte_string));
+                    new_ids.push(
+                        state.builder.add_byte_string_bytes(&cur_byte_string),
+                    );
                     cur_byte_string.clear();
                 }
                 new_ids.push(self.visit_expr(state, ty, &edata));

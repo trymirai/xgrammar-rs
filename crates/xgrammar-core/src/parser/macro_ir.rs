@@ -29,7 +29,10 @@ pub struct MacroArguments {
 impl MacroArguments {
     /// Returns the value of the named argument `name`, if present.
     #[must_use]
-    pub fn named(&self, name: &str) -> Option<&MacroValue> {
+    pub fn named(
+        &self,
+        name: &str,
+    ) -> Option<&MacroValue> {
         self.named.iter().find(|(n, _)| n == name).map(|(_, v)| v)
     }
 }

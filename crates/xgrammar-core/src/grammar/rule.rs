@@ -28,7 +28,10 @@ fn no_expr() -> i32 {
 impl Rule {
     /// Creates a rule with the given name and body expression, no lookahead assertion.
     #[must_use]
-    pub fn new(name: impl Into<String>, body_expr_id: i32) -> Self {
+    pub fn new(
+        name: impl Into<String>,
+        body_expr_id: i32,
+    ) -> Self {
         Self {
             name: name.into(),
             body_expr_id,

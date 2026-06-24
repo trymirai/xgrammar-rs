@@ -47,7 +47,10 @@ impl Grammar {
 
 /// Copies every rule of `sub` into `builder` (deduplicating names and remapping references),
 /// returning the new id of `sub`'s root rule.
-fn add_sub_grammar(builder: &mut GrammarBuilder, sub: &Grammar) -> i32 {
+fn add_sub_grammar(
+    builder: &mut GrammarBuilder,
+    sub: &Grammar,
+) -> i32 {
     let mut new_rule_ids = Vec::with_capacity(sub.num_rules() as usize);
     for i in 0..sub.num_rules() {
         let name = builder.get_new_rule_name(&sub.rule(i).name);
@@ -65,14 +68,22 @@ fn add_sub_grammar(builder: &mut GrammarBuilder, sub: &Grammar) -> i32 {
         } else {
             copy_expr(builder, sub, &new_rule_ids, lookahead)
         };
-        builder.update_lookahead_assertion(new_rule_ids[i as usize], new_lookahead);
+        builder.update_lookahead_assertion(
+            new_rule_ids[i as usize],
+            new_lookahead,
+        );
     }
     new_rule_ids[sub.root_rule_id() as usize]
 }
 
 /// Re-adds an expression from `sub` into `builder`, remapping rule references through
 /// `new_rule_ids`.
-fn copy_expr(builder: &mut GrammarBuilder, sub: &Grammar, new_rule_ids: &[i32], expr_id: i32) -> i32 {
+fn copy_expr(
+    builder: &mut GrammarBuilder,
+    sub: &Grammar,
+    new_rule_ids: &[i32],
+    expr_id: i32,
+) -> i32 {
     let (ty, data) = {
         let expr = sub.expr(expr_id);
         (expr.ty, expr.data.to_vec())
@@ -84,18 +95,20 @@ fn copy_expr(builder: &mut GrammarBuilder, sub: &Grammar, new_rule_ids: &[i32], 
                 ids.push(copy_expr(builder, sub, new_rule_ids, child));
             }
             builder.add_sequence(&ids)
-        }
+        },
         GrammarExprType::Choices => {
             let mut ids = Vec::with_capacity(data.len());
             for &child in &data {
                 ids.push(copy_expr(builder, sub, new_rule_ids, child));
             }
             builder.add_choices(&ids)
-        }
-        GrammarExprType::RuleRef => builder.add_rule_ref(new_rule_ids[data[0] as usize]),
+        },
+        GrammarExprType::RuleRef => {
+            builder.add_rule_ref(new_rule_ids[data[0] as usize])
+        },
         GrammarExprType::Repeat => {
             builder.add_repeat(new_rule_ids[data[0] as usize], data[1], data[2])
-        }
+        },
         // Tag-dispatch remapping needs the tag-dispatch builder (macro work); not exercised
         // by the union/concat gates.
         _ => builder.add_grammar_expr(ty, &data),

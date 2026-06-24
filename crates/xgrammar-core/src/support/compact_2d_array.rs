@@ -71,10 +71,15 @@ impl<T> Compact2dArray<T> {
         if indptr.windows(2).any(|w| w[0] > w[1]) {
             return Err(Compact2dArrayError::NotMonotonic);
         }
-        if *indptr.last().expect("indptr is non-empty here") as usize != data.len() {
+        if *indptr.last().expect("indptr is non-empty here") as usize
+            != data.len()
+        {
             return Err(Compact2dArrayError::BadEnd);
         }
-        Ok(Self { data, indptr })
+        Ok(Self {
+            data,
+            indptr,
+        })
     }
 
     /// Number of rows.
@@ -97,7 +102,10 @@ impl<T> Compact2dArray<T> {
 
     /// Returns row `i` as a slice, or `None` if out of bounds.
     #[must_use]
-    pub fn get(&self, i: usize) -> Option<&[T]> {
+    pub fn get(
+        &self,
+        i: usize,
+    ) -> Option<&[T]> {
         if i >= self.len() {
             return None;
         }
@@ -111,7 +119,10 @@ impl<T> Compact2dArray<T> {
     /// # Panics
     /// Panics if `i` is out of bounds (an internal invariant violation).
     #[must_use]
-    pub fn row(&self, i: usize) -> &[T] {
+    pub fn row(
+        &self,
+        i: usize,
+    ) -> &[T] {
         self.get(i).expect("row index out of bounds")
     }
 
@@ -119,7 +130,10 @@ impl<T> Compact2dArray<T> {
     ///
     /// # Panics
     /// Panics if `i` is out of bounds.
-    pub fn row_mut(&mut self, i: usize) -> &mut [T] {
+    pub fn row_mut(
+        &mut self,
+        i: usize,
+    ) -> &mut [T] {
         assert!(i < self.len(), "row index out of bounds");
         let start = self.indptr[i] as usize;
         let end = self.indptr[i + 1] as usize;
@@ -157,11 +171,15 @@ impl<T> Compact2dArray<T> {
     ///
     /// # Panics
     /// Panics if `cnt` exceeds the number of rows.
-    pub fn pop_back(&mut self, cnt: usize) {
+    pub fn pop_back(
+        &mut self,
+        cnt: usize,
+    ) {
         assert!(cnt <= self.len(), "cannot pop more rows than exist");
         let new_len = self.indptr.len() - cnt;
         self.indptr.truncate(new_len);
-        let new_data_len = *self.indptr.last().expect("indptr keeps its leading 0") as usize;
+        let new_data_len =
+            *self.indptr.last().expect("indptr keeps its leading 0") as usize;
         self.data.truncate(new_data_len);
     }
 }
@@ -182,8 +200,10 @@ impl<T: Clone> Compact2dArray<T> {
     ///
     /// # Panics
     /// Panics if any row size is negative.
-    pub fn reset_with_row_sizes(&mut self, row_sizes: &[i32])
-    where
+    pub fn reset_with_row_sizes(
+        &mut self,
+        row_sizes: &[i32],
+    ) where
         T: Default,
     {
         self.indptr.clear();
@@ -200,7 +220,10 @@ impl<T: Clone> Compact2dArray<T> {
     }
 
     /// Appends a new row, returning its index.
-    pub fn push_row(&mut self, new_data: &[T]) -> usize {
+    pub fn push_row(
+        &mut self,
+        new_data: &[T],
+    ) -> usize {
         self.data.extend_from_slice(new_data);
         self.indptr.push(self.data.len() as i32);
         self.indptr.len() - 2
@@ -209,7 +232,11 @@ impl<T: Clone> Compact2dArray<T> {
     /// Appends a new row consisting of one leading element followed by `rest`.
     ///
     /// Mirrors the C++ `PushBackNonContiguous`, used by the grammar-expression encoding.
-    pub fn push_row_noncontiguous(&mut self, first: T, rest: &[T]) -> usize {
+    pub fn push_row_noncontiguous(
+        &mut self,
+        first: T,
+        rest: &[T],
+    ) -> usize {
         self.data.push(first);
         self.data.extend_from_slice(rest);
         self.indptr.push(self.data.len() as i32);
@@ -222,7 +249,10 @@ impl<T> Compact2dArray<T> {
     ///
     /// # Panics
     /// Panics if the array has no rows yet.
-    pub fn push_in_latest_row(&mut self, new_data: T) {
+    pub fn push_in_latest_row(
+        &mut self,
+        new_data: T,
+    ) {
         assert!(!self.is_empty(), "cannot push into an empty Compact2dArray");
         self.data.push(new_data);
         *self.indptr.last_mut().expect("non-empty") += 1;

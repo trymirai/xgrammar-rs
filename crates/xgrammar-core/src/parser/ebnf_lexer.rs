@@ -1,9 +1,14 @@
 //! The EBNF lexer — a port of `EBNFLexer` in `cpp/grammar_parser.cc`.
 
-use super::lexer_error::LexerError;
-use super::token::{Token, TokenValue};
-use super::token_type::TokenType;
-use crate::support::{CharHandlingError, Codepoint, char_to_utf8_bytes, parse_next_utf8_or_escaped};
+use super::{
+    lexer_error::LexerError,
+    token::{Token, TokenValue},
+    token_type::TokenType,
+};
+use crate::support::{
+    CharHandlingError, Codepoint, char_to_utf8_bytes,
+    parse_next_utf8_or_escaped,
+};
 
 /// Largest integer literal permitted in a grammar (`1e15`).
 const MAX_INTEGER_IN_GRAMMAR: i64 = 1_000_000_000_000_000;
@@ -62,7 +67,10 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn peek(&self, delta: isize) -> u8 {
+    fn peek(
+        &self,
+        delta: isize,
+    ) -> u8 {
         let idx = self.pos as isize + delta;
         if idx < 0 {
             return 0;
@@ -74,7 +82,10 @@ impl<'a> Lexer<'a> {
         self.peek(0)
     }
 
-    fn consume(&mut self, cnt: usize) {
+    fn consume(
+        &mut self,
+        cnt: usize,
+    ) {
         for _ in 0..cnt {
             let b = self.cur();
             if b == b'\n' || (b == b'\r' && self.peek(1) != b'\n') {
@@ -87,7 +98,10 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn err(&self, message: impl Into<String>) -> LexerError {
+    fn err(
+        &self,
+        message: impl Into<String>,
+    ) -> LexerError {
         LexerError {
             line: self.line,
             column: self.column,
@@ -95,7 +109,10 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn char_err(&self, e: CharHandlingError) -> LexerError {
+    fn char_err(
+        &self,
+        e: CharHandlingError,
+    ) -> LexerError {
         self.err(match e {
             CharHandlingError::InvalidUtf8 => "Invalid UTF8 sequence",
             CharHandlingError::InvalidEscape => "Invalid escape sequence",
@@ -103,11 +120,21 @@ impl<'a> Lexer<'a> {
         })
     }
 
-    fn slice_string(&self, start: usize, end: usize) -> String {
+    fn slice_string(
+        &self,
+        start: usize,
+        end: usize,
+    ) -> String {
         String::from_utf8_lossy(&self.input[start..end]).into_owned()
     }
 
-    fn punct(&self, ty: TokenType, lexeme: &str, line: i32, column: i32) -> Token {
+    fn punct(
+        &self,
+        ty: TokenType,
+        lexeme: &str,
+        line: i32,
+        column: i32,
+    ) -> Token {
         Token {
             ty,
             lexeme: lexeme.to_owned(),
@@ -118,10 +145,15 @@ impl<'a> Lexer<'a> {
     }
 
     fn consume_space(&mut self) {
-        while self.cur() != 0 && matches!(self.cur(), b' ' | b'\t' | b'#' | b'\n' | b'\r') {
+        while self.cur() != 0
+            && matches!(self.cur(), b' ' | b'\t' | b'#' | b'\n' | b'\r')
+        {
             self.consume(1);
             if self.peek(-1) == b'#' {
-                while self.cur() != 0 && self.cur() != b'\n' && self.cur() != b'\r' {
+                while self.cur() != 0
+                    && self.cur() != b'\n'
+                    && self.cur() != b'\r'
+                {
                     self.consume(1);
                 }
                 if self.cur() == 0 {
@@ -135,7 +167,10 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn is_name_char(c: u8, is_first: bool) -> bool {
+    fn is_name_char(
+        c: u8,
+        is_first: bool,
+    ) -> bool {
         c == b'_'
             || c == b'-'
             || c == b'.'
@@ -187,9 +222,14 @@ impl<'a> Lexer<'a> {
         self.consume(1); // opening quote
 
         let mut bytes = Vec::new();
-        while self.cur() != 0 && self.cur() != b'"' && self.cur() != b'\n' && self.cur() != b'\r' {
+        while self.cur() != 0
+            && self.cur() != b'"'
+            && self.cur() != b'\n'
+            && self.cur() != b'\r'
+        {
             let (codepoint, len) =
-                parse_next_utf8_or_escaped(&self.input[self.pos..], &[]).map_err(|e| self.char_err(e))?;
+                parse_next_utf8_or_escaped(&self.input[self.pos..], &[])
+                    .map_err(|e| self.char_err(e))?;
             self.consume(len);
             bytes.extend_from_slice(&char_to_utf8_bytes(codepoint));
         }
@@ -201,28 +241,45 @@ impl<'a> Lexer<'a> {
         Ok(Token {
             ty: TokenType::StringLiteral,
             lexeme: self.slice_string(start_pos, self.pos),
-            value: TokenValue::Str(String::from_utf8_lossy(&bytes).into_owned()),
+            value: TokenValue::Str(
+                String::from_utf8_lossy(&bytes).into_owned(),
+            ),
             line,
             column,
         })
     }
 
     fn parse_char_class(&mut self) -> Result<Vec<Token>, LexerError> {
-        let mut tokens = vec![self.punct(TokenType::LBracket, "[", self.line, self.column)];
+        let mut tokens =
+            vec![self.punct(TokenType::LBracket, "[", self.line, self.column)];
         self.consume(1); // '['
 
         if self.cur() == b'^' {
-            tokens.push(self.punct(TokenType::Caret, "^", self.line, self.column));
+            tokens.push(self.punct(
+                TokenType::Caret,
+                "^",
+                self.line,
+                self.column,
+            ));
             self.consume(1);
         }
 
         while self.cur() != 0 && self.cur() != b']' {
             if self.cur() == b'\r' || self.cur() == b'\n' {
-                return Err(self.err("Character class should not contain newline"));
+                return Err(
+                    self.err("Character class should not contain newline")
+                );
             } else if self.cur() == b'-' {
-                tokens.push(self.punct(TokenType::Dash, "-", self.line, self.column));
+                tokens.push(self.punct(
+                    TokenType::Dash,
+                    "-",
+                    self.line,
+                    self.column,
+                ));
                 self.consume(1);
-            } else if self.cur() == b'\\' && is_regex_special_escape(self.peek(1)) {
+            } else if self.cur() == b'\\'
+                && is_regex_special_escape(self.peek(1))
+            {
                 let (line, column) = (self.line, self.column);
                 let lexeme = self.slice_string(self.pos, self.pos + 2);
                 let value = self.slice_string(self.pos + 1, self.pos + 2);
@@ -236,9 +293,11 @@ impl<'a> Lexer<'a> {
                 self.consume(2);
             } else {
                 let (line, column) = (self.line, self.column);
-                let (codepoint, len) =
-                    parse_next_utf8_or_escaped(&self.input[self.pos..], REGEX_ESCAPE_CHARS)
-                        .map_err(|e| self.char_err(e))?;
+                let (codepoint, len) = parse_next_utf8_or_escaped(
+                    &self.input[self.pos..],
+                    REGEX_ESCAPE_CHARS,
+                )
+                .map_err(|e| self.char_err(e))?;
                 let lexeme = self.slice_string(self.pos, self.pos + len);
                 tokens.push(Token {
                     ty: TokenType::CharInCharClass,
@@ -254,7 +313,12 @@ impl<'a> Lexer<'a> {
         if self.cur() == 0 {
             return Err(self.err("Unterminated character class"));
         }
-        tokens.push(self.punct(TokenType::RBracket, "]", self.line, self.column));
+        tokens.push(self.punct(
+            TokenType::RBracket,
+            "]",
+            self.line,
+            self.column,
+        ));
         self.consume(1); // ']'
         Ok(tokens)
     }
@@ -286,7 +350,11 @@ impl<'a> Lexer<'a> {
         Ok(Token {
             ty: TokenType::IntegerLiteral,
             lexeme: self.slice_string(start_pos, self.pos),
-            value: TokenValue::Int(if is_negative { -num } else { num }),
+            value: TokenValue::Int(if is_negative {
+                -num
+            } else {
+                num
+            }),
             line,
             column,
         })
@@ -297,10 +365,17 @@ impl<'a> Lexer<'a> {
         let (line, column) = (self.line, self.column);
 
         if self.cur() == 0 {
-            return Ok(Next::One(self.punct(TokenType::EndOfFile, "", line, column)));
+            return Ok(Next::One(self.punct(
+                TokenType::EndOfFile,
+                "",
+                line,
+                column,
+            )));
         }
 
-        let one = |ty, lexeme, lexer: &Lexer| Next::One(lexer.punct(ty, lexeme, line, column));
+        let one = |ty, lexeme, lexer: &Lexer| {
+            Next::One(lexer.punct(ty, lexeme, line, column))
+        };
         Ok(match self.cur() {
             b'(' => {
                 if self.peek(1) == b'=' {
@@ -310,43 +385,43 @@ impl<'a> Lexer<'a> {
                     self.consume(1);
                     one(TokenType::LParen, "(", self)
                 }
-            }
+            },
             b')' => {
                 self.consume(1);
                 one(TokenType::RParen, ")", self)
-            }
+            },
             b'{' => {
                 self.consume(1);
                 one(TokenType::LBrace, "{", self)
-            }
+            },
             b'}' => {
                 self.consume(1);
                 one(TokenType::RBrace, "}", self)
-            }
+            },
             b'|' => {
                 self.consume(1);
                 one(TokenType::Pipe, "|", self)
-            }
+            },
             b',' => {
                 self.consume(1);
                 one(TokenType::Comma, ",", self)
-            }
+            },
             b'*' => {
                 self.consume(1);
                 one(TokenType::Star, "*", self)
-            }
+            },
             b'+' => {
                 self.consume(1);
                 one(TokenType::Plus, "+", self)
-            }
+            },
             b'?' => {
                 self.consume(1);
                 one(TokenType::Question, "?", self)
-            }
+            },
             b'=' => {
                 self.consume(1);
                 one(TokenType::Equal, "=", self)
-            }
+            },
             b':' => {
                 if self.peek(1) == b':' && self.peek(2) == b'=' {
                     self.consume(3);
@@ -354,7 +429,7 @@ impl<'a> Lexer<'a> {
                 } else {
                     return Err(self.err("Unexpected character: ':'"));
                 }
-            }
+            },
             b'"' => Next::One(self.parse_string()?),
             b'[' => Next::Many(self.parse_char_class()?),
             c => {
@@ -364,14 +439,17 @@ impl<'a> Lexer<'a> {
                 } else if c.is_ascii_digit() || c == b'+' {
                     Next::One(self.parse_integer()?)
                 } else {
-                    return Err(self.err(format!("Unexpected character: {}", c as char)));
+                    return Err(self
+                        .err(format!("Unexpected character: {}", c as char)));
                 }
-            }
+            },
         })
     }
 
     /// Promotes each identifier immediately left of `::=` to a [`TokenType::RuleName`].
-    fn convert_identifier_to_rule_name(tokens: &mut [Token]) -> Result<(), LexerError> {
+    fn convert_identifier_to_rule_name(
+        tokens: &mut [Token]
+    ) -> Result<(), LexerError> {
         for i in 0..tokens.len() {
             if tokens[i].ty != TokenType::Assign {
                 continue;
@@ -387,14 +465,17 @@ impl<'a> Lexer<'a> {
                 return Err(LexerError {
                     line: tokens[i - 1].line,
                     column: tokens[i - 1].column,
-                    message: "Assign should be preceded by an identifier".to_owned(),
+                    message: "Assign should be preceded by an identifier"
+                        .to_owned(),
                 });
             }
             if i >= 2 && tokens[i - 2].line == tokens[i - 1].line {
                 return Err(LexerError {
                     line: tokens[i - 1].line,
                     column: tokens[i - 1].column,
-                    message: "The rule name should be at the beginning of the line".to_owned(),
+                    message:
+                        "The rule name should be at the beginning of the line"
+                            .to_owned(),
                 });
             }
             tokens[i - 1].ty = TokenType::RuleName;
@@ -412,7 +493,7 @@ impl<'a> Lexer<'a> {
                     if is_eof {
                         break;
                     }
-                }
+                },
                 Next::Many(many) => tokens.extend(many),
             }
         }

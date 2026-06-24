@@ -25,7 +25,11 @@ struct RuleInliner {
 }
 
 impl RuleInliner {
-    fn can_inline(&mut self, base: &Grammar, rule_id: i32) -> bool {
+    fn can_inline(
+        &mut self,
+        base: &Grammar,
+        rule_id: i32,
+    ) -> bool {
         if let Some(&cached) = self.cache.get(&rule_id) {
             return cached;
         }
@@ -36,7 +40,11 @@ impl RuleInliner {
 }
 
 impl GrammarMutator for RuleInliner {
-    fn visit_choices(&mut self, state: &mut MutatorState, data: &[i32]) -> i32 {
+    fn visit_choices(
+        &mut self,
+        state: &mut MutatorState,
+        data: &[i32],
+    ) -> i32 {
         let mut new_choice_ids = Vec::new();
         for &choice_id in data {
             let (choice_ty, choice_data) = {
@@ -45,7 +53,8 @@ impl GrammarMutator for RuleInliner {
             };
 
             // Keep empty strings, empty sequences, and sequences not led by a rule ref.
-            if choice_ty != GrammarExprType::Sequence || choice_data.is_empty() {
+            if choice_ty != GrammarExprType::Sequence || choice_data.is_empty()
+            {
                 new_choice_ids.push(self.visit_expr_id(state, choice_id));
                 continue;
             }
@@ -72,8 +81,11 @@ impl GrammarMutator for RuleInliner {
             let ref_body = state.base.rule(rule_ref_id).body_expr_id;
             let ref_choice_ids = state.base.expr(ref_body).data.to_vec();
             for ref_choice_id in ref_choice_ids {
-                let ref_element_ids = state.base.expr(ref_choice_id).data.to_vec();
-                let mut new_sequence = Vec::with_capacity(ref_element_ids.len() + other_elements.len());
+                let ref_element_ids =
+                    state.base.expr(ref_choice_id).data.to_vec();
+                let mut new_sequence = Vec::with_capacity(
+                    ref_element_ids.len() + other_elements.len(),
+                );
                 for &re in &ref_element_ids {
                     new_sequence.push(self.visit_expr_id(state, re));
                 }
@@ -87,7 +99,10 @@ impl GrammarMutator for RuleInliner {
 
 /// A rule is inlinable if its body is a non-empty choices of sequences, with no empty-string
 /// choice and no rule-reference element.
-fn check_can_inline(base: &Grammar, rule_id: i32) -> bool {
+fn check_can_inline(
+    base: &Grammar,
+    rule_id: i32,
+) -> bool {
     let body = base.rule(rule_id).body_expr_id;
     let (body_ty, choice_ids) = {
         let expr = base.expr(body);

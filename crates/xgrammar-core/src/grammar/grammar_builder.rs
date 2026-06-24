@@ -2,13 +2,15 @@
 
 use std::collections::HashMap;
 
-use super::character_class_element::CharacterClassElement;
-use super::grammar::Grammar;
-use super::grammar_expr::GrammarExpr;
-use super::grammar_expr_type::GrammarExprType;
-use super::rule::{NO_EXPR, Rule};
-use super::tag_dispatch::TagDispatch;
-use super::token_tag_dispatch::TokenTagDispatch;
+use super::{
+    character_class_element::CharacterClassElement,
+    grammar::Grammar,
+    grammar_expr::GrammarExpr,
+    grammar_expr_type::GrammarExprType,
+    rule::{NO_EXPR, Rule},
+    tag_dispatch::TagDispatch,
+    token_tag_dispatch::TokenTagDispatch,
+};
 use crate::support::Compact2dArray;
 
 /// Builds a [`Grammar`] incrementally: add expressions (each returns its id), wire them
@@ -50,39 +52,58 @@ impl GrammarBuilder {
     ///
     /// # Errors
     /// Returns the missing name if no such rule was added.
-    pub fn into_grammar(self, root_rule_name: &str) -> Result<Grammar, String> {
-        let root_rule_id = *self
-            .rule_name_to_id
-            .get(root_rule_name)
-            .ok_or_else(|| format!("root rule {root_rule_name:?} was never added"))?;
+    pub fn into_grammar(
+        self,
+        root_rule_name: &str,
+    ) -> Result<Grammar, String> {
+        let root_rule_id =
+            *self.rule_name_to_id.get(root_rule_name).ok_or_else(|| {
+                format!("root rule {root_rule_name:?} was never added")
+            })?;
         Ok(Grammar::from_parts(self.rules, self.exprs, root_rule_id))
     }
 
     /// Finalizes the grammar with an explicit root rule id.
     #[must_use]
-    pub fn into_grammar_with_root_id(self, root_rule_id: i32) -> Grammar {
+    pub fn into_grammar_with_root_id(
+        self,
+        root_rule_id: i32,
+    ) -> Grammar {
         Grammar::from_parts(self.rules, self.exprs, root_rule_id)
     }
 
     /* ----------------------------- expressions ----------------------------- */
 
     /// Low-level: appends an expression of `ty` with `data`, returning its id.
-    pub fn add_grammar_expr(&mut self, ty: GrammarExprType, data: &[i32]) -> i32 {
+    pub fn add_grammar_expr(
+        &mut self,
+        ty: GrammarExprType,
+        data: &[i32],
+    ) -> i32 {
         self.exprs.push_row_noncontiguous(ty.as_i32(), data) as i32
     }
 
     /// Adds a byte-string expression from raw byte values (`0..=255`).
-    pub fn add_byte_string_bytes(&mut self, bytes: &[i32]) -> i32 {
+    pub fn add_byte_string_bytes(
+        &mut self,
+        bytes: &[i32],
+    ) -> i32 {
         self.add_grammar_expr(GrammarExprType::ByteString, bytes)
     }
 
     /// Adds a byte-string expression from a string's UTF-8 bytes.
-    pub fn add_byte_string(&mut self, s: &str) -> i32 {
+    pub fn add_byte_string(
+        &mut self,
+        s: &str,
+    ) -> i32 {
         let bytes: Vec<i32> = s.bytes().map(i32::from).collect();
         self.add_byte_string_bytes(&bytes)
     }
 
-    fn char_class_data(elements: &[CharacterClassElement], is_negative: bool) -> Vec<i32> {
+    fn char_class_data(
+        elements: &[CharacterClassElement],
+        is_negative: bool,
+    ) -> Vec<i32> {
         let mut data = Vec::with_capacity(1 + elements.len() * 2);
         data.push(i32::from(is_negative));
         for e in elements {
@@ -118,33 +139,56 @@ impl GrammarBuilder {
     }
 
     /// Adds an allowed-token-set expression.
-    pub fn add_token_set(&mut self, token_ids: &[i32]) -> i32 {
+    pub fn add_token_set(
+        &mut self,
+        token_ids: &[i32],
+    ) -> i32 {
         self.add_grammar_expr(GrammarExprType::Token, token_ids)
     }
 
     /// Adds an excluded-token-set expression.
-    pub fn add_exclude_token_set(&mut self, token_ids: &[i32]) -> i32 {
+    pub fn add_exclude_token_set(
+        &mut self,
+        token_ids: &[i32],
+    ) -> i32 {
         self.add_grammar_expr(GrammarExprType::ExcludeToken, token_ids)
     }
 
     /// Adds a reference to another rule.
-    pub fn add_rule_ref(&mut self, rule_id: i32) -> i32 {
+    pub fn add_rule_ref(
+        &mut self,
+        rule_id: i32,
+    ) -> i32 {
         self.add_grammar_expr(GrammarExprType::RuleRef, &[rule_id])
     }
 
     /// Adds a sequence of expressions.
-    pub fn add_sequence(&mut self, elements: &[i32]) -> i32 {
+    pub fn add_sequence(
+        &mut self,
+        elements: &[i32],
+    ) -> i32 {
         self.add_grammar_expr(GrammarExprType::Sequence, elements)
     }
 
     /// Adds an alternation of expressions.
-    pub fn add_choices(&mut self, choices: &[i32]) -> i32 {
+    pub fn add_choices(
+        &mut self,
+        choices: &[i32],
+    ) -> i32 {
         self.add_grammar_expr(GrammarExprType::Choices, choices)
     }
 
     /// Adds a repetition of a rule: `[ref_rule_id, min, max]` (`max == -1` is unbounded).
-    pub fn add_repeat(&mut self, ref_rule_id: i32, min_repeat: i32, max_repeat: i32) -> i32 {
-        self.add_grammar_expr(GrammarExprType::Repeat, &[ref_rule_id, min_repeat, max_repeat])
+    pub fn add_repeat(
+        &mut self,
+        ref_rule_id: i32,
+        min_repeat: i32,
+        max_repeat: i32,
+    ) -> i32 {
+        self.add_grammar_expr(
+            GrammarExprType::Repeat,
+            &[ref_rule_id, min_repeat, max_repeat],
+        )
     }
 
     /// Adds a repetition of an arbitrary expression, wrapping it in a fresh rule (named
@@ -165,14 +209,18 @@ impl GrammarBuilder {
             None => {
                 let name = self.get_new_rule_name(cur_rule_name);
                 self.add_rule_named(name, grammar_expr_id)
-            }
+            },
         };
         self.add_repeat(ref_rule_id, min_repeat, max_repeat)
     }
 
     /// Adds a tag-dispatch expression from its decoded form.
-    pub fn add_tag_dispatch(&mut self, tag_dispatch: &TagDispatch) -> i32 {
-        let mut data = Vec::with_capacity(tag_dispatch.tag_rule_pairs.len() * 2 + 2);
+    pub fn add_tag_dispatch(
+        &mut self,
+        tag_dispatch: &TagDispatch,
+    ) -> i32 {
+        let mut data =
+            Vec::with_capacity(tag_dispatch.tag_rule_pairs.len() * 2 + 2);
         for (tag, rule_id) in &tag_dispatch.tag_rule_pairs {
             let bytes: Vec<i32> = tag.iter().map(|&b| i32::from(b)).collect();
             data.push(self.add_byte_string_bytes(&bytes));
@@ -181,7 +229,8 @@ impl GrammarBuilder {
         data.push(i32::from(tag_dispatch.loop_after_dispatch));
         let mut exclude_ids = Vec::with_capacity(tag_dispatch.excludes.len());
         for exclude in &tag_dispatch.excludes {
-            let bytes: Vec<i32> = exclude.iter().map(|&b| i32::from(b)).collect();
+            let bytes: Vec<i32> =
+                exclude.iter().map(|&b| i32::from(b)).collect();
             exclude_ids.push(self.add_byte_string_bytes(&bytes));
         }
         let exclude_choices = self.add_choices(&exclude_ids);
@@ -190,8 +239,13 @@ impl GrammarBuilder {
     }
 
     /// Adds a token-tag-dispatch expression from its decoded form.
-    pub fn add_token_tag_dispatch(&mut self, ttd: &TokenTagDispatch) -> i32 {
-        let mut data = Vec::with_capacity(ttd.trigger_rule_pairs.len() * 2 + ttd.excludes.len() + 3);
+    pub fn add_token_tag_dispatch(
+        &mut self,
+        ttd: &TokenTagDispatch,
+    ) -> i32 {
+        let mut data = Vec::with_capacity(
+            ttd.trigger_rule_pairs.len() * 2 + ttd.excludes.len() + 3,
+        );
         data.push(ttd.trigger_rule_pairs.len() as i32);
         for (token_id, rule_id) in &ttd.trigger_rule_pairs {
             data.push(*token_id);
@@ -214,9 +268,13 @@ impl GrammarBuilder {
     /// # Panics
     /// Panics if `expr_id` is out of bounds or its type tag is invalid.
     #[must_use]
-    pub fn grammar_expr(&self, expr_id: i32) -> GrammarExpr<'_> {
+    pub fn grammar_expr(
+        &self,
+        expr_id: i32,
+    ) -> GrammarExpr<'_> {
         let row = self.exprs.row(expr_id as usize);
-        let ty = GrammarExprType::try_from(row[0]).expect("builder stores valid expr type tags");
+        let ty = GrammarExprType::try_from(row[0])
+            .expect("builder stores valid expr type tags");
         GrammarExpr {
             ty,
             data: &row[1..],
@@ -229,7 +287,10 @@ impl GrammarBuilder {
     ///
     /// # Panics
     /// Panics if a rule with the same name already exists.
-    pub fn add_rule(&mut self, rule: Rule) -> i32 {
+    pub fn add_rule(
+        &mut self,
+        rule: Rule,
+    ) -> i32 {
         let id = self.rules.len() as i32;
         assert!(
             !self.rule_name_to_id.contains_key(&rule.name),
@@ -242,23 +303,37 @@ impl GrammarBuilder {
     }
 
     /// Adds a rule with the given name and body.
-    pub fn add_rule_named(&mut self, name: impl Into<String>, body_expr_id: i32) -> i32 {
+    pub fn add_rule_named(
+        &mut self,
+        name: impl Into<String>,
+        body_expr_id: i32,
+    ) -> i32 {
         self.add_rule(Rule::new(name, body_expr_id))
     }
 
     /// Adds a rule whose name is derived from `name_hint` (deduplicated with `_N` suffixes).
-    pub fn add_rule_with_hint(&mut self, name_hint: &str, body_expr_id: i32) -> i32 {
+    pub fn add_rule_with_hint(
+        &mut self,
+        name_hint: &str,
+        body_expr_id: i32,
+    ) -> i32 {
         let name = self.get_new_rule_name(name_hint);
         self.add_rule(Rule::new(name, body_expr_id))
     }
 
     /// Adds a body-less rule (set the body later with [`Self::update_rule_body`]).
-    pub fn add_empty_rule(&mut self, name: impl Into<String>) -> i32 {
+    pub fn add_empty_rule(
+        &mut self,
+        name: impl Into<String>,
+    ) -> i32 {
         self.add_rule(Rule::empty(name))
     }
 
     /// Adds a body-less rule with a hinted, deduplicated name.
-    pub fn add_empty_rule_with_hint(&mut self, name_hint: &str) -> i32 {
+    pub fn add_empty_rule_with_hint(
+        &mut self,
+        name_hint: &str,
+    ) -> i32 {
         let name = self.get_new_rule_name(name_hint);
         self.add_rule(Rule::empty(name))
     }
@@ -267,7 +342,11 @@ impl GrammarBuilder {
     ///
     /// # Panics
     /// Panics if `rule_id` is out of bounds.
-    pub fn update_rule_body(&mut self, rule_id: i32, body_expr_id: i32) {
+    pub fn update_rule_body(
+        &mut self,
+        rule_id: i32,
+        body_expr_id: i32,
+    ) {
         self.rules[rule_id as usize].body_expr_id = body_expr_id;
     }
 
@@ -275,7 +354,11 @@ impl GrammarBuilder {
     ///
     /// # Panics
     /// Panics if no rule with that name exists.
-    pub fn update_rule_body_by_name(&mut self, name: &str, body_expr_id: i32) {
+    pub fn update_rule_body_by_name(
+        &mut self,
+        name: &str,
+        body_expr_id: i32,
+    ) {
         let id = self.get_rule_id(name);
         assert!(id != NO_EXPR, "rule {name:?} not found");
         self.update_rule_body(id, body_expr_id);
@@ -285,7 +368,11 @@ impl GrammarBuilder {
     ///
     /// # Panics
     /// Panics if no rule with that name exists.
-    pub fn update_lookahead_assertion_by_name(&mut self, name: &str, lookahead_assertion_id: i32) {
+    pub fn update_lookahead_assertion_by_name(
+        &mut self,
+        name: &str,
+        lookahead_assertion_id: i32,
+    ) {
         let id = self.get_rule_id(name);
         assert!(id != NO_EXPR, "rule {name:?} not found");
         self.update_lookahead_assertion(id, lookahead_assertion_id);
@@ -295,15 +382,24 @@ impl GrammarBuilder {
     ///
     /// # Panics
     /// Panics if `rule_id` is out of bounds.
-    pub fn update_lookahead_assertion(&mut self, rule_id: i32, lookahead_assertion_id: i32) {
-        self.rules[rule_id as usize].lookahead_assertion_id = lookahead_assertion_id;
+    pub fn update_lookahead_assertion(
+        &mut self,
+        rule_id: i32,
+        lookahead_assertion_id: i32,
+    ) {
+        self.rules[rule_id as usize].lookahead_assertion_id =
+            lookahead_assertion_id;
     }
 
     /// Marks a rule's lookahead assertion as exact (or not).
     ///
     /// # Panics
     /// Panics if `rule_id` is out of bounds.
-    pub fn update_lookahead_exact(&mut self, rule_id: i32, is_exact: bool) {
+    pub fn update_lookahead_exact(
+        &mut self,
+        rule_id: i32,
+        is_exact: bool,
+    ) {
         self.rules[rule_id as usize].is_exact_lookahead = is_exact;
     }
 
@@ -318,30 +414,37 @@ impl GrammarBuilder {
     /// # Panics
     /// Panics if `rule_id` is out of bounds.
     #[must_use]
-    pub fn get_rule(&self, rule_id: i32) -> &Rule {
+    pub fn get_rule(
+        &self,
+        rule_id: i32,
+    ) -> &Rule {
         &self.rules[rule_id as usize]
     }
 
     /// The id of the rule with the given name, or [`NO_EXPR`] (`-1`) if absent.
     #[must_use]
-    pub fn get_rule_id(&self, name: &str) -> i32 {
+    pub fn get_rule_id(
+        &self,
+        name: &str,
+    ) -> i32 {
         self.rule_name_to_id.get(name).copied().unwrap_or(NO_EXPR)
     }
 
     /// Returns a fresh rule name based on `name_hint`, appending `_1`, `_2`, … to avoid
     /// collisions (matching the C++ scheme exactly).
-    pub fn get_new_rule_name(&mut self, name_hint: &str) -> String {
+    pub fn get_new_rule_name(
+        &mut self,
+        name_hint: &str,
+    ) -> String {
         if !self.rule_name_to_id.contains_key(name_hint) {
             return name_hint.to_owned();
         }
-        let cnt = self.next_cnt_per_hint.entry(name_hint.to_owned()).or_insert(0);
+        let cnt =
+            self.next_cnt_per_hint.entry(name_hint.to_owned()).or_insert(0);
         if *cnt == 0 {
             *cnt = 1;
         }
-        while self
-            .rule_name_to_id
-            .contains_key(&format!("{name_hint}_{cnt}"))
-        {
+        while self.rule_name_to_id.contains_key(&format!("{name_hint}_{cnt}")) {
             *cnt += 1;
         }
         format!("{name_hint}_{cnt}")

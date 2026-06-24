@@ -11,7 +11,10 @@
 use std::cmp::Ordering;
 
 /// Replaces `lhs` with the sorted union `lhs ∪ rhs`.
-pub fn intset_union(lhs: &mut Vec<i32>, rhs: &[i32]) {
+pub fn intset_union(
+    lhs: &mut Vec<i32>,
+    rhs: &[i32],
+) {
     let mut merged = Vec::with_capacity(lhs.len() + rhs.len());
     let (mut i, mut j) = (0, 0);
     while i < lhs.len() && j < rhs.len() {
@@ -19,16 +22,16 @@ pub fn intset_union(lhs: &mut Vec<i32>, rhs: &[i32]) {
             Ordering::Less => {
                 merged.push(lhs[i]);
                 i += 1;
-            }
+            },
             Ordering::Greater => {
                 merged.push(rhs[j]);
                 j += 1;
-            }
+            },
             Ordering::Equal => {
                 merged.push(lhs[i]);
                 i += 1;
                 j += 1;
-            }
+            },
         }
     }
     merged.extend_from_slice(&lhs[i..]);
@@ -39,7 +42,10 @@ pub fn intset_union(lhs: &mut Vec<i32>, rhs: &[i32]) {
 /// Replaces `lhs` with the sorted intersection `lhs ∩ rhs`, in place.
 ///
 /// As a special case, `lhs == [-1]` denotes the universal set, so the result is `rhs`.
-pub fn intset_intersection(lhs: &mut Vec<i32>, rhs: &[i32]) {
+pub fn intset_intersection(
+    lhs: &mut Vec<i32>,
+    rhs: &[i32],
+) {
     if lhs.as_slice() == [-1] {
         lhs.clear();
         lhs.extend_from_slice(rhs);
@@ -56,14 +62,17 @@ pub fn intset_intersection(lhs: &mut Vec<i32>, rhs: &[i32]) {
                 write += 1;
                 i += 1;
                 j += 1;
-            }
+            },
         }
     }
     lhs.truncate(write);
 }
 
 /// Replaces `lhs` with the sorted difference `lhs − rhs`, in place.
-pub fn intset_difference(lhs: &mut Vec<i32>, rhs: &[i32]) {
+pub fn intset_difference(
+    lhs: &mut Vec<i32>,
+    rhs: &[i32],
+) {
     let mut write = 0;
     let (mut i, mut j) = (0, 0);
     while i < lhs.len() && j < rhs.len() {
@@ -72,12 +81,12 @@ pub fn intset_difference(lhs: &mut Vec<i32>, rhs: &[i32]) {
                 lhs[write] = lhs[i];
                 write += 1;
                 i += 1;
-            }
+            },
             Ordering::Greater => j += 1,
             Ordering::Equal => {
                 i += 1;
                 j += 1;
-            }
+            },
         }
     }
     while i < lhs.len() {
@@ -90,8 +99,12 @@ pub fn intset_difference(lhs: &mut Vec<i32>, rhs: &[i32]) {
 
 /// Returns `[0, n) − excluded`. `excluded` must be sorted with values in `[0, n)`.
 #[must_use]
-pub fn intset_complement(n: i32, excluded: &[i32]) -> Vec<i32> {
-    let mut result = Vec::with_capacity((n as usize).saturating_sub(excluded.len()));
+pub fn intset_complement(
+    n: i32,
+    excluded: &[i32],
+) -> Vec<i32> {
+    let mut result =
+        Vec::with_capacity((n as usize).saturating_sub(excluded.len()));
     let mut it = excluded.iter().peekable();
     for i in 0..n {
         if it.peek() == Some(&&i) {

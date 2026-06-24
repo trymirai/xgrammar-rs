@@ -15,13 +15,22 @@ pub struct CharacterClassElement {
 impl CharacterClassElement {
     /// Creates a range from `lower` to `upper`, inclusive.
     #[must_use]
-    pub const fn new(lower: i32, upper: i32) -> Self {
-        Self { lower, upper }
+    pub const fn new(
+        lower: i32,
+        upper: i32,
+    ) -> Self {
+        Self {
+            lower,
+            upper,
+        }
     }
 
     /// Whether `codepoint` falls within this range.
     #[must_use]
-    pub const fn contains(self, codepoint: i32) -> bool {
+    pub const fn contains(
+        self,
+        codepoint: i32,
+    ) -> bool {
         self.lower <= codepoint && codepoint <= self.upper
     }
 }

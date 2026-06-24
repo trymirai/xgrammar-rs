@@ -82,7 +82,10 @@ impl DynamicBitset {
     /// # Panics
     /// Panics if `index >= len`.
     #[must_use]
-    pub fn get(&self, index: usize) -> bool {
+    pub fn get(
+        &self,
+        index: usize,
+    ) -> bool {
         assert!(index < self.size, "bit index out of bounds");
         (self.data[index / BITS_PER_BLOCK] >> (index % BITS_PER_BLOCK)) & 1 == 1
     }
@@ -101,7 +104,11 @@ impl DynamicBitset {
     ///
     /// # Panics
     /// Panics if `index >= len`.
-    pub fn set(&mut self, index: usize, value: bool) {
+    pub fn set(
+        &mut self,
+        index: usize,
+        value: bool,
+    ) {
         assert!(index < self.size, "bit index out of bounds");
         let word = &mut self.data[index / BITS_PER_BLOCK];
         let mask = 1u32 << (index % BITS_PER_BLOCK);
@@ -116,7 +123,10 @@ impl DynamicBitset {
     ///
     /// # Panics
     /// Panics if `index >= len`.
-    pub fn reset(&mut self, index: usize) {
+    pub fn reset(
+        &mut self,
+        index: usize,
+    ) {
         self.set(index, false);
     }
 
@@ -125,7 +135,10 @@ impl DynamicBitset {
     /// # Panics
     /// Panics if `self`'s buffer is larger than `other`'s (mirrors the C++ contract that
     /// `self` must be no larger than `other`).
-    pub fn or_assign(&mut self, other: &DynamicBitset) {
+    pub fn or_assign(
+        &mut self,
+        other: &DynamicBitset,
+    ) {
         assert!(
             self.data.len() <= other.data.len(),
             "or_assign target buffer must not exceed the source buffer"
@@ -143,7 +156,10 @@ impl DynamicBitset {
 
     /// Index of the first set bit strictly after `pos`, or `None`.
     #[must_use]
-    pub fn find_next_one(&self, pos: usize) -> Option<usize> {
+    pub fn find_next_one(
+        &self,
+        pos: usize,
+    ) -> Option<usize> {
         if self.size == 0 || pos >= self.size - 1 {
             return None;
         }
@@ -167,7 +183,10 @@ impl DynamicBitset {
 
     /// Index of the first cleared bit strictly after `pos`, or `None`.
     #[must_use]
-    pub fn find_next_zero(&self, pos: usize) -> Option<usize> {
+    pub fn find_next_zero(
+        &self,
+        pos: usize,
+    ) -> Option<usize> {
         if self.size == 0 || pos >= self.size - 1 {
             return None;
         }
@@ -208,16 +227,22 @@ impl DynamicBitset {
         (self.data[last] & last_mask) == last_mask
     }
 
-    fn do_find_one_from(&self, first_block: usize) -> Option<usize> {
-        let pos = self.data[first_block..].iter().position(|&w| w != 0)? + first_block;
+    fn do_find_one_from(
+        &self,
+        first_block: usize,
+    ) -> Option<usize> {
+        let pos = self.data[first_block..].iter().position(|&w| w != 0)?
+            + first_block;
         Some(pos * BITS_PER_BLOCK + self.data[pos].trailing_zeros() as usize)
     }
 
-    fn do_find_zero_from(&self, first_block: usize) -> Option<usize> {
-        let pos = self.data[first_block..]
-            .iter()
-            .position(|&w| w != u32::MAX)?
-            + first_block;
+    fn do_find_zero_from(
+        &self,
+        first_block: usize,
+    ) -> Option<usize> {
+        let pos =
+            self.data[first_block..].iter().position(|&w| w != u32::MAX)?
+                + first_block;
         Some(pos * BITS_PER_BLOCK + (!self.data[pos]).trailing_zeros() as usize)
     }
 }

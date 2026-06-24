@@ -1,7 +1,6 @@
 //! Unified error for turning an EBNF string into a grammar (lexing or parsing).
 
-use super::lexer_error::LexerError;
-use super::parse_error::ParserError;
+use super::{lexer_error::LexerError, parse_error::ParserError};
 
 /// A failure while converting EBNF text to a grammar.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]

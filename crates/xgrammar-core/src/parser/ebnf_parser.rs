@@ -3,15 +3,17 @@
 //! Produces the raw (un-normalized) BNF AST, including the four macros (`TagDispatch`,
 //! `Token`, `ExcludeToken`, `TokenTagDispatch`).
 
-use super::ebnf_error::EbnfError;
-use super::ebnf_lexer::tokenize;
-use super::macro_ir::{MacroArguments, MacroValue};
-use super::parse_error::ParserError;
-use super::token::Token;
-use super::token_type::TokenType;
+use super::{
+    ebnf_error::EbnfError,
+    ebnf_lexer::tokenize,
+    macro_ir::{MacroArguments, MacroValue},
+    parse_error::ParserError,
+    token::Token,
+    token_type::TokenType,
+};
 use crate::grammar::{
-    CharacterClassElement, Grammar, GrammarBuilder, GrammarExprType, NO_EXPR, TagDispatch,
-    TokenTagDispatch,
+    CharacterClassElement, Grammar, GrammarBuilder, GrammarExprType, NO_EXPR,
+    TagDispatch, TokenTagDispatch,
 };
 
 const MAX_NEST_LAYER: i32 = 1000;
@@ -38,7 +40,10 @@ struct Parser {
 }
 
 impl Parser {
-    fn new(tokens: Vec<Token>, root_rule_name: &str) -> Self {
+    fn new(
+        tokens: Vec<Token>,
+        root_rule_name: &str,
+    ) -> Self {
         Self {
             builder: GrammarBuilder::new(),
             tokens,
@@ -49,7 +54,10 @@ impl Parser {
         }
     }
 
-    fn peek(&self, delta: isize) -> &Token {
+    fn peek(
+        &self,
+        delta: isize,
+    ) -> &Token {
         let last = self.tokens.len() as isize - 1;
         let idx = (self.pos as isize + delta).clamp(0, last) as usize;
         &self.tokens[idx]
@@ -59,15 +67,25 @@ impl Parser {
         self.peek(0)
     }
 
-    fn consume(&mut self, cnt: usize) {
+    fn consume(
+        &mut self,
+        cnt: usize,
+    ) {
         self.pos += cnt;
     }
 
-    fn error(&self, message: impl Into<String>) -> ParserError {
+    fn error(
+        &self,
+        message: impl Into<String>,
+    ) -> ParserError {
         self.error_at(0, message)
     }
 
-    fn error_at(&self, delta: isize, message: impl Into<String>) -> ParserError {
+    fn error_at(
+        &self,
+        delta: isize,
+        message: impl Into<String>,
+    ) -> ParserError {
         let token = self.peek(delta);
         ParserError {
             line: token.line,
@@ -76,7 +94,11 @@ impl Parser {
         }
     }
 
-    fn expect(&mut self, ty: TokenType, message: &str) -> Result<(), ParserError> {
+    fn expect(
+        &mut self,
+        ty: TokenType,
+        message: &str,
+    ) -> Result<(), ParserError> {
         if self.cur().ty != ty {
             return Err(self.error(message));
         }
@@ -107,19 +129,25 @@ impl Parser {
             self.consume(1);
         }
 
-        while self.cur().ty != TokenType::RBracket && self.cur().ty != TokenType::EndOfFile {
+        while self.cur().ty != TokenType::RBracket
+            && self.cur().ty != TokenType::EndOfFile
+        {
             if self.cur().ty == TokenType::EscapeInCharClass {
-                return Err(self.error("Character class escape is not supported yet in EBNF"));
+                return Err(self.error(
+                    "Character class escape is not supported yet in EBNF",
+                ));
             }
             let lower = match self.cur().ty {
-                TokenType::CharInCharClass => self.cur().value.as_codepoint().unwrap_or(0),
+                TokenType::CharInCharClass => {
+                    self.cur().value.as_codepoint().unwrap_or(0)
+                },
                 TokenType::Dash => i32::from(b'-'),
                 _ => {
                     return Err(self.error(format!(
                         "Unexpected character in character class: {}",
                         self.cur().lexeme
                     )));
-                }
+                },
             };
             self.consume(1);
 
@@ -130,7 +158,9 @@ impl Parser {
                 );
             if is_range {
                 let upper = match self.peek(1).ty {
-                    TokenType::CharInCharClass => self.peek(1).value.as_codepoint().unwrap_or(0),
+                    TokenType::CharInCharClass => {
+                        self.peek(1).value.as_codepoint().unwrap_or(0)
+                    },
                     _ => i32::from(b'-'),
                 };
                 if lower > upper {
@@ -167,7 +197,9 @@ impl Parser {
         let name = self.parse_identifier()?;
         let rule_id = self.builder.get_rule_id(&name);
         if rule_id == NO_EXPR {
-            return Err(self.error_at(-1, format!("Rule \"{name}\" is not defined")));
+            return Err(
+                self.error_at(-1, format!("Rule \"{name}\" is not defined"))
+            );
         }
         Ok(self.builder.add_rule_ref(rule_id))
     }
@@ -179,22 +211,22 @@ impl Parser {
                 let value = self.cur_str();
                 self.consume(1);
                 Ok(MacroValue::Str(value))
-            }
+            },
             TokenType::IntegerLiteral => {
                 let value = self.cur().value.as_int().unwrap_or(0);
                 self.consume(1);
                 Ok(MacroValue::Int(value))
-            }
+            },
             TokenType::BooleanLiteral => {
                 let value = self.cur().value.as_bool().unwrap_or(false);
                 self.consume(1);
                 Ok(MacroValue::Bool(value))
-            }
+            },
             TokenType::Identifier => {
                 let name = self.cur_str();
                 self.consume(1);
                 Ok(MacroValue::Identifier(name))
-            }
+            },
             TokenType::LParen => {
                 self.consume(1);
                 let mut elements = Vec::new();
@@ -215,8 +247,10 @@ impl Parser {
                 }
                 self.consume(1); // Consume )
                 Ok(MacroValue::Tuple(elements))
-            }
-            _ => Err(self.error("Expect string, integer, boolean, or tuple in macro argument")),
+            },
+            _ => Err(self.error(
+                "Expect string, integer, boolean, or tuple in macro argument",
+            )),
         }
     }
 
@@ -226,7 +260,9 @@ impl Parser {
         let mut args = MacroArguments::default();
         if self.cur().ty != TokenType::RParen {
             loop {
-                if self.cur().ty == TokenType::Identifier && self.peek(1).ty == TokenType::Equal {
+                if self.cur().ty == TokenType::Identifier
+                    && self.peek(1).ty == TokenType::Equal
+                {
                     let name = self.cur_str();
                     self.consume(2); // Consume identifier and =
                     let value = self.parse_macro_value()?;
@@ -255,34 +291,49 @@ impl Parser {
 
         for (name, _) in &args.named {
             if name != "loop_after_dispatch" && name != "excludes" {
-                return Err(
-                    self.error_at(delta, format!("Unknown named argument for TagDispatch: {name}"))
-                );
+                return Err(self.error_at(
+                    delta,
+                    format!("Unknown named argument for TagDispatch: {name}"),
+                ));
             }
         }
 
         let mut tag_rule_pairs = Vec::new();
         for arg in &args.positional {
             let MacroValue::Tuple(elements) = arg else {
-                return Err(self.error_at(delta, "Each tag dispatch element must be a tuple"));
+                return Err(self.error_at(
+                    delta,
+                    "Each tag dispatch element must be a tuple",
+                ));
             };
             if elements.len() != 2 {
-                return Err(
-                    self.error_at(delta, "Each tag dispatch element must be a pair (tag, rule)")
-                );
+                return Err(self.error_at(
+                    delta,
+                    "Each tag dispatch element must be a pair (tag, rule)",
+                ));
             }
             let MacroValue::Str(tag) = &elements[0] else {
-                return Err(self.error_at(delta, "Tag must be a non-empty string literal"));
+                return Err(self.error_at(
+                    delta,
+                    "Tag must be a non-empty string literal",
+                ));
             };
             if tag.is_empty() {
-                return Err(self.error_at(delta, "Tag must be a non-empty string literal"));
+                return Err(self.error_at(
+                    delta,
+                    "Tag must be a non-empty string literal",
+                ));
             }
             let MacroValue::Identifier(rule_name) = &elements[1] else {
-                return Err(self.error_at(delta, "Rule reference must be an identifier"));
+                return Err(self
+                    .error_at(delta, "Rule reference must be an identifier"));
             };
             let rule_id = self.builder.get_rule_id(rule_name);
             if rule_id == NO_EXPR {
-                return Err(self.error_at(delta, format!("Rule \"{rule_name}\" is not defined")));
+                return Err(self.error_at(
+                    delta,
+                    format!("Rule \"{rule_name}\" is not defined"),
+                ));
             }
             tag_rule_pairs.push((tag.clone().into_bytes(), rule_id));
         }
@@ -290,7 +341,10 @@ impl Parser {
         let mut loop_after_dispatch = true;
         if let Some(value) = args.named("loop_after_dispatch") {
             let MacroValue::Bool(b) = value else {
-                return Err(self.error_at(delta, "loop_after_dispatch must be a boolean literal"));
+                return Err(self.error_at(
+                    delta,
+                    "loop_after_dispatch must be a boolean literal",
+                ));
             };
             loop_after_dispatch = *b;
         }
@@ -302,10 +356,16 @@ impl Parser {
             };
             for element in elements {
                 let MacroValue::Str(s) = element else {
-                    return Err(self.error_at(delta, "Exclude must be a non-empty string literal"));
+                    return Err(self.error_at(
+                        delta,
+                        "Exclude must be a non-empty string literal",
+                    ));
                 };
                 if s.is_empty() {
-                    return Err(self.error_at(delta, "Exclude must be a non-empty string literal"));
+                    return Err(self.error_at(
+                        delta,
+                        "Exclude must be a non-empty string literal",
+                    ));
                 }
                 excludes.push(s.clone().into_bytes());
             }
@@ -340,18 +400,29 @@ impl Parser {
         let delta = start as isize - self.pos as isize;
 
         if !args.named.is_empty() {
-            return Err(self.error_at(delta, "Token() does not accept named arguments"));
+            return Err(
+                self.error_at(delta, "Token() does not accept named arguments")
+            );
         }
         if args.positional.is_empty() {
-            return Err(self.error_at(delta, "Token() requires at least one integer argument"));
+            return Err(self.error_at(
+                delta,
+                "Token() requires at least one integer argument",
+            ));
         }
         let mut token_ids = Vec::with_capacity(args.positional.len());
         for arg in &args.positional {
             let MacroValue::Int(value) = arg else {
-                return Err(self.error_at(delta, "Token() arguments must be non-negative integers"));
+                return Err(self.error_at(
+                    delta,
+                    "Token() arguments must be non-negative integers",
+                ));
             };
             if *value < 0 {
-                return Err(self.error_at(delta, "Token() arguments must be non-negative integers"));
+                return Err(self.error_at(
+                    delta,
+                    "Token() arguments must be non-negative integers",
+                ));
             }
             token_ids.push(*value as i32);
         }
@@ -367,24 +438,30 @@ impl Parser {
         let delta = start as isize - self.pos as isize;
 
         if !args.named.is_empty() {
-            return Err(self.error_at(delta, "ExcludeToken() does not accept named arguments"));
+            return Err(self.error_at(
+                delta,
+                "ExcludeToken() does not accept named arguments",
+            ));
         }
         if args.positional.is_empty() {
-            return Err(
-                self.error_at(delta, "ExcludeToken() requires at least one integer argument")
-            );
+            return Err(self.error_at(
+                delta,
+                "ExcludeToken() requires at least one integer argument",
+            ));
         }
         let mut token_ids = Vec::with_capacity(args.positional.len());
         for arg in &args.positional {
             let MacroValue::Int(value) = arg else {
-                return Err(
-                    self.error_at(delta, "ExcludeToken() arguments must be non-negative integers")
-                );
+                return Err(self.error_at(
+                    delta,
+                    "ExcludeToken() arguments must be non-negative integers",
+                ));
             };
             if *value < 0 {
-                return Err(
-                    self.error_at(delta, "ExcludeToken() arguments must be non-negative integers")
-                );
+                return Err(self.error_at(
+                    delta,
+                    "ExcludeToken() arguments must be non-negative integers",
+                ));
             }
             token_ids.push(*value as i32);
         }
@@ -403,7 +480,9 @@ impl Parser {
             if name != "loop_after_dispatch" && name != "excludes" {
                 return Err(self.error_at(
                     delta,
-                    format!("Unknown named argument for TokenTagDispatch: {name}"),
+                    format!(
+                        "Unknown named argument for TokenTagDispatch: {name}"
+                    ),
                 ));
             }
         }
@@ -423,17 +502,27 @@ impl Parser {
                 ));
             }
             let MacroValue::Int(token_id) = &elements[0] else {
-                return Err(self.error_at(delta, "Token trigger ID must be a non-negative integer"));
+                return Err(self.error_at(
+                    delta,
+                    "Token trigger ID must be a non-negative integer",
+                ));
             };
             if *token_id < 0 {
-                return Err(self.error_at(delta, "Token trigger ID must be a non-negative integer"));
+                return Err(self.error_at(
+                    delta,
+                    "Token trigger ID must be a non-negative integer",
+                ));
             }
             let MacroValue::Identifier(rule_name) = &elements[1] else {
-                return Err(self.error_at(delta, "Rule reference must be an identifier"));
+                return Err(self
+                    .error_at(delta, "Rule reference must be an identifier"));
             };
             let rule_id = self.builder.get_rule_id(rule_name);
             if rule_id == NO_EXPR {
-                return Err(self.error_at(delta, format!("Rule \"{rule_name}\" is not defined")));
+                return Err(self.error_at(
+                    delta,
+                    format!("Rule \"{rule_name}\" is not defined"),
+                ));
             }
             trigger_rule_pairs.push((*token_id as i32, rule_id));
         }
@@ -441,7 +530,8 @@ impl Parser {
         let mut loop_after_dispatch = true;
         if let Some(value) = args.named("loop_after_dispatch") {
             let MacroValue::Bool(b) = value else {
-                return Err(self.error_at(delta, "loop_after_dispatch must be a boolean"));
+                return Err(self
+                    .error_at(delta, "loop_after_dispatch must be a boolean"));
             };
             loop_after_dispatch = *b;
         }
@@ -453,14 +543,16 @@ impl Parser {
             };
             for element in elements {
                 let MacroValue::Int(token_id) = element else {
-                    return Err(
-                        self.error_at(delta, "Exclude token ID must be a non-negative integer")
-                    );
+                    return Err(self.error_at(
+                        delta,
+                        "Exclude token ID must be a non-negative integer",
+                    ));
                 };
                 if *token_id < 0 {
-                    return Err(
-                        self.error_at(delta, "Exclude token ID must be a non-negative integer")
-                    );
+                    return Err(self.error_at(
+                        delta,
+                        "Exclude token ID must be a non-negative integer",
+                    ));
                 }
                 excludes.push(*token_id as i32);
             }
@@ -492,7 +584,10 @@ impl Parser {
             TokenType::LParen => {
                 self.nest_layer_guard += 1;
                 if self.nest_layer_guard > MAX_NEST_LAYER {
-                    return Err(self.error_at(-1, "Nest layer exceeded the maximum limit"));
+                    return Err(self.error_at(
+                        -1,
+                        "Nest layer exceeded the maximum limit",
+                    ));
                 }
                 self.consume(1);
                 if self.cur().ty == TokenType::RParen {
@@ -504,7 +599,7 @@ impl Parser {
                 self.expect(TokenType::RParen, "Expect )")?;
                 self.nest_layer_guard -= 1;
                 Ok(expr)
-            }
+            },
             TokenType::LBracket => self.parse_char_class(),
             TokenType::StringLiteral => self.parse_string(),
             TokenType::Identifier => match self.cur_str().as_str() {
@@ -514,13 +609,19 @@ impl Parser {
                 "TokenTagDispatch" => self.parse_token_tag_dispatch(),
                 _ => self.parse_rule_ref(),
             },
-            _ => Err(self.error(format!("Expect element, but got {}", self.cur().lexeme))),
+            _ => Err(self.error(format!(
+                "Expect element, but got {}",
+                self.cur().lexeme
+            ))),
         }
     }
 
     fn parse_integer(&mut self) -> Result<i64, ParserError> {
         if self.cur().ty != TokenType::IntegerLiteral {
-            return Err(self.error(format!("Expect integer, but got {}", self.cur().lexeme)));
+            return Err(self.error(format!(
+                "Expect integer, but got {}",
+                self.cur().lexeme
+            )));
         }
         let num = self.cur().value.as_int().unwrap_or(0);
         self.consume(1);
@@ -545,7 +646,9 @@ impl Parser {
                 }
                 // The printer emits `{n, -1}` for unbounded upper bounds, and `-` is a
                 // name char, so the lexer yields Identifier("-1"). Accept it as `{n,}`.
-                if self.cur().ty == TokenType::Identifier && self.cur().lexeme == "-1" {
+                if self.cur().ty == TokenType::Identifier
+                    && self.cur().lexeme == "-1"
+                {
                     self.consume(1);
                     self.expect(TokenType::RBrace, "Expect }")?;
                     return Ok((lower, -1));
@@ -559,20 +662,24 @@ impl Parser {
                 }
                 self.expect(TokenType::RBrace, "Expect }")?;
                 Ok((lower, upper))
-            }
+            },
             TokenType::RBrace => {
                 self.consume(1);
                 Ok((lower, lower))
-            }
+            },
             _ => Err(self.error("Expect ',' or '}' in repetition range")),
         }
     }
 
-    fn handle_star_quantifier(&mut self, grammar_expr_id: i32) -> i32 {
+    fn handle_star_quantifier(
+        &mut self,
+        grammar_expr_id: i32,
+    ) -> i32 {
         // A character-class star has a dedicated expr type: [a-z]*
         let char_class = {
             let expr = self.builder.grammar_expr(grammar_expr_id);
-            (expr.ty == GrammarExprType::CharacterClass).then(|| expr.character_class())
+            (expr.ty == GrammarExprType::CharacterClass)
+                .then(|| expr.character_class())
         };
         if let Some((is_negative, ranges)) = char_class {
             return self.builder.add_character_class_star(&ranges, is_negative);
@@ -582,24 +689,32 @@ impl Parser {
         let new_rule_id = self.builder.add_empty_rule(new_rule_name);
         let ref_to_new_rule = self.builder.add_rule_ref(new_rule_id);
         let empty = self.builder.add_empty_str();
-        let seq = self.builder.add_sequence(&[grammar_expr_id, ref_to_new_rule]);
+        let seq =
+            self.builder.add_sequence(&[grammar_expr_id, ref_to_new_rule]);
         let body = self.builder.add_choices(&[empty, seq]);
         self.builder.update_rule_body(new_rule_id, body);
         self.builder.add_rule_ref(new_rule_id)
     }
 
-    fn handle_plus_quantifier(&mut self, grammar_expr_id: i32) -> i32 {
+    fn handle_plus_quantifier(
+        &mut self,
+        grammar_expr_id: i32,
+    ) -> i32 {
         // a+  -->  rule ::= a rule | a
         let new_rule_name = self.builder.get_new_rule_name(&self.cur_rule_name);
         let new_rule_id = self.builder.add_empty_rule(new_rule_name);
         let ref_to_new_rule = self.builder.add_rule_ref(new_rule_id);
-        let seq = self.builder.add_sequence(&[grammar_expr_id, ref_to_new_rule]);
+        let seq =
+            self.builder.add_sequence(&[grammar_expr_id, ref_to_new_rule]);
         let body = self.builder.add_choices(&[seq, grammar_expr_id]);
         self.builder.update_rule_body(new_rule_id, body);
         self.builder.add_rule_ref(new_rule_id)
     }
 
-    fn handle_question_quantifier(&mut self, grammar_expr_id: i32) -> i32 {
+    fn handle_question_quantifier(
+        &mut self,
+        grammar_expr_id: i32,
+    ) -> i32 {
         // a?  -->  rule ::= a | empty
         let new_rule_name = self.builder.get_new_rule_name(&self.cur_rule_name);
         let empty = self.builder.add_empty_str();
@@ -614,15 +729,15 @@ impl Parser {
             TokenType::Star => {
                 self.consume(1);
                 self.handle_star_quantifier(grammar_expr_id)
-            }
+            },
             TokenType::Plus => {
                 self.consume(1);
                 self.handle_plus_quantifier(grammar_expr_id)
-            }
+            },
             TokenType::Question => {
                 self.consume(1);
                 self.handle_question_quantifier(grammar_expr_id)
-            }
+            },
             TokenType::LBrace => {
                 let (lower, upper) = self.parse_repetition_range()?;
                 let name = self.cur_rule_name.clone();
@@ -630,9 +745,13 @@ impl Parser {
                     &name,
                     grammar_expr_id,
                     lower as i32,
-                    if upper == -1 { -1 } else { upper as i32 },
+                    if upper == -1 {
+                        -1
+                    } else {
+                        upper as i32
+                    },
                 )
-            }
+            },
             _ => grammar_expr_id,
         })
     }
@@ -662,7 +781,10 @@ impl Parser {
     }
 
     fn parse_lookahead_assertion(&mut self) -> Result<i32, ParserError> {
-        self.expect(TokenType::LookaheadLParen, "Expect (= in lookahead assertion")?;
+        self.expect(
+            TokenType::LookaheadLParen,
+            "Expect (= in lookahead assertion",
+        )?;
         let result = self.parse_choices()?;
         self.expect(TokenType::RParen, "Expect )")?;
         Ok(result)
@@ -689,7 +811,11 @@ impl Parser {
     fn init_rule_names(&mut self) -> Result<(), ParserError> {
         for i in 0..self.tokens.len() {
             if self.tokens[i].ty == TokenType::RuleName {
-                let name = self.tokens[i].value.as_str().unwrap_or_default().to_owned();
+                let name = self.tokens[i]
+                    .value
+                    .as_str()
+                    .unwrap_or_default()
+                    .to_owned();
                 if self.builder.get_rule_id(&name) != NO_EXPR {
                     return Err(self.error_at(
                         i as isize - self.pos as isize,
@@ -713,20 +839,17 @@ impl Parser {
         while self.cur().ty != TokenType::EndOfFile {
             let (name, body, lookahead) = self.parse_rule()?;
             self.builder.update_rule_body_by_name(&name, body);
-            self.builder
-                .update_lookahead_assertion_by_name(&name, lookahead);
+            self.builder.update_lookahead_assertion_by_name(&name, lookahead);
         }
         let Parser {
             builder,
             root_rule_name,
             ..
         } = self;
-        builder
-            .into_grammar(&root_rule_name)
-            .map_err(|message| ParserError {
-                line: 0,
-                column: 0,
-                message,
-            })
+        builder.into_grammar(&root_rule_name).map_err(|message| ParserError {
+            line: 0,
+            column: 0,
+            message,
+        })
     }
 }

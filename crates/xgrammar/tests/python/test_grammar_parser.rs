@@ -4,32 +4,40 @@
 //! exercise the grammar-functor passes (`GrammarFunctor`) or normalized `from_ebnf` are
 //! added once those land (M3 functors).
 
-use xgrammar::functor::{
-    dead_code_eliminator, lookahead_assertion_analyzer, rule_inliner, structure_normalizer,
+use xgrammar::{
+    functor::{
+        dead_code_eliminator, lookahead_assertion_analyzer, rule_inliner,
+        structure_normalizer,
+    },
+    grammar::Grammar,
+    parser::ebnf_to_grammar_no_normalization,
 };
-use xgrammar::grammar::Grammar;
-use xgrammar::parser::ebnf_to_grammar_no_normalization;
 
 /// Parse without normalization (root rule "root") and render back to EBNF.
 fn no_norm(ebnf: &str) -> String {
-    ebnf_to_grammar_no_normalization(ebnf, "root")
-        .unwrap()
-        .to_string()
+    ebnf_to_grammar_no_normalization(ebnf, "root").unwrap().to_string()
 }
 
 /// Parse, then run the structure-normalizer pass, and render back to EBNF.
 fn normalized(ebnf: &str) -> String {
-    structure_normalizer(&ebnf_to_grammar_no_normalization(ebnf, "root").unwrap()).to_string()
+    structure_normalizer(
+        &ebnf_to_grammar_no_normalization(ebnf, "root").unwrap(),
+    )
+    .to_string()
 }
 
 /// Parse, then run the dead-code-eliminator pass, and render back to EBNF.
 fn dead_code(ebnf: &str) -> String {
-    dead_code_eliminator(&ebnf_to_grammar_no_normalization(ebnf, "root").unwrap()).to_string()
+    dead_code_eliminator(
+        &ebnf_to_grammar_no_normalization(ebnf, "root").unwrap(),
+    )
+    .to_string()
 }
 
 /// Parse, then run the rule-inliner pass, and render back to EBNF.
 fn inlined(ebnf: &str) -> String {
-    rule_inliner(&ebnf_to_grammar_no_normalization(ebnf, "root").unwrap()).to_string()
+    rule_inliner(&ebnf_to_grammar_no_normalization(ebnf, "root").unwrap())
+        .to_string()
 }
 
 /// Full `Grammar::from_ebnf` (parse + normalize), rendered back to EBNF.
@@ -39,15 +47,15 @@ fn from_ebnf(ebnf: &str) -> String {
 
 /// Parse, then run the lookahead-assertion-analyzer pass, and render back to EBNF.
 fn lookahead_analyzed(ebnf: &str) -> String {
-    lookahead_assertion_analyzer(&ebnf_to_grammar_no_normalization(ebnf, "root").unwrap())
-        .to_string()
+    lookahead_assertion_analyzer(
+        &ebnf_to_grammar_no_normalization(ebnf, "root").unwrap(),
+    )
+    .to_string()
 }
 
 /// The (lexer or parser) error message from parsing `ebnf` without normalization.
 fn parse_err(ebnf: &str) -> String {
-    ebnf_to_grammar_no_normalization(ebnf, "root")
-        .unwrap_err()
-        .to_string()
+    ebnf_to_grammar_no_normalization(ebnf, "root").unwrap_err().to_string()
 }
 
 /// The error message from `Grammar::from_ebnf` on `ebnf`.
@@ -300,7 +308,8 @@ rule2 ::= (("b") | ("c" [b-c]))
 
 #[test]
 fn test_space() {
-    let before = "\n\nroot::=\"a\"  \"b\" (\"c\"\"d\"\n\"e\") |\n\n\"f\" | \"g\"\n";
+    let before =
+        "\n\nroot::=\"a\"  \"b\" (\"c\"\"d\"\n\"e\") |\n\n\"f\" | \"g\"\n";
     assert_eq!(
         from_ebnf(before),
         concat!(r#"root ::= (("a" "b" "c" "d" "e") | ("f") | ("g"))"#, "\n")
@@ -339,20 +348,33 @@ rule1 ::= ("")
 fn test_question_quantifier() {
     assert_eq!(
         no_norm(r#"root ::= "a"?"#),
-        concat!(r#"root ::= ((root_1))"#, "\n", r#"root_1 ::= ("" | "a")"#, "\n")
+        concat!(
+            r#"root ::= ((root_1))"#,
+            "\n",
+            r#"root_1 ::= ("" | "a")"#,
+            "\n"
+        )
     );
 }
 
 #[test]
 fn test_character_class_star() {
-    assert_eq!(no_norm("root ::= [a-z]*"), concat!("root ::= (([a-z]*))", "\n"));
+    assert_eq!(
+        no_norm("root ::= [a-z]*"),
+        concat!("root ::= (([a-z]*))", "\n")
+    );
 }
 
 #[test]
 fn test_repetition_range_exact() {
     assert_eq!(
         no_norm(r#"root ::= "a"{3}"#),
-        concat!(r#"root ::= ((root_1{3, 3}))"#, "\n", r#"root_1 ::= "a""#, "\n")
+        concat!(
+            r#"root ::= ((root_1{3, 3}))"#,
+            "\n",
+            r#"root_1 ::= "a""#,
+            "\n"
+        )
     );
 }
 
@@ -360,7 +382,12 @@ fn test_repetition_range_exact() {
 fn test_repetition_range_min_max() {
     assert_eq!(
         no_norm(r#"root ::= "a"{2,4}"#),
-        concat!(r#"root ::= ((root_1{2, 4}))"#, "\n", r#"root_1 ::= "a""#, "\n")
+        concat!(
+            r#"root ::= ((root_1{2, 4}))"#,
+            "\n",
+            r#"root_1 ::= "a""#,
+            "\n"
+        )
     );
 }
 
@@ -368,7 +395,12 @@ fn test_repetition_range_min_max() {
 fn test_repetition_range_min_only() {
     assert_eq!(
         no_norm(r#"root ::= "a"{2,}"#),
-        concat!(r#"root ::= ((root_1{2, -1}))"#, "\n", r#"root_1 ::= "a""#, "\n")
+        concat!(
+            r#"root ::= ((root_1{2, -1}))"#,
+            "\n",
+            r#"root_1 ::= "a""#,
+            "\n"
+        )
     );
 }
 
@@ -408,8 +440,10 @@ fn test_unicode_escape() {
     // © and ☃ (U+2603) are non-printable, so they render as hex / unicode escapes.
     // Build the expectation with an explicit backslash char to avoid escaping noise.
     let bs = char::from_u32(0x5c).unwrap();
-    let expected = format!(r#"root ::= (("ABC{bs}xa9{bs}u2603"))
-"#);
+    let expected = format!(
+        r#"root ::= (("ABC{bs}xa9{bs}u2603"))
+"#
+    );
     assert_eq!(no_norm(r#"root ::= "ABC©☃""#), expected);
 }
 
@@ -445,21 +479,27 @@ number_3 ::= ("" | (("." number_2)))
 
 #[test]
 fn test_lexer_parser_errors() {
-    assert!(parse_err(r#"root ::= "a" ""#)
-        .contains(r#"EBNF lexer error at line 1, column 15: Expect " in string literal"#));
+    assert!(parse_err(r#"root ::= "a" ""#).contains(
+        r#"EBNF lexer error at line 1, column 15: Expect " in string literal"#
+    ));
     assert!(parse_err("root ::= [a\n]").contains(
         "EBNF lexer error at line 1, column 12: Character class should not contain newline"
     ));
-    assert!(parse_err(r#"root ::= "\@""#)
-        .contains("EBNF lexer error at line 1, column 11: Invalid escape sequence"));
-    assert!(parse_err(r#"root ::= "\uFF""#)
-        .contains("EBNF lexer error at line 1, column 11: Invalid escape sequence"));
+    assert!(parse_err(r#"root ::= "\@""#).contains(
+        "EBNF lexer error at line 1, column 11: Invalid escape sequence"
+    ));
+    assert!(parse_err(r#"root ::= "\uFF""#).contains(
+        "EBNF lexer error at line 1, column 11: Invalid escape sequence"
+    ));
     assert!(parse_err(r#"::= "a""#)
         .contains("EBNF lexer error at line 1, column 1: Assign should not be the first token"));
-    assert!(parse_err("root ::= a b")
-        .contains(r#"EBNF parser error at line 1, column 10: Rule "a" is not defined"#));
-    assert!(parse_err(r#"root ::= "a" |"#)
-        .contains("EBNF parser error at line 1, column 15: Expect element"));
+    assert!(parse_err("root ::= a b").contains(
+        r#"EBNF parser error at line 1, column 10: Rule "a" is not defined"#
+    ));
+    assert!(
+        parse_err(r#"root ::= "a" |"#)
+            .contains("EBNF parser error at line 1, column 15: Expect element")
+    );
     assert!(parse_err("root ::= [Z-A]").contains(
         "EBNF parser error at line 1, column 11: Invalid character class: lower bound is larger than upper bound"
     ));
@@ -468,8 +508,11 @@ fn test_lexer_parser_errors() {
     assert!(parse_err(r#"a ::= "a""#).contains(
         r#"EBNF parser error at line 1, column 1: The root rule with name "root" is not found"#
     ));
-    assert!(parse_err(r#"root ::= "a" (="a") (="b")"#)
-        .contains("EBNF parser error at line 1, column 21: Expect rule name"));
+    assert!(
+        parse_err(r#"root ::= "a" (="a") (="b")"#).contains(
+            "EBNF parser error at line 1, column 21: Expect rule name"
+        )
+    );
 }
 
 #[test]
@@ -480,12 +523,15 @@ fn test_end_to_end_errors() {
 
 #[test]
 fn test_error_consecutive_quantifiers() {
-    assert!(from_ebnf_err(r#"root ::= "a"{1,3}{1,3}"#)
-        .contains("EBNF parser error at line 1, column 18: Expect element, but got {"));
-    assert!(from_ebnf_err(r#"root ::= "a"++"#)
-        .contains("EBNF parser error at line 1, column 14: Expect element, but got +"));
-    assert!(from_ebnf_err(r#"root ::= "a"??"#)
-        .contains("EBNF parser error at line 1, column 14: Expect element, but got ?"));
+    assert!(from_ebnf_err(r#"root ::= "a"{1,3}{1,3}"#).contains(
+        "EBNF parser error at line 1, column 18: Expect element, but got {"
+    ));
+    assert!(from_ebnf_err(r#"root ::= "a"++"#).contains(
+        "EBNF parser error at line 1, column 14: Expect element, but got +"
+    ));
+    assert!(from_ebnf_err(r#"root ::= "a"??"#).contains(
+        "EBNF parser error at line 1, column 14: Expect element, but got ?"
+    ));
 }
 
 #[test]

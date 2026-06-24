@@ -1,8 +1,10 @@
 //! A borrowed view over one grammar expression — a port of
 //! `Grammar::Impl::GrammarExpr` in `cpp/grammar_impl.h`.
 
-use super::character_class_element::CharacterClassElement;
-use super::grammar_expr_type::GrammarExprType;
+use super::{
+    character_class_element::CharacterClassElement,
+    grammar_expr_type::GrammarExprType,
+};
 
 /// A read-only view of a grammar expression: its [`GrammarExprType`] and its `i32` data
 /// payload, borrowed from the grammar's flat buffer.
@@ -47,7 +49,8 @@ impl<'a> GrammarExpr<'a> {
     pub fn character_class(&self) -> (bool, Vec<CharacterClassElement>) {
         debug_assert!(matches!(
             self.ty,
-            GrammarExprType::CharacterClass | GrammarExprType::CharacterClassStar
+            GrammarExprType::CharacterClass
+                | GrammarExprType::CharacterClassStar
         ));
         let is_negative = self.data[0] != 0;
         let ranges = self.data[1..]

@@ -5,8 +5,10 @@
 //! RAII [`RecursionGuard`]. Recursion is always within a single thread, so the counter is
 //! thread-local (each rayon worker gets its own).
 
-use std::cell::Cell;
-use std::sync::atomic::{AtomicI32, Ordering};
+use std::{
+    cell::Cell,
+    sync::atomic::{AtomicI32, Ordering},
+};
 
 /// Default maximum recursion depth when unset and no env override is present.
 pub const DEFAULT_MAX_RECURSION_DEPTH: i32 = 10_000;
@@ -33,7 +35,9 @@ pub enum RecursionError {
     )]
     InvalidMax(i32),
     /// The live recursion depth exceeded the configured maximum.
-    #[error("maximum recursion depth exceeded: current depth {current}, max allowed {max}")]
+    #[error(
+        "maximum recursion depth exceeded: current depth {current}, max allowed {max}"
+    )]
     DepthExceeded {
         /// The depth reached when the limit was hit.
         current: i32,
@@ -104,9 +108,14 @@ impl RecursionGuard {
         });
         if current > max {
             CURRENT_DEPTH.with(|d| d.set(d.get() - 1));
-            return Err(RecursionError::DepthExceeded { current, max });
+            return Err(RecursionError::DepthExceeded {
+                current,
+                max,
+            });
         }
-        Ok(Self { _private: () })
+        Ok(Self {
+            _private: (),
+        })
     }
 }
 

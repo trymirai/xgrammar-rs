@@ -10,18 +10,24 @@ fn ebnf(s: &str) -> Grammar {
 
 fn three_grammars() -> [Grammar; 3] {
     [
-        ebnf(r#"root ::= r1 | r2
+        ebnf(
+            r#"root ::= r1 | r2
 r1 ::= "true" | ""
 r2 ::= "false" | ""
-"#),
-        ebnf(r#"root ::= "abc" | r1
+"#,
+        ),
+        ebnf(
+            r#"root ::= "abc" | r1
 r1 ::= "true" | r1
-"#),
-        ebnf(r#"root ::= r1 | r2 | r3
+"#,
+        ),
+        ebnf(
+            r#"root ::= r1 | r2 | r3
 r1 ::= "true" | r3
 r2 ::= "false" | r3
 r3 ::= "abc" | ""
-"#),
+"#,
+        ),
     ]
 }
 

@@ -4,8 +4,7 @@
 //! acceptance assertions and the HF `test_mask_generation` cases are added once the matcher
 //! lands (M6).
 
-use xgrammar::converter::regex_to_ebnf;
-use xgrammar::grammar::Grammar;
+use xgrammar::{converter::regex_to_ebnf, grammar::Grammar};
 
 /// Convert a regex to its EBNF text (with the `root ::=` rule name), matching `_regex_to_ebnf`.
 fn re(regex: &str) -> String {
@@ -24,7 +23,10 @@ fn test_basic() {
 
 #[test]
 fn test_unicode() {
-    assert_eq!(re("ww我😁"), "root ::= \"w\" \"w\" \"\\u6211\" \"\\U0001f601\"\n");
+    assert_eq!(
+        re("ww我😁"),
+        "root ::= \"w\" \"w\" \"\\u6211\" \"\\U0001f601\"\n"
+    );
 }
 
 #[test]
@@ -68,7 +70,10 @@ fn test_boundary() {
 
 #[test]
 fn test_disjunction() {
-    assert_eq!(re("abc|de(f|g)"), "root ::= \"a\" \"b\" \"c\" | \"d\" \"e\" ( \"f\" | \"g\" )\n");
+    assert_eq!(
+        re("abc|de(f|g)"),
+        "root ::= \"a\" \"b\" \"c\" | \"d\" \"e\" ( \"f\" | \"g\" )\n"
+    );
 }
 
 #[test]
@@ -91,7 +96,9 @@ fn test_quantifier() {
 fn test_consecutive_quantifiers() {
     for regex in ["a{1,3}?{1,3}", "a???", "a++", "a+?{1,3}"] {
         assert!(
-            re_err(regex).contains("Two consecutive repetition modifiers are not allowed."),
+            re_err(regex).contains(
+                "Two consecutive repetition modifiers are not allowed."
+            ),
             "regex: {regex}"
         );
     }
@@ -99,7 +106,10 @@ fn test_consecutive_quantifiers() {
 
 #[test]
 fn test_group() {
-    assert_eq!(re("(a|b)(c|d)"), "root ::= ( \"a\" | \"b\" ) ( \"c\" | \"d\" )\n");
+    assert_eq!(
+        re("(a|b)(c|d)"),
+        "root ::= ( \"a\" | \"b\" ) ( \"c\" | \"d\" )\n"
+    );
 }
 
 #[test]
@@ -123,7 +133,9 @@ fn test_ipv4() {
 
 #[test]
 fn test_empty_character_class() {
-    assert!(re_err("[]").contains("Empty character class is not allowed in regex."));
+    assert!(
+        re_err("[]").contains("Empty character class is not allowed in regex.")
+    );
 }
 
 #[test]

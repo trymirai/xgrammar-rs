@@ -1,14 +1,16 @@
 //! Port of `xgrammar/tests/python/test_grammar_parser_macro.py`.
 
-use xgrammar::functor::{byte_string_fuser, lookahead_assertion_analyzer, structure_normalizer};
-use xgrammar::grammar::Grammar;
-use xgrammar::parser::ebnf_to_grammar_no_normalization;
+use xgrammar::{
+    functor::{
+        byte_string_fuser, lookahead_assertion_analyzer, structure_normalizer,
+    },
+    grammar::Grammar,
+    parser::ebnf_to_grammar_no_normalization,
+};
 
 /// Parse without normalization (root rule "root") and render back to EBNF.
 fn no_norm(ebnf: &str) -> String {
-    ebnf_to_grammar_no_normalization(ebnf, "root")
-        .unwrap()
-        .to_string()
+    ebnf_to_grammar_no_normalization(ebnf, "root").unwrap().to_string()
 }
 
 /// Full `Grammar::from_ebnf` (parse + normalize), rendered back to EBNF.
@@ -18,9 +20,7 @@ fn from_ebnf(ebnf: &str) -> String {
 
 /// The parser error message from parsing `ebnf` without normalization.
 fn parse_err(ebnf: &str) -> String {
-    ebnf_to_grammar_no_normalization(ebnf, "root")
-        .unwrap_err()
-        .to_string()
+    ebnf_to_grammar_no_normalization(ebnf, "root").unwrap_err().to_string()
 }
 
 #[test]

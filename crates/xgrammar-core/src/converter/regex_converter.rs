@@ -5,8 +5,10 @@
 //! <https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Regular_expressions>.
 
 use super::regex_error::RegexError;
-use crate::grammar::Grammar;
-use crate::support::{Codepoint, escape_codepoint, parse_next_escaped};
+use crate::{
+    grammar::Grammar,
+    support::{Codepoint, escape_codepoint, parse_next_escaped},
+};
 
 impl Grammar {
     /// Builds a grammar from a regular expression.
@@ -47,7 +49,10 @@ const CHAR_ESCAPE_MAP: &[(u8, Codepoint)] = &[
 ///
 /// # Errors
 /// Returns a [`RegexError`] (with position) on malformed or unsupported regex.
-pub fn regex_to_ebnf(regex: &str, with_rule_name: bool) -> Result<String, RegexError> {
+pub fn regex_to_ebnf(
+    regex: &str,
+    with_rule_name: bool,
+) -> Result<String, RegexError> {
     let body = RegexConverter::new(regex).convert()?;
     if with_rule_name {
         Ok(format!("root ::= {body}\n"))
@@ -77,7 +82,10 @@ impl RegexConverter {
         }
     }
 
-    fn peek(&self, delta: isize) -> char {
+    fn peek(
+        &self,
+        delta: isize,
+    ) -> char {
         let idx = self.cur as isize + delta;
         if idx < 0 {
             return '\0';
@@ -93,7 +101,10 @@ impl RegexConverter {
         self.end - self.cur
     }
 
-    fn error(&self, message: &str) -> RegexError {
+    fn error(
+        &self,
+        message: &str,
+    ) -> RegexError {
         RegexError {
             position: self.cur + 1,
             message: message.to_owned(),
@@ -101,7 +112,10 @@ impl RegexConverter {
     }
 
     /// Appends an EBNF segment, prefixing a space when the result is non-empty.
-    fn add_segment(&mut self, element: &str) {
+    fn add_segment(
+        &mut self,
+        element: &str,
+    ) {
         if !self.result.is_empty() {
             self.result.push(' ');
         }
@@ -112,7 +126,9 @@ impl RegexConverter {
         let mut char_class = String::from("[");
         self.cur += 1;
         if self.cur_char() == ']' {
-            return Err(self.error("Empty character class is not allowed in regex."));
+            return Err(
+                self.error("Empty character class is not allowed in regex.")
+            );
         }
         while self.cur_char() != ']' && self.cur != self.end {
             if self.cur_char() == '\\' {
@@ -168,7 +184,13 @@ impl RegexConverter {
     fn try_parse_escaped(&self) -> Option<(Codepoint, usize)> {
         let bytes: Vec<u8> = self.chars[self.cur..self.end]
             .iter()
-            .map(|&c| if (c as u32) < 128 { c as u8 } else { 0xFF })
+            .map(|&c| {
+                if (c as u32) < 128 {
+                    c as u8
+                } else {
+                    0xFF
+                }
+            })
             .collect();
         parse_next_escaped(&bytes, CHAR_ESCAPE_MAP).ok()
     }
@@ -196,7 +218,7 @@ impl RegexConverter {
                     Some(d) => {
                         value = value * 16 + d as Codepoint;
                         len += 1;
-                    }
+                    },
                     None => break,
                 }
             }
@@ -208,7 +230,9 @@ impl RegexConverter {
         } else if c1 == 'c' {
             self.cur += 2;
             if !self.cur_char().is_ascii_alphabetic() {
-                return Err(self.error("Invalid control character escape sequence."));
+                return Err(
+                    self.error("Invalid control character escape sequence.")
+                );
             }
             self.cur += 1;
             Ok(escape_codepoint((self.peek(-1) as Codepoint) % 32, &[]))
@@ -227,27 +251,29 @@ impl RegexConverter {
             'd' => {
                 self.cur += 2;
                 Ok("0-9".to_owned())
-            }
+            },
             'D' => {
                 self.cur += 2;
                 Ok("\\x00-\\x2F\\x3A-\\U0010FFFF".to_owned())
-            }
+            },
             'w' => {
                 self.cur += 2;
                 Ok("a-zA-Z0-9_".to_owned())
-            }
+            },
             'W' => {
                 self.cur += 2;
-                Ok("\\x00-\\x2F\\x3A-\\x40\\x5B-\\x5E\\x60\\x7B-\\U0010FFFF".to_owned())
-            }
+                Ok("\\x00-\\x2F\\x3A-\\x40\\x5B-\\x5E\\x60\\x7B-\\U0010FFFF"
+                    .to_owned())
+            },
             's' => {
                 self.cur += 2;
                 Ok("\\f\\n\\r\\t\\v\\u0020\\u00a0".to_owned())
-            }
+            },
             'S' => {
                 self.cur += 2;
-                Ok("\\x00-\\x08\\x0E-\\x1F\\x21-\\x9F\\xA1-\\U0010FFFF".to_owned())
-            }
+                Ok("\\x00-\\x08\\x0E-\\x1F\\x21-\\x9F\\xA1-\\U0010FFFF"
+                    .to_owned())
+            },
             _ => {
                 let res = self.handle_char_escape()?;
                 if res == "]" || res == "-" {
@@ -255,7 +281,7 @@ impl RegexConverter {
                 } else {
                     Ok(res)
                 }
-            }
+            },
         }
     }
 
@@ -267,33 +293,33 @@ impl RegexConverter {
             'd' => {
                 self.cur += 2;
                 Ok("[0-9]".to_owned())
-            }
+            },
             'D' => {
                 self.cur += 2;
                 Ok("[^0-9]".to_owned())
-            }
+            },
             'w' => {
                 self.cur += 2;
                 Ok("[a-zA-Z0-9_]".to_owned())
-            }
+            },
             'W' => {
                 self.cur += 2;
                 Ok("[^a-zA-Z0-9_]".to_owned())
-            }
+            },
             's' => {
                 self.cur += 2;
                 Ok("[\\f\\n\\r\\t\\v\\u0020\\u00a0]".to_owned())
-            }
+            },
             'S' => {
                 self.cur += 2;
                 Ok("[^[\\f\\n\\r\\t\\v\\u0020\\u00a0]".to_owned())
-            }
+            },
             c if ('1'..='9').contains(&c) || c == 'k' => {
                 Err(self.error("Backreference is not supported yet."))
-            }
-            'p' | 'P' => {
-                Err(self.error("Unicode character class escape sequence is not supported yet."))
-            }
+            },
+            'p' | 'P' => Err(self.error(
+                "Unicode character class escape sequence is not supported yet.",
+            )),
             'b' | 'B' => Err(self.error("Word boundary is not supported yet.")),
             _ => Ok(format!("\"{}\"", self.handle_char_escape()?)),
         }
@@ -306,22 +332,32 @@ impl RegexConverter {
         match self.cur_char() {
             ':' => {
                 self.cur += 1;
-            }
-            '=' | '!' => return Err(self.error("Lookahead is not supported yet.")),
-            '<' if self.cur + 1 != self.end && matches!(self.peek(1), '=' | '!') => {
+            },
+            '=' | '!' => {
+                return Err(self.error("Lookahead is not supported yet."));
+            },
+            '<' if self.cur + 1 != self.end
+                && matches!(self.peek(1), '=' | '!') =>
+            {
                 return Err(self.error("Lookbehind is not supported yet."));
-            }
+            },
             '<' => {
                 self.cur += 1;
-                while self.cur != self.end && self.cur_char().is_ascii_alphabetic() {
+                while self.cur != self.end
+                    && self.cur_char().is_ascii_alphabetic()
+                {
                     self.cur += 1;
                 }
                 if self.cur == self.end || self.cur_char() != '>' {
                     return Err(self.error("Invalid named capturing group."));
                 }
                 self.cur += 1;
-            }
-            _ => return Err(self.error("Group modifier flag is not supported yet.")),
+            },
+            _ => {
+                return Err(
+                    self.error("Group modifier flag is not supported yet.")
+                );
+            },
         }
         Ok(())
     }
@@ -333,16 +369,16 @@ impl RegexConverter {
                 '^' => {
                     // '^' is only meaningful at the start; elsewhere it is ignored.
                     self.cur += 1;
-                }
+                },
                 '$' => {
                     // '$' is only meaningful at the end; elsewhere it is ignored.
                     self.cur += 1;
-                }
+                },
                 '[' => {
                     is_empty = false;
                     let class = self.handle_character_class()?;
                     self.add_segment(&class);
-                }
+                },
                 '(' => {
                     is_empty = false;
                     self.cur += 1;
@@ -352,7 +388,7 @@ impl RegexConverter {
                         self.cur += 1;
                         self.handle_group_modifier()?;
                     }
-                }
+                },
                 ')' => {
                     is_empty = false;
                     if self.parenthesis_level == 0 {
@@ -365,7 +401,7 @@ impl RegexConverter {
                     self.parenthesis_level -= 1;
                     self.add_segment(")");
                     self.cur += 1;
-                }
+                },
                 c @ ('*' | '+' | '?') => {
                     is_empty = false;
                     self.result.push(c);
@@ -379,7 +415,7 @@ impl RegexConverter {
                     {
                         return Err(self.error("Two consecutive repetition modifiers are not allowed."));
                     }
-                }
+                },
                 '{' => {
                     is_empty = false;
                     let range = self.handle_repetition_range()?;
@@ -392,28 +428,31 @@ impl RegexConverter {
                     {
                         return Err(self.error("Two consecutive repetition modifiers are not allowed."));
                     }
-                }
+                },
                 '|' => {
                     is_empty = false;
                     self.add_segment("|");
                     self.cur += 1;
-                }
+                },
                 '\\' => {
                     is_empty = false;
                     let escape = self.handle_escape()?;
                     self.add_segment(&escape);
-                }
+                },
                 '.' => {
                     is_empty = false;
                     self.add_segment("[\\u0000-\\U0010FFFF]");
                     self.cur += 1;
-                }
+                },
                 c => {
                     is_empty = false;
-                    let segment = format!("\"{}\"", escape_codepoint(c as Codepoint, &[]));
+                    let segment = format!(
+                        "\"{}\"",
+                        escape_codepoint(c as Codepoint, &[])
+                    );
                     self.add_segment(&segment);
                     self.cur += 1;
-                }
+                },
             }
         }
         if self.parenthesis_level != 0 {

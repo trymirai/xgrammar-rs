@@ -1,8 +1,7 @@
 //! Decoded form of a [`GrammarExprType::TokenTagDispatch`] expression — a port of
 //! `Grammar::Impl::TokenTagDispatch` and `GetTokenTagDispatch` in `cpp/grammar_impl.h`.
 
-use super::grammar::Grammar;
-use super::grammar_expr_type::GrammarExprType;
+use super::{grammar::Grammar, grammar_expr_type::GrammarExprType};
 
 /// A decoded token-tag-dispatch expression: `(token id, rule id)` triggers, a looping
 /// flag, and excluded token ids.
@@ -22,7 +21,10 @@ impl Grammar {
     /// # Panics
     /// Panics if the expression is not a [`GrammarExprType::TokenTagDispatch`] or is malformed.
     #[must_use]
-    pub fn token_tag_dispatch(&self, expr_id: i32) -> TokenTagDispatch {
+    pub fn token_tag_dispatch(
+        &self,
+        expr_id: i32,
+    ) -> TokenTagDispatch {
         let expr = self.expr(expr_id);
         assert_eq!(
             expr.ty,
@@ -33,7 +35,9 @@ impl Grammar {
     }
 
     /// Decodes a token-tag-dispatch payload (the expr data without its type tag).
-    pub(crate) fn decode_token_tag_dispatch_data(data: &[i32]) -> TokenTagDispatch {
+    pub(crate) fn decode_token_tag_dispatch_data(
+        data: &[i32]
+    ) -> TokenTagDispatch {
         let mut pos = 0;
 
         let trigger_count = data[pos] as usize;
@@ -55,7 +59,11 @@ impl Grammar {
             pos += 1;
         }
 
-        debug_assert_eq!(pos, data.len(), "token-tag-dispatch payload length mismatch");
+        debug_assert_eq!(
+            pos,
+            data.len(),
+            "token-tag-dispatch payload length mismatch"
+        );
         TokenTagDispatch {
             trigger_rule_pairs,
             loop_after_dispatch,

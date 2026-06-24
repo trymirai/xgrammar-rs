@@ -3,9 +3,9 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::grammar_expr::GrammarExpr;
-use super::grammar_expr_type::GrammarExprType;
-use super::rule::Rule;
+use super::{
+    grammar_expr::GrammarExpr, grammar_expr_type::GrammarExprType, rule::Rule,
+};
 use crate::support::Compact2dArray;
 
 /// A Backus–Naur Form grammar: an ordered set of [`Rule`]s plus all grammar expressions
@@ -23,7 +23,11 @@ pub struct Grammar {
 impl Grammar {
     /// Assembles a grammar from its parts (used by [`super::GrammarBuilder`]).
     #[must_use]
-    pub(crate) fn from_parts(rules: Vec<Rule>, exprs: Compact2dArray<i32>, root_rule_id: i32) -> Self {
+    pub(crate) fn from_parts(
+        rules: Vec<Rule>,
+        exprs: Compact2dArray<i32>,
+        root_rule_id: i32,
+    ) -> Self {
         Self {
             rules,
             exprs,
@@ -54,7 +58,10 @@ impl Grammar {
     /// # Panics
     /// Panics if `rule_id` is out of bounds.
     #[must_use]
-    pub fn rule(&self, rule_id: i32) -> &Rule {
+    pub fn rule(
+        &self,
+        rule_id: i32,
+    ) -> &Rule {
         &self.rules[rule_id as usize]
     }
 
@@ -62,7 +69,11 @@ impl Grammar {
     ///
     /// # Panics
     /// Panics if `rule_id` is out of bounds.
-    pub(crate) fn rename_rule(&mut self, rule_id: i32, new_name: String) {
+    pub(crate) fn rename_rule(
+        &mut self,
+        rule_id: i32,
+        new_name: String,
+    ) {
         self.rules[rule_id as usize].name = new_name;
     }
 
@@ -92,9 +103,13 @@ impl Grammar {
     /// # Panics
     /// Panics if `expr_id` is out of bounds or the stored type tag is invalid.
     #[must_use]
-    pub fn expr(&self, expr_id: i32) -> GrammarExpr<'_> {
+    pub fn expr(
+        &self,
+        expr_id: i32,
+    ) -> GrammarExpr<'_> {
         let row = self.exprs.row(expr_id as usize);
-        let ty = GrammarExprType::try_from(row[0]).expect("grammar stores valid expr type tags");
+        let ty = GrammarExprType::try_from(row[0])
+            .expect("grammar stores valid expr type tags");
         GrammarExpr {
             ty,
             data: &row[1..],
@@ -103,7 +118,10 @@ impl Grammar {
 
     /// The byte string of a [`GrammarExprType::ByteString`] expression.
     #[must_use]
-    pub fn byte_string(&self, expr_id: i32) -> Vec<u8> {
+    pub fn byte_string(
+        &self,
+        expr_id: i32,
+    ) -> Vec<u8> {
         self.expr(expr_id).byte_string()
     }
 }

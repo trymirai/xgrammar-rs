@@ -1,8 +1,7 @@
 //! Decoded form of a [`GrammarExprType::TagDispatch`] expression — a port of
 //! `Grammar::Impl::TagDispatch` and `GetTagDispatch` in `cpp/grammar_impl.h`.
 
-use super::grammar::Grammar;
-use super::grammar_expr_type::GrammarExprType;
+use super::{grammar::Grammar, grammar_expr_type::GrammarExprType};
 
 /// The number of trailing payload elements after the tag/rule pairs:
 /// `loop_after_dispatch` and the excluded-strings expression id.
@@ -26,7 +25,10 @@ impl Grammar {
     /// # Panics
     /// Panics if the expression is not a [`GrammarExprType::TagDispatch`] or is malformed.
     #[must_use]
-    pub fn tag_dispatch(&self, expr_id: i32) -> TagDispatch {
+    pub fn tag_dispatch(
+        &self,
+        expr_id: i32,
+    ) -> TagDispatch {
         let expr = self.expr(expr_id);
         assert_eq!(expr.ty, GrammarExprType::TagDispatch, "not a tag dispatch");
         self.decode_tag_dispatch_data(expr.data)
@@ -34,7 +36,10 @@ impl Grammar {
 
     /// Decodes a tag-dispatch payload (the expr data without its type tag), resolving the
     /// byte-string and excludes expression ids against this grammar.
-    pub(crate) fn decode_tag_dispatch_data(&self, data: &[i32]) -> TagDispatch {
+    pub(crate) fn decode_tag_dispatch_data(
+        &self,
+        data: &[i32],
+    ) -> TagDispatch {
         let body_len = data.len() - EXTRA_PARAMETERS;
 
         let mut tag_rule_pairs = Vec::with_capacity(body_len / 2);

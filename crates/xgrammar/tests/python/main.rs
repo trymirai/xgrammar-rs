@@ -1,5 +1,4 @@
 //! Aggregates the ported Python suite (`xgrammar/tests/python/`) into one test binary.
-mod test_utils;
 mod encoding_dsv32;
 mod encoding_dsv4;
 mod test_builtin_structural_tag;
@@ -25,3 +24,4 @@ mod test_structural_tag_converter;
 mod test_token_bitmask_operations;
 mod test_token_edge;
 mod test_tokenizer_info;
+mod test_utils;

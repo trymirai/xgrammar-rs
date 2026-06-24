@@ -13,12 +13,10 @@ pub fn root_rule_renamer(grammar: &Grammar) -> Grammar {
         return grammar.clone();
     }
 
-    let names: HashSet<&str> = grammar.rules().iter().map(|r| r.name.as_str()).collect();
-    let collision = grammar
-        .rules()
-        .iter()
-        .position(|r| r.name == "root")
-        .map(|i| i as i32);
+    let names: HashSet<&str> =
+        grammar.rules().iter().map(|r| r.name.as_str()).collect();
+    let collision =
+        grammar.rules().iter().position(|r| r.name == "root").map(|i| i as i32);
 
     let mut renamed = grammar.clone();
     let root_id = renamed.root_rule_id();

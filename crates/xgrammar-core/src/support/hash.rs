@@ -5,7 +5,10 @@ const HASH_MIX: u64 = 0x9e37_79b9_7f4a_7c15;
 
 /// Mixes `value` into `seed` (boost `hash_combine`).
 #[inline]
-pub fn hash_combine_binary(seed: &mut u64, value: u64) {
+pub fn hash_combine_binary(
+    seed: &mut u64,
+    value: u64,
+) {
     *seed ^= value
         .wrapping_add(HASH_MIX)
         .wrapping_add(*seed << 6)

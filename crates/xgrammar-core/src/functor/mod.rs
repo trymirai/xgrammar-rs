@@ -6,9 +6,11 @@
 
 mod dead_code_eliminator;
 mod mutator;
+mod rule_inliner;
 mod single_element_expr_eliminator;
 mod structure_normalizer;
 
 pub use dead_code_eliminator::dead_code_eliminator;
 pub use mutator::{GrammarMutator, MutatorState};
+pub use rule_inliner::rule_inliner;
 pub use structure_normalizer::structure_normalizer;

@@ -359,8 +359,9 @@ impl<'a> Lexer<'a> {
             b'[' => Next::Many(self.parse_char_class()?),
             c => {
                 if Self::is_name_char(c, true) {
+                    // Note: `-` is a name char, so negatives like `-1` lex as identifiers here.
                     Next::One(self.parse_identifier_or_boolean()?)
-                } else if c.is_ascii_digit() || c == b'-' || c == b'+' {
+                } else if c.is_ascii_digit() || c == b'+' {
                     Next::One(self.parse_integer()?)
                 } else {
                     return Err(self.err(format!("Unexpected character: {}", c as char)));
@@ -460,7 +461,7 @@ mod tests {
 
     #[test]
     fn special_escape_in_char_class() {
-        let toks = tokenize(r#"a ::= [\S]"#).unwrap();
+        let toks = tokenize(r"a ::= [\S]").unwrap();
         let esc = toks.iter().find(|t| t.ty == TokenType::EscapeInCharClass).unwrap();
         assert_eq!(esc.value, TokenValue::Str("S".into()));
         assert_eq!(esc.lexeme, "\\S");

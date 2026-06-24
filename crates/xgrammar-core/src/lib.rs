@@ -11,6 +11,7 @@
 
 #![forbid(unsafe_op_in_unsafe_fn)]
 
+pub mod functor;
 pub mod grammar;
 pub mod parser;
 pub mod support;

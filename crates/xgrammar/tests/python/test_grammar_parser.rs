@@ -4,7 +4,7 @@
 //! exercise the grammar-functor passes (`GrammarFunctor`) or normalized `from_ebnf` are
 //! added once those land (M3 functors).
 
-use xgrammar::functor::structure_normalizer;
+use xgrammar::functor::{dead_code_eliminator, structure_normalizer};
 use xgrammar::parser::ebnf_to_grammar_no_normalization;
 
 /// Parse without normalization (root rule "root") and render back to EBNF.
@@ -17,6 +17,11 @@ fn no_norm(ebnf: &str) -> String {
 /// Parse, then run the structure-normalizer pass, and render back to EBNF.
 fn normalized(ebnf: &str) -> String {
     structure_normalizer(&ebnf_to_grammar_no_normalization(ebnf, "root").unwrap()).to_string()
+}
+
+/// Parse, then run the dead-code-eliminator pass, and render back to EBNF.
+fn dead_code(ebnf: &str) -> String {
+    dead_code_eliminator(&ebnf_to_grammar_no_normalization(ebnf, "root").unwrap()).to_string()
 }
 
 #[test]
@@ -176,4 +181,59 @@ d ::= (("ac") | ("b" d_choice)) (=("abc"))
 d_choice ::= (("e") | ("d"))
 "#;
     assert_eq!(normalized(before), expected);
+}
+
+#[test]
+fn test_dead_code_eliminator() {
+    // Basic dead-code elimination.
+    assert_eq!(
+        dead_code(
+            r#"root ::= rule1 | rule2
+rule1 ::= "a" | "b"
+rule2 ::= "b" | "c"
+unused ::= "x" | "y"
+"#
+        ),
+        r#"root ::= ((rule1) | (rule2))
+rule1 ::= (("a") | ("b"))
+rule2 ::= (("b") | ("c"))
+"#
+    );
+
+    // Recursive rule references, with an unused recursive cluster.
+    assert_eq!(
+        dead_code(
+            r#"root ::= rule1 | rule2
+unused1 ::= unused2 | "x"
+unused2 ::= unused1 | "y"
+rule1 ::= "a" rule2 | "b"
+rule2 ::= "c" rule1 | "d"
+"#
+        ),
+        r#"root ::= ((rule1) | (rule2))
+rule1 ::= (("a" rule2) | ("b"))
+rule2 ::= (("c" rule1) | ("d"))
+"#
+    );
+
+    // Complex nested rules with unused branches.
+    assert_eq!(
+        dead_code(
+            r#"root ::= rule1 "x" | rule2
+rule1 ::= "a" rule3 | "b"
+rule2 ::= "c" | "d" rule4
+rule3 ::= "e" | "f"
+rule4 ::= "g" | "h"
+unused1 ::= "i" unused2
+unused2 ::= "j" unused3
+unused3 ::= "k" | "l"
+"#
+        ),
+        r#"root ::= ((rule1 "x") | (rule2))
+rule1 ::= (("a" rule3) | ("b"))
+rule2 ::= (("c") | ("d" rule4))
+rule3 ::= (("e") | ("f"))
+rule4 ::= (("g") | ("h"))
+"#
+    );
 }

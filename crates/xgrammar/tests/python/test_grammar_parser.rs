@@ -5,6 +5,7 @@
 //! added once those land (M3 functors).
 
 use xgrammar::functor::{dead_code_eliminator, rule_inliner, structure_normalizer};
+use xgrammar::grammar::Grammar;
 use xgrammar::parser::ebnf_to_grammar_no_normalization;
 
 /// Parse without normalization (root rule "root") and render back to EBNF.
@@ -27,6 +28,11 @@ fn dead_code(ebnf: &str) -> String {
 /// Parse, then run the rule-inliner pass, and render back to EBNF.
 fn inlined(ebnf: &str) -> String {
     rule_inliner(&ebnf_to_grammar_no_normalization(ebnf, "root").unwrap()).to_string()
+}
+
+/// Full `Grammar::from_ebnf` (parse + normalize), rendered back to EBNF.
+fn from_ebnf(ebnf: &str) -> String {
+    Grammar::from_ebnf(ebnf, "root").unwrap().to_string()
 }
 
 #[test]
@@ -268,6 +274,43 @@ rule2 ::= "b" | "c" [b-c]
         r#"root ::= (("a" [a-z]* "a" [a-z]*) | ("b" "a" [a-z]*) | ("b" "b" "c") | ("c" [b-c] "b" "c"))
 rule1 ::= (("a" [a-z]*) | ("b"))
 rule2 ::= (("b") | ("c" [b-c]))
+"#
+    );
+}
+
+#[test]
+fn test_space() {
+    let before = "\n\nroot::=\"a\"  \"b\" (\"c\"\"d\"\n\"e\") |\n\n\"f\" | \"g\"\n";
+    assert_eq!(
+        from_ebnf(before),
+        concat!(r#"root ::= (("a" "b" "c" "d" "e") | ("f") | ("g"))"#, "\n")
+    );
+}
+
+#[test]
+fn test_nest() {
+    assert_eq!(
+        from_ebnf(r#"root::= "a" ("b" | "c" "d") | (("e" "f"))"#),
+        r#"root ::= (("a" root_1) | ("e" "f"))
+root_1 ::= (("b") | ("c" "d"))
+"#
+    );
+}
+
+#[test]
+fn test_empty_parentheses() {
+    assert_eq!(
+        from_ebnf(r#"root ::= "a" ( ) "b""#),
+        concat!(r#"root ::= (("a" "b"))"#, "\n")
+    );
+    assert_eq!(
+        from_ebnf(
+            r#"root ::= "a" rule1
+rule1 ::= ( )
+"#
+        ),
+        r#"root ::= (("a" rule1))
+rule1 ::= ("")
 "#
     );
 }

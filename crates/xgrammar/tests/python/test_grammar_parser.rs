@@ -4,7 +4,7 @@
 //! exercise the grammar-functor passes (`GrammarFunctor`) or normalized `from_ebnf` are
 //! added once those land (M3 functors).
 
-use xgrammar::functor::{dead_code_eliminator, structure_normalizer};
+use xgrammar::functor::{dead_code_eliminator, rule_inliner, structure_normalizer};
 use xgrammar::parser::ebnf_to_grammar_no_normalization;
 
 /// Parse without normalization (root rule "root") and render back to EBNF.
@@ -22,6 +22,11 @@ fn normalized(ebnf: &str) -> String {
 /// Parse, then run the dead-code-eliminator pass, and render back to EBNF.
 fn dead_code(ebnf: &str) -> String {
     dead_code_eliminator(&ebnf_to_grammar_no_normalization(ebnf, "root").unwrap()).to_string()
+}
+
+/// Parse, then run the rule-inliner pass, and render back to EBNF.
+fn inlined(ebnf: &str) -> String {
+    rule_inliner(&ebnf_to_grammar_no_normalization(ebnf, "root").unwrap()).to_string()
 }
 
 #[test]
@@ -234,6 +239,35 @@ rule1 ::= (("a" rule3) | ("b"))
 rule2 ::= (("c") | ("d" rule4))
 rule3 ::= (("e") | ("f"))
 rule4 ::= (("g") | ("h"))
+"#
+    );
+}
+
+#[test]
+fn test_rule_inliner() {
+    assert_eq!(
+        inlined(
+            r#"root ::= rule1 | rule2
+rule1 ::= "a" | "b"
+rule2 ::= "b" | "c"
+"#
+        ),
+        r#"root ::= (("a") | ("b") | ("b") | ("c"))
+rule1 ::= (("a") | ("b"))
+rule2 ::= (("b") | ("c"))
+"#
+    );
+
+    assert_eq!(
+        inlined(
+            r#"root ::= rule1 "a" [a-z]* | rule2 "b" "c"
+rule1 ::= "a" [a-z]* | "b"
+rule2 ::= "b" | "c" [b-c]
+"#
+        ),
+        r#"root ::= (("a" [a-z]* "a" [a-z]*) | ("b" "a" [a-z]*) | ("b" "b" "c") | ("c" [b-c] "b" "c"))
+rule1 ::= (("a" [a-z]*) | ("b"))
+rule2 ::= (("b") | ("c" [b-c]))
 "#
     );
 }

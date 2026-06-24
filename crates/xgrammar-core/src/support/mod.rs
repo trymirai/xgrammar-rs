@@ -3,3 +3,7 @@
 //! recursion-depth guard.
 //!
 //! One dedicated type per file; re-exported here.
+
+mod compact_2d_array;
+
+pub use compact_2d_array::{Compact2dArray, Compact2dArrayError};

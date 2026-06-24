@@ -6,6 +6,8 @@
 
 mod compact_2d_array;
 mod dynamic_bitset;
+mod int_set;
 
 pub use compact_2d_array::{Compact2dArray, Compact2dArrayError};
 pub use dynamic_bitset::{BITS_PER_BLOCK, DynamicBitset};
+pub use int_set::{intset_complement, intset_difference, intset_intersection, intset_union};

@@ -145,6 +145,29 @@ impl GrammarBuilder {
         self.add_grammar_expr(GrammarExprType::Repeat, &[ref_rule_id, min_repeat, max_repeat])
     }
 
+    /// Adds a repetition of an arbitrary expression, wrapping it in a fresh rule (named
+    /// from `cur_rule_name`) unless it is already a rule reference.
+    pub fn add_repeat_from_expr(
+        &mut self,
+        cur_rule_name: &str,
+        grammar_expr_id: i32,
+        min_repeat: i32,
+        max_repeat: i32,
+    ) -> i32 {
+        let rule_ref = {
+            let expr = self.grammar_expr(grammar_expr_id);
+            (expr.ty == GrammarExprType::RuleRef).then(|| expr.rule_ref_id())
+        };
+        let ref_rule_id = match rule_ref {
+            Some(id) => id,
+            None => {
+                let name = self.get_new_rule_name(cur_rule_name);
+                self.add_rule_named(name, grammar_expr_id)
+            }
+        };
+        self.add_repeat(ref_rule_id, min_repeat, max_repeat)
+    }
+
     /// Number of grammar expressions added so far.
     #[must_use]
     pub fn num_grammar_exprs(&self) -> i32 {
@@ -211,6 +234,26 @@ impl GrammarBuilder {
     /// Panics if `rule_id` is out of bounds.
     pub fn update_rule_body(&mut self, rule_id: i32, body_expr_id: i32) {
         self.rules[rule_id as usize].body_expr_id = body_expr_id;
+    }
+
+    /// Sets the body expression of the rule with the given name.
+    ///
+    /// # Panics
+    /// Panics if no rule with that name exists.
+    pub fn update_rule_body_by_name(&mut self, name: &str, body_expr_id: i32) {
+        let id = self.get_rule_id(name);
+        assert!(id != NO_EXPR, "rule {name:?} not found");
+        self.update_rule_body(id, body_expr_id);
+    }
+
+    /// Attaches a lookahead assertion to the rule with the given name.
+    ///
+    /// # Panics
+    /// Panics if no rule with that name exists.
+    pub fn update_lookahead_assertion_by_name(&mut self, name: &str, lookahead_assertion_id: i32) {
+        let id = self.get_rule_id(name);
+        assert!(id != NO_EXPR, "rule {name:?} not found");
+        self.update_lookahead_assertion(id, lookahead_assertion_id);
     }
 
     /// Attaches a lookahead assertion (a sequence expr id, or [`NO_EXPR`] for none).

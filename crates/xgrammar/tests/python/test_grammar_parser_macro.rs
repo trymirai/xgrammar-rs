@@ -1,8 +1,6 @@
 //! Port of `xgrammar/tests/python/test_grammar_parser_macro.py`.
-//!
-//! `test_lookahead_assertion_analyzer_tag_dispatch` is added once the `byte_string_fuser`
-//! and `lookahead_assertion_analyzer` passes land.
 
+use xgrammar::functor::{byte_string_fuser, lookahead_assertion_analyzer, structure_normalizer};
 use xgrammar::grammar::Grammar;
 use xgrammar::parser::ebnf_to_grammar_no_normalization;
 
@@ -64,6 +62,38 @@ rule1 ::= (("a"))
 rule2 ::= (("b"))
 "#;
     assert_eq!(no_norm(before), expected);
+}
+
+#[test]
+fn test_lookahead_assertion_analyzer_tag_dispatch() {
+    // Tag dispatch disables lookahead assertion detection.
+    let before = r#"root ::= TagDispatch(("tag1", rule1), ("tag2", rule2), ("tag3", rule3), ("tag4", rule4), ("tag5", rule5))
+rule1 ::= "b"
+rule2 ::= "c"
+rule3 ::= "" | "d" rule3
+rule4 ::= "" | "e" rule4 "f"
+rule5 ::= "" | "g" rule5 "h"
+"#;
+    let expected = r#"root ::= TagDispatch(
+  ("tag1", rule1),
+  ("tag2", rule2),
+  ("tag3", rule3),
+  ("tag4", rule4),
+  ("tag5", rule5),
+  loop_after_dispatch=true,
+  excludes=()
+)
+rule1 ::= (("b"))
+rule2 ::= (("c"))
+rule3 ::= ("" | ("d" rule3))
+rule4 ::= ("" | ("e" rule4 "f"))
+rule5 ::= ("" | ("g" rule5 "h"))
+"#;
+    let grammar = ebnf_to_grammar_no_normalization(before, "root").unwrap();
+    let grammar = structure_normalizer(&grammar);
+    let grammar = byte_string_fuser(&grammar);
+    let grammar = lookahead_assertion_analyzer(&grammar);
+    assert_eq!(grammar.to_string(), expected);
 }
 
 #[test]

@@ -4,7 +4,9 @@
 //! exercise the grammar-functor passes (`GrammarFunctor`) or normalized `from_ebnf` are
 //! added once those land (M3 functors).
 
-use xgrammar::functor::{dead_code_eliminator, rule_inliner, structure_normalizer};
+use xgrammar::functor::{
+    dead_code_eliminator, lookahead_assertion_analyzer, rule_inliner, structure_normalizer,
+};
 use xgrammar::grammar::Grammar;
 use xgrammar::parser::ebnf_to_grammar_no_normalization;
 
@@ -33,6 +35,12 @@ fn inlined(ebnf: &str) -> String {
 /// Full `Grammar::from_ebnf` (parse + normalize), rendered back to EBNF.
 fn from_ebnf(ebnf: &str) -> String {
     Grammar::from_ebnf(ebnf, "root").unwrap().to_string()
+}
+
+/// Parse, then run the lookahead-assertion-analyzer pass, and render back to EBNF.
+fn lookahead_analyzed(ebnf: &str) -> String {
+    lookahead_assertion_analyzer(&ebnf_to_grammar_no_normalization(ebnf, "root").unwrap())
+        .to_string()
 }
 
 /// The (lexer or parser) error message from parsing `ebnf` without normalization.
@@ -478,4 +486,23 @@ fn test_error_consecutive_quantifiers() {
         .contains("EBNF parser error at line 1, column 14: Expect element, but got +"));
     assert!(from_ebnf_err(r#"root ::= "a"??"#)
         .contains("EBNF parser error at line 1, column 14: Expect element, but got ?"));
+}
+
+#[test]
+fn test_lookahead_assertion_analyzer() {
+    let before = r#"root ::= "a" rule1 "b" rule3 rule5 rule2
+rule1 ::= "b"
+rule2 ::= "c"
+rule3 ::= "" | "d" rule3
+rule4 ::= "" | "e" rule4 "f"
+rule5 ::= "" | "g" rule5 "h"
+"#;
+    let expected = r#"root ::= (("a" rule1 "b" rule3 rule5 rule2))
+rule1 ::= (("b")) (=("b" rule3 rule5 rule2))
+rule2 ::= (("c"))
+rule3 ::= (("") | ("d" rule3)) (=(rule5 rule2))
+rule4 ::= (("") | ("e" rule4 "f")) (=("f"))
+rule5 ::= (("") | ("g" rule5 "h"))
+"#;
+    assert_eq!(lookahead_analyzed(before), expected);
 }

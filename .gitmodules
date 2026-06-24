@@ -2,5 +2,5 @@
 	path = xgrammar
 	url = https://github.com/mlc-ai/xgrammar.git
 [submodule "build/wasi-sdk"]
-	path = build/wasi-sdk
+	path = crates/legacy/build/wasi-sdk
 	url = https://github.com/WebAssembly/wasi-sdk.git

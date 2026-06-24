@@ -1,43 +1,39 @@
-[package]
-name = "xgrammar-rs"
-version = "0.2.2"
+[workspace]
+resolver = "3"
+members = ["crates/xgrammar-core", "crates/xgrammar"]
+# `crates/legacy` is the retired cxx-backed crate, kept for differential testing
+# and reference; it is built on demand, not as part of the workspace.
+# `xgrammar/` is the upstream C++ submodule (used only by the legacy crate).
+exclude = ["crates/legacy", "xgrammar", "external"]
+
+[workspace.package]
+version = "0.3.0"
 edition = "2024"
-rust-version = "1.85.1"
-build = "build.rs"
-links = "xgrammar"
-authors = ["Eugene Bokhan <eugenebokhan@gmail.com>"]
-description = "Efficient, Flexible and Portable Structured Generation for Rust - Rust bindings for XGrammar"
+rust-version = "1.85"
 license = "Apache-2.0"
 repository = "https://github.com/trymirai/xgrammar-rs"
 homepage = "https://github.com/trymirai/xgrammar-rs"
-documentation = "https://docs.rs/xgrammar-rs"
-readme = "README.md"
-keywords = ["llm", "grammar", "structured-gen", "json-schema", "parser"]
-categories = ["parsing", "text-processing"]
+authors = ["Eugene Bokhan <eugenebokhan@gmail.com>"]
 
-[lib]
-name = "xgrammar"
+[workspace.dependencies]
+xgrammar-core = { path = "crates/xgrammar-core", version = "0.3.0" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+ahash = "0.8"
+smallvec = { version = "1", features = ["serde", "union"] }
+rayon = "1"
+dlpark = "0.7"
 
-[dependencies]
-cxx = { version = "1", git = "https://github.com/trymirai/cxx.git", branch = "master", features = ["compile-builtins-at-bridge-stage"] }
-tokenizers = { version = "0.22", features = ["fancy-regex"], default-features = false, optional = true }
-serde_json = "1.0"
+[workspace.lints.clippy]
+correctness = { level = "deny", priority = -1 }
 
-[build-dependencies]
-cc = "1.2.65"
-cmake = "0.1"
-cxx-build = { version = "1", git = "https://github.com/trymirai/cxx.git", branch = "master" }
-walkdir = "2.5"
-which = "8"
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+strip = true
 
-[dev-dependencies]
-hf-hub = { version = "0.5" }
-schemars = "1.2"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-serial_test = "3.4"
-
-[features]
-default = []
-tokenizers = ["dep:tokenizers"]
-hf = ["tokenizers"] # `hf` only remains for compatibility, it is synonymous to `tokenizers`
+# Optimize dependencies even in dev builds — the parsing/automata tests are heavy.
+[profile.dev.package."*"]
+opt-level = 3

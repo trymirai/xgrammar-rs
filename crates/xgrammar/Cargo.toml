@@ -1,0 +1,27 @@
+[package]
+name = "xgrammar"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+description = "Efficient, Flexible and Portable Structured Generation for Rust — pure-Rust XGrammar."
+keywords = ["llm", "grammar", "structured-generation", "json-schema", "parser"]
+categories = ["parsing", "text-processing"]
+readme = "../../README.md"
+
+[features]
+default = []
+# HuggingFace tokenizer integration (pulls in the `tokenizers` crate).
+tokenizers = ["dep:tokenizers"]
+# Backwards-compatible alias for `tokenizers`.
+hf = ["tokenizers"]
+
+[dependencies]
+xgrammar-core = { workspace = true }
+tokenizers = { version = "0.22", default-features = false, features = ["fancy-regex"], optional = true }
+
+[lints]
+workspace = true

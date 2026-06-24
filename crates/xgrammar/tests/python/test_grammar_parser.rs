@@ -4,6 +4,7 @@
 //! exercise the grammar-functor passes (`GrammarFunctor`) or normalized `from_ebnf` are
 //! added once those land (M3 functors).
 
+use xgrammar::functor::structure_normalizer;
 use xgrammar::parser::ebnf_to_grammar_no_normalization;
 
 /// Parse without normalization (root rule "root") and render back to EBNF.
@@ -11,6 +12,11 @@ fn no_norm(ebnf: &str) -> String {
     ebnf_to_grammar_no_normalization(ebnf, "root")
         .unwrap()
         .to_string()
+}
+
+/// Parse, then run the structure-normalizer pass, and render back to EBNF.
+fn normalized(ebnf: &str) -> String {
+    structure_normalizer(&ebnf_to_grammar_no_normalization(ebnf, "root").unwrap()).to_string()
 }
 
 #[test]
@@ -95,4 +101,79 @@ fn test_plus_quantifier() {
             "\n"
         )
     );
+}
+
+#[test]
+fn test_star_quantifier() {
+    let before = r#"root ::= b c d
+b ::= [b]*
+c ::= "b"*
+d ::= ([b] [c] [d] | ([p] [q]))*
+e ::= [e]* [f]* | [g]*
+"#;
+    let expected = r#"root ::= ((b c d))
+b ::= (([b]*))
+c ::= ((c_1))
+d ::= ((d_1))
+e ::= (([e]* [f]*) | ([g]*))
+c_1 ::= ("" | ("b" c_1))
+d_1 ::= ("" | (d_1_1 d_1))
+d_1_1 ::= (("b" "c" "d") | ("p" "q"))
+"#;
+    assert_eq!(normalized(before), expected);
+
+    let before = r#"root ::= [a]* [b]* rule1
+rule1 ::= [abc]* [def]*
+"#;
+    let expected = r#"root ::= (([a]* [b]* rule1))
+rule1 ::= (([abc]* [def]*))
+"#;
+    assert_eq!(normalized(before), expected);
+}
+
+#[test]
+fn test_repetition_range() {
+    let before = r#"root ::= a b c d e f g
+a ::= [a]{1,2}
+b ::= (a | "b"){1, 5}
+c ::= "c" {0 , 2}
+d ::= "d" {0,}
+e ::= "e" {2, }
+f ::= "f" {3}
+g ::= "g" {0}
+"#;
+    let expected = r#"root ::= ((a b c d e f g))
+a ::= ((a_1{1, 2}))
+b ::= ((b_1{1, 5}))
+c ::= ((c_1{0, 2}))
+d ::= ((d_1{0, -1}))
+e ::= ((e_1{2, -1}))
+f ::= ((f_1{3, 3}))
+g ::= ((g_1{0, 0}))
+a_1 ::= (("a"))
+b_1 ::= ((a) | ("b"))
+c_1 ::= (("c"))
+d_1 ::= (("d"))
+e_1 ::= (("e"))
+f_1 ::= (("f"))
+g_1 ::= (("g"))
+"#;
+    assert_eq!(normalized(before), expected);
+}
+
+#[test]
+fn test_lookahead_assertion_with_normalizer() {
+    let before = r#"root ::= ((b c d))
+b ::= (("abc" [a-z])) (=("abc"))
+c ::= (("a") | ("b")) (=[a-z] "b")
+d ::= (("ac") | ("b" d_choice)) (="abc")
+d_choice ::= (("e") | ("d"))
+"#;
+    let expected = r#"root ::= ((b c d))
+b ::= (("abc" [a-z])) (=("abc"))
+c ::= (("a") | ("b")) (=([a-z] "b"))
+d ::= (("ac") | ("b" d_choice)) (=("abc"))
+d_choice ::= (("e") | ("d"))
+"#;
+    assert_eq!(normalized(before), expected);
 }

@@ -489,6 +489,67 @@ fn test_error_consecutive_quantifiers() {
 }
 
 #[test]
+fn test_bnf_comment() {
+    let before = r#"# top comment
+root ::= a b # inline comment
+a ::= "a"
+b ::= "b"
+# bottom comment
+"#;
+    let expected = r#"root ::= ((a b))
+a ::= (("a"))
+b ::= (("b"))
+"#;
+    assert_eq!(no_norm(before), expected);
+}
+
+#[test]
+fn test_combined_features() {
+    let before = r#"root ::= "start" (rule1 | rule2)+ "end"
+rule1 ::= [a-z]{1,3} (=":")
+rule2 ::= [0-9]+ "." [0-9]*
+"#;
+    let expected = r#"root ::= (("start" root_1 "end"))
+rule1 ::= ((rule1_1{1, 3})) (=((":")))
+rule2 ::= ((rule2_1 "." [0-9]*))
+root_1 ::= ((((rule1) | (rule2)) root_1) | ((rule1) | (rule2)))
+rule1_1 ::= [a-z]
+rule2_1 ::= (([0-9] rule2_1) | [0-9])
+"#;
+    assert_eq!(no_norm(before), expected);
+}
+
+#[test]
+fn test_nested_quantifiers() {
+    let before = "root ::= (\"a\"*)+\n";
+    let expected = r#"root ::= ((root_2))
+root_1 ::= ("" | ("a" root_1))
+root_2 ::= ((((root_1)) root_2) | ((root_1)))
+"#;
+    assert_eq!(no_norm(before), expected);
+}
+
+#[test]
+fn test_flatten() {
+    let before = r#"root ::= or_test sequence_test nested_test empty_test
+or_test ::= ([a] | "b") | "de" | "" | or_test | [^a-z]
+sequence_test ::= [a] "a" ("b" ("c" | "d")) ("d" "e") sequence_test ""
+nested_test ::= ("a" ("b" ("c" "d"))) | ("a" | ("b" | "c")) | nested_rest
+nested_rest ::= ("a" | ("b" "c" | ("d" | "e" "f"))) | ((("g")))
+empty_test ::= "d" | (("" | "" "") "" | "a" "") | ("" ("" | "")) "" ""
+"#;
+    let expected = r#"root ::= ((or_test sequence_test nested_test empty_test))
+or_test ::= ("" | ("a") | ("b") | ("de") | (or_test) | ([^a-z]))
+sequence_test ::= (("a" "a" "b" sequence_test_1 "d" "e" sequence_test))
+nested_test ::= (("a" "b" "c" "d") | ("a") | ("b") | ("c") | (nested_rest))
+nested_rest ::= (("a") | ("b" "c") | ("d") | ("e" "f") | ("g"))
+empty_test ::= ("" | ("d") | ("a"))
+sequence_test_1 ::= (("c") | ("d"))
+"#;
+    assert_eq!(normalized(before), expected);
+}
+
+#[test]
 fn test_lookahead_assertion_analyzer() {
     let before = r#"root ::= "a" rule1 "b" rule3 rule5 rule2
 rule1 ::= "b"

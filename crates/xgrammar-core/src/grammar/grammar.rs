@@ -58,6 +58,14 @@ impl Grammar {
         &self.rules[rule_id as usize]
     }
 
+    /// Renames a rule in place (used by the root-rule renamer pass).
+    ///
+    /// # Panics
+    /// Panics if `rule_id` is out of bounds.
+    pub(crate) fn rename_rule(&mut self, rule_id: i32, new_name: String) {
+        self.rules[rule_id as usize].name = new_name;
+    }
+
     /// The root rule id.
     #[must_use]
     pub fn root_rule_id(&self) -> i32 {

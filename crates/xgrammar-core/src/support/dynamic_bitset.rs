@@ -1,10 +1,6 @@
-//! Runtime-sized bitset — a port of `cpp/support/dynamic_bitset.h`.
+//! Runtime-sized bitset over a `u32` word array — a port of `cpp/support/dynamic_bitset.h`.
 //!
-//! The backing buffer is a `u32` word array, 32 bits per word. This is the owned
-//! ("internal buffer") form used by the compiler's token-mask storage. The matcher's
-//! external-buffer form — writing bits directly into a caller-provided DLTensor — is
-//! added as a borrowed view alongside the matcher (M6); the bit-scan logic here is the
-//! shared source of truth.
+//! This is the owned form; the matcher's external-buffer (DLTensor) view lands in M6.
 
 use serde::{Deserialize, Serialize};
 

@@ -1,36 +1,30 @@
 //! The grammar visitor/mutator framework — a port of `GrammarFunctor` in
 //! `cpp/grammar_functor.h`.
 //!
-//! A *mutator* walks every rule of a grammar and rebuilds it into a fresh
-//! [`GrammarBuilder`], dispatching on each expression's type. The default methods form an
-//! **identity** transform (the output is structurally equivalent to the input); a concrete
-//! pass overrides the `visit_*` methods it cares about and inherits the rest.
-//!
-//! Unlike the C++ CRTP version, the traversal state ([`MutatorState`]) is threaded
-//! explicitly so a pass can hold its own `&mut self` state (caches, counters). Each
-//! `visit_*` receives the expression's payload copied out of the source grammar, which
-//! sidesteps borrow conflicts between reading `base` and writing `builder`.
+//! A mutator walks every rule and rebuilds the grammar into a fresh [`GrammarBuilder`],
+//! dispatching on each expression's type. The defaults form an identity transform; a pass
+//! overrides the `visit_*` methods it cares about. State is threaded explicitly via
+//! [`MutatorState`], and each `visit_*` receives the payload copied out of the source,
+//! which avoids borrow conflicts between reading `base` and writing `builder`.
 
 use crate::grammar::{Grammar, GrammarBuilder, GrammarExprType, NO_EXPR};
 
-/// The traversal state shared across a mutation: the source grammar, the builder for the
-/// result, and the name of the rule currently being rewritten.
+/// Traversal state: the source grammar, the builder for the result, and the rule being
+/// rewritten (a hint for generated rule names).
 pub struct MutatorState<'a> {
     /// The grammar being transformed (read-only source).
     pub base: &'a Grammar,
-    /// The builder accumulating the transformed grammar.
+    /// The builder accumulating the result.
     pub builder: GrammarBuilder,
-    /// Name of the rule currently being rewritten (a hint for generated rule names).
+    /// Name of the rule currently being rewritten.
     pub cur_rule_name: String,
 }
 
-/// A grammar transformation. Implementors override the `visit_*` methods they need; the
-/// defaults rebuild each expression unchanged.
+/// A grammar transformation. Override the `visit_*` methods you need; the defaults rebuild
+/// each expression unchanged.
 pub trait GrammarMutator {
-    /// Applies the transformation, returning the rebuilt grammar.
-    ///
-    /// Rules are first created empty (preserving rule ids), then each body and lookahead
-    /// assertion is visited and rewritten.
+    /// Rebuilds the grammar. Rules are created empty first (preserving rule ids), then each
+    /// body and lookahead assertion is visited.
     fn apply(&mut self, grammar: &Grammar) -> Grammar {
         let mut state = MutatorState {
             base: grammar,
@@ -56,7 +50,7 @@ pub trait GrammarMutator {
             .expect("root rule preserved during mutation")
     }
 
-    /// Visits a lookahead assertion (or passes through [`NO_EXPR`]).
+    /// Visits a lookahead assertion, passing [`NO_EXPR`] through.
     fn visit_lookahead(&mut self, state: &mut MutatorState, lookahead_id: i32) -> i32 {
         if lookahead_id == NO_EXPR {
             NO_EXPR
@@ -65,7 +59,7 @@ pub trait GrammarMutator {
         }
     }
 
-    /// Visits the expression with the given id in the source grammar.
+    /// Visits the source expression with the given id.
     fn visit_expr_id(&mut self, state: &mut MutatorState, expr_id: i32) -> i32 {
         let (ty, data) = {
             let expr = state.base.expr(expr_id);
@@ -110,87 +104,53 @@ pub trait GrammarMutator {
         state.builder.add_choices(&ids)
     }
 
-    /// Re-adds a leaf expression (no nested expression ids) unchanged.
+    /// Re-adds a leaf expression unchanged. The per-leaf hooks below default to this.
     fn visit_element(&mut self, state: &mut MutatorState, ty: GrammarExprType, data: &[i32]) -> i32 {
         state.builder.add_grammar_expr(ty, data)
     }
 
-    /// Visits an empty-string expression (default: re-add unchanged).
-    fn visit_empty_str(&mut self, state: &mut MutatorState, ty: GrammarExprType, data: &[i32]) -> i32 {
-        self.visit_element(state, ty, data)
+    #[doc(hidden)]
+    fn visit_empty_str(&mut self, st: &mut MutatorState, ty: GrammarExprType, data: &[i32]) -> i32 {
+        self.visit_element(st, ty, data)
+    }
+    #[doc(hidden)]
+    fn visit_byte_string(&mut self, st: &mut MutatorState, ty: GrammarExprType, data: &[i32]) -> i32 {
+        self.visit_element(st, ty, data)
+    }
+    #[doc(hidden)]
+    fn visit_character_class(&mut self, st: &mut MutatorState, ty: GrammarExprType, data: &[i32]) -> i32 {
+        self.visit_element(st, ty, data)
+    }
+    #[doc(hidden)]
+    fn visit_character_class_star(&mut self, st: &mut MutatorState, ty: GrammarExprType, data: &[i32]) -> i32 {
+        self.visit_element(st, ty, data)
+    }
+    #[doc(hidden)]
+    fn visit_rule_ref(&mut self, st: &mut MutatorState, ty: GrammarExprType, data: &[i32]) -> i32 {
+        self.visit_element(st, ty, data)
+    }
+    #[doc(hidden)]
+    fn visit_repeat(&mut self, st: &mut MutatorState, ty: GrammarExprType, data: &[i32]) -> i32 {
+        self.visit_element(st, ty, data)
+    }
+    #[doc(hidden)]
+    fn visit_token(&mut self, st: &mut MutatorState, ty: GrammarExprType, data: &[i32]) -> i32 {
+        self.visit_element(st, ty, data)
+    }
+    #[doc(hidden)]
+    fn visit_exclude_token(&mut self, st: &mut MutatorState, ty: GrammarExprType, data: &[i32]) -> i32 {
+        self.visit_element(st, ty, data)
     }
 
-    /// Visits a byte-string expression (default: re-add unchanged).
-    fn visit_byte_string(&mut self, state: &mut MutatorState, ty: GrammarExprType, data: &[i32]) -> i32 {
-        self.visit_element(state, ty, data)
+    // Tag-dispatch hooks re-add the raw payload, which is only valid while expression ids
+    // are preserved; proper re-encoding lands with tag-dispatch builder support. Not hit by
+    // the current non-tag passes.
+    #[doc(hidden)]
+    fn visit_tag_dispatch(&mut self, st: &mut MutatorState, ty: GrammarExprType, data: &[i32]) -> i32 {
+        self.visit_element(st, ty, data)
     }
-
-    /// Visits a character-class expression (default: re-add unchanged).
-    fn visit_character_class(
-        &mut self,
-        state: &mut MutatorState,
-        ty: GrammarExprType,
-        data: &[i32],
-    ) -> i32 {
-        self.visit_element(state, ty, data)
-    }
-
-    /// Visits a starred character-class expression (default: re-add unchanged).
-    fn visit_character_class_star(
-        &mut self,
-        state: &mut MutatorState,
-        ty: GrammarExprType,
-        data: &[i32],
-    ) -> i32 {
-        self.visit_element(state, ty, data)
-    }
-
-    /// Visits a rule reference (default: re-add unchanged; rule ids are preserved).
-    fn visit_rule_ref(&mut self, state: &mut MutatorState, ty: GrammarExprType, data: &[i32]) -> i32 {
-        self.visit_element(state, ty, data)
-    }
-
-    /// Visits a repeat expression (default: re-add unchanged).
-    fn visit_repeat(&mut self, state: &mut MutatorState, ty: GrammarExprType, data: &[i32]) -> i32 {
-        self.visit_element(state, ty, data)
-    }
-
-    /// Visits a token-set expression (default: re-add unchanged).
-    fn visit_token(&mut self, state: &mut MutatorState, ty: GrammarExprType, data: &[i32]) -> i32 {
-        self.visit_element(state, ty, data)
-    }
-
-    /// Visits an exclude-token-set expression (default: re-add unchanged).
-    fn visit_exclude_token(
-        &mut self,
-        state: &mut MutatorState,
-        ty: GrammarExprType,
-        data: &[i32],
-    ) -> i32 {
-        self.visit_element(state, ty, data)
-    }
-
-    /// Visits a tag-dispatch expression.
-    ///
-    /// The default re-adds the raw payload, which is only correct while expression ids are
-    /// preserved; proper re-encoding lands with the tag-dispatch builder support (the
-    /// macro work). Not exercised by the current non-tag passes.
-    fn visit_tag_dispatch(
-        &mut self,
-        state: &mut MutatorState,
-        ty: GrammarExprType,
-        data: &[i32],
-    ) -> i32 {
-        self.visit_element(state, ty, data)
-    }
-
-    /// Visits a token-tag-dispatch expression (see [`Self::visit_tag_dispatch`]).
-    fn visit_token_tag_dispatch(
-        &mut self,
-        state: &mut MutatorState,
-        ty: GrammarExprType,
-        data: &[i32],
-    ) -> i32 {
-        self.visit_element(state, ty, data)
+    #[doc(hidden)]
+    fn visit_token_tag_dispatch(&mut self, st: &mut MutatorState, ty: GrammarExprType, data: &[i32]) -> i32 {
+        self.visit_element(st, ty, data)
     }
 }

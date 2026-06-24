@@ -11,6 +11,9 @@ description = "Efficient, Flexible and Portable Structured Generation for Rust â
 keywords = ["llm", "grammar", "structured-generation", "json-schema", "parser"]
 categories = ["parsing", "text-processing"]
 readme = "../../README.md"
+# Integration tests mirror the upstream layout (tests/{cpp,python}/) and are aggregated
+# per-directory via main.rs, so disable auto-discovery and declare them explicitly.
+autotests = false
 
 [features]
 default = []
@@ -25,3 +28,12 @@ tokenizers = { version = "0.22", default-features = false, features = ["fancy-re
 
 [lints]
 workspace = true
+
+# Ported upstream suites, mirroring xgrammar/tests/{cpp,python}/ file-for-file.
+[[test]]
+name = "cpp"
+path = "tests/cpp/main.rs"
+
+[[test]]
+name = "python"
+path = "tests/python/main.rs"

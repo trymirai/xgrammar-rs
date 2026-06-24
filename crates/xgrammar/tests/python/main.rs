@@ -1,0 +1,27 @@
+//! Aggregates the ported Python suite (`xgrammar/tests/python/`) into one test binary.
+mod test_utils;
+mod encoding_dsv32;
+mod encoding_dsv4;
+mod test_builtin_structural_tag;
+mod test_builtin_structural_tag_alignment;
+mod test_function_calling_converter;
+mod test_grammar_compiler;
+mod test_grammar_matcher_basic;
+mod test_grammar_matcher_ebnf;
+mod test_grammar_matcher_json;
+mod test_grammar_matcher_json_schema;
+mod test_grammar_matcher_macro;
+mod test_grammar_matcher_regex;
+mod test_grammar_matcher_structural_tag;
+mod test_grammar_parser;
+mod test_grammar_parser_macro;
+mod test_grammar_union_concat;
+mod test_json_schema_converter;
+mod test_recursion_depth;
+mod test_regex_converter;
+mod test_serialization;
+mod test_speculative_decoding;
+mod test_structural_tag_converter;
+mod test_token_bitmask_operations;
+mod test_token_edge;
+mod test_tokenizer_info;

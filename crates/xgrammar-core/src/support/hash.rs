@@ -44,14 +44,10 @@ mod tests {
 
     #[test]
     fn matches_reference_mixing() {
-        // Reproduce the C++ formula by hand for a single combine from seed 0.
+        // From a zero seed the two shift terms vanish, so the result is just `v + HASH_MIX`.
         let mut seed = 0u64;
         hash_combine_binary(&mut seed, 42);
-        let expected = 42u64
-            .wrapping_add(HASH_MIX)
-            .wrapping_add(0 << 6)
-            .wrapping_add(0 >> 2);
-        assert_eq!(seed, 0 ^ expected);
+        assert_eq!(seed, 42u64.wrapping_add(HASH_MIX));
     }
 
     #[test]

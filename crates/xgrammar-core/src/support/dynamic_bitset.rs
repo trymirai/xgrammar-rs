@@ -262,7 +262,7 @@ mod tests {
         assert!(b.all()); // padding bits ignored by `all`
         b.reset_all();
         assert!(!b.all());
-        assert_eq!(DynamicBitset::new(0).all(), true);
+        assert!(DynamicBitset::new(0).all());
     }
 
     #[test]

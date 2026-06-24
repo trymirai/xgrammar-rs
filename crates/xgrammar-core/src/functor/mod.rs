@@ -5,5 +5,8 @@
 //! [`GrammarMutator`] is the visitor/mutator framework; concrete passes implement it.
 
 mod mutator;
+mod single_element_expr_eliminator;
+mod structure_normalizer;
 
 pub use mutator::{GrammarMutator, MutatorState};
+pub use structure_normalizer::structure_normalizer;

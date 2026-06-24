@@ -8,7 +8,10 @@ mod grammar;
 mod grammar_builder;
 mod grammar_expr;
 mod grammar_expr_type;
+mod printer;
 mod rule;
+mod tag_dispatch;
+mod token_tag_dispatch;
 
 pub use character_class_element::CharacterClassElement;
 pub use grammar::Grammar;
@@ -16,3 +19,5 @@ pub use grammar_builder::GrammarBuilder;
 pub use grammar_expr::GrammarExpr;
 pub use grammar_expr_type::{GrammarExprType, UnknownGrammarExprType};
 pub use rule::{NO_EXPR, Rule};
+pub use tag_dispatch::TagDispatch;
+pub use token_tag_dispatch::TokenTagDispatch;

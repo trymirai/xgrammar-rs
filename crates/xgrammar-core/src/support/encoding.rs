@@ -175,15 +175,22 @@ pub fn escape_byte(raw_char: u8) -> String {
     escape_codepoint(Codepoint::from(raw_char), &[])
 }
 
-/// Escapes a whole string (decoding UTF-8, preserving invalid bytes) into a printable form.
+/// Escapes a raw byte sequence (decoding UTF-8, preserving invalid bytes) into a printable
+/// form.
 #[must_use]
-pub fn escape_str(raw: &str) -> String {
-    let codepoints = parse_utf8(raw.as_bytes(), true).expect("preserve_invalid_bytes never errors");
+pub fn escape_bytes(raw: &[u8]) -> String {
+    let codepoints = parse_utf8(raw, true).expect("preserve_invalid_bytes never errors");
     let mut out = String::new();
     for cp in codepoints {
         out.push_str(&escape_codepoint(cp, &[]));
     }
     out
+}
+
+/// Escapes a whole string (decoding UTF-8, preserving invalid bytes) into a printable form.
+#[must_use]
+pub fn escape_str(raw: &str) -> String {
+    escape_bytes(raw.as_bytes())
 }
 
 fn default_escape_to_codepoint(escape_char: u8) -> Option<Codepoint> {

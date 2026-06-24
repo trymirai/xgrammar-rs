@@ -29,7 +29,11 @@ impl Grammar {
             GrammarExprType::TokenTagDispatch,
             "not a token tag dispatch"
         );
-        let data = expr.data;
+        Self::decode_token_tag_dispatch_data(expr.data)
+    }
+
+    /// Decodes a token-tag-dispatch payload (the expr data without its type tag).
+    pub(crate) fn decode_token_tag_dispatch_data(data: &[i32]) -> TokenTagDispatch {
         let mut pos = 0;
 
         let trigger_count = data[pos] as usize;

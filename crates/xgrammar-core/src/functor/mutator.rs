@@ -142,15 +142,17 @@ pub trait GrammarMutator {
         self.visit_element(st, ty, data)
     }
 
-    // Tag-dispatch hooks re-add the raw payload, which is only valid while expression ids
-    // are preserved; proper re-encoding lands with tag-dispatch builder support. Not hit by
-    // the current non-tag passes.
+    // Tag-dispatch payloads embed byte-string and excludes expression ids that point into
+    // the source grammar, so they are decoded and re-encoded into the fresh builder rather
+    // than copied raw. Rule ids are preserved by the rule-ordering invariant of `apply`.
     #[doc(hidden)]
-    fn visit_tag_dispatch(&mut self, st: &mut MutatorState, ty: GrammarExprType, data: &[i32]) -> i32 {
-        self.visit_element(st, ty, data)
+    fn visit_tag_dispatch(&mut self, st: &mut MutatorState, _ty: GrammarExprType, data: &[i32]) -> i32 {
+        let tag_dispatch = st.base.decode_tag_dispatch_data(data);
+        st.builder.add_tag_dispatch(&tag_dispatch)
     }
     #[doc(hidden)]
-    fn visit_token_tag_dispatch(&mut self, st: &mut MutatorState, ty: GrammarExprType, data: &[i32]) -> i32 {
-        self.visit_element(st, ty, data)
+    fn visit_token_tag_dispatch(&mut self, st: &mut MutatorState, _ty: GrammarExprType, data: &[i32]) -> i32 {
+        let ttd = Grammar::decode_token_tag_dispatch_data(data);
+        st.builder.add_token_tag_dispatch(&ttd)
     }
 }

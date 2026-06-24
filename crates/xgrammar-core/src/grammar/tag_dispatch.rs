@@ -29,7 +29,12 @@ impl Grammar {
     pub fn tag_dispatch(&self, expr_id: i32) -> TagDispatch {
         let expr = self.expr(expr_id);
         assert_eq!(expr.ty, GrammarExprType::TagDispatch, "not a tag dispatch");
-        let data = expr.data;
+        self.decode_tag_dispatch_data(expr.data)
+    }
+
+    /// Decodes a tag-dispatch payload (the expr data without its type tag), resolving the
+    /// byte-string and excludes expression ids against this grammar.
+    pub(crate) fn decode_tag_dispatch_data(&self, data: &[i32]) -> TagDispatch {
         let body_len = data.len() - EXTRA_PARAMETERS;
 
         let mut tag_rule_pairs = Vec::with_capacity(body_len / 2);

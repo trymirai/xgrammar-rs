@@ -65,6 +65,21 @@ impl StructureNormalizer {
         (expr.ty, expr.data.to_vec())
     }
 
+    /// Re-encodes a tag-dispatch (or token-tag-dispatch) payload into the result builder.
+    fn rebuild_tag_dispatch(&mut self, ty: GrammarExprType, data: &[i32]) -> i32 {
+        match ty {
+            GrammarExprType::TagDispatch => {
+                let tag_dispatch = self.base.decode_tag_dispatch_data(data);
+                self.builder.add_tag_dispatch(&tag_dispatch)
+            }
+            GrammarExprType::TokenTagDispatch => {
+                let ttd = Grammar::decode_token_tag_dispatch_data(data);
+                self.builder.add_token_tag_dispatch(&ttd)
+            }
+            _ => unreachable!("rebuild_tag_dispatch called with non-tag-dispatch type"),
+        }
+    }
+
     fn visit_lookahead(&mut self, lookahead_id: i32) -> i32 {
         if lookahead_id == NO_EXPR {
             return NO_EXPR;
@@ -114,10 +129,10 @@ impl StructureNormalizer {
                 let seq = self.builder.add_sequence(&[element]);
                 self.builder.add_choices(&[seq])
             }
-            // Tag-dispatch normalization needs the tag-dispatch builder (macro work); not
-            // exercised by the current gates. Re-add raw as a placeholder.
+            // A tag dispatch is kept as the rule body directly (printed without the
+            // `(( … ))` choices/sequence wrapping).
             GrammarExprType::TagDispatch | GrammarExprType::TokenTagDispatch => {
-                self.builder.add_grammar_expr(ty, &data)
+                self.rebuild_tag_dispatch(ty, &data)
             }
         }
     }
@@ -152,7 +167,7 @@ impl StructureNormalizer {
                 }
                 GrammarExprType::EmptyStr => found_empty = true,
                 GrammarExprType::TagDispatch | GrammarExprType::TokenTagDispatch => {
-                    let element = self.builder.add_grammar_expr(ty, &cdata);
+                    let element = self.rebuild_tag_dispatch(ty, &cdata);
                     let rule_id = self.builder.add_rule_with_hint(&self.cur_rule_name.clone(), element);
                     let rule_ref = self.builder.add_rule_ref(rule_id);
                     let seq = self.builder.add_sequence(&[rule_ref]);
@@ -200,7 +215,7 @@ impl StructureNormalizer {
                 }
                 GrammarExprType::EmptyStr => {}
                 GrammarExprType::TagDispatch | GrammarExprType::TokenTagDispatch => {
-                    let element_id = self.builder.add_grammar_expr(ty, &edata);
+                    let element_id = self.rebuild_tag_dispatch(ty, &edata);
                     let rule_id =
                         self.builder.add_rule_with_hint(&self.cur_rule_name.clone(), element_id);
                     new_sequence_ids.push(self.builder.add_rule_ref(rule_id));

@@ -75,7 +75,9 @@ impl StructureNormalizer {
                 let ids = self.visit_sequence_(&data);
                 self.builder.add_sequence(&ids)
             }
-            GrammarExprType::Choices => panic!("Choices in lookahead assertion are not supported"),
+            GrammarExprType::Choices => {
+                panic!("Choices in lookahead assertion are not supported yet")
+            }
             GrammarExprType::EmptyStr => panic!("Empty string should not be in lookahead assertion"),
             GrammarExprType::TagDispatch => panic!("TagDispatch should not be in lookahead assertion"),
             _ => {

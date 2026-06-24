@@ -27,6 +27,9 @@ dlpark = "0.7"
 
 [workspace.lints.clippy]
 correctness = { level = "deny", priority = -1 }
+# The one-type-per-file convention names a file after its type, which can match the
+# containing feature module (e.g. `grammar/grammar.rs`). That is intentional.
+module_inception = "allow"
 
 [profile.release]
 opt-level = 3

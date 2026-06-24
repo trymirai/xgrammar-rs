@@ -4,10 +4,12 @@
 //!
 //! One dedicated type per file; re-exported here.
 
+mod ebnf_script_creator;
 mod range_regex;
 mod regex_converter;
 mod regex_error;
 
+pub use ebnf_script_creator::EbnfScriptCreator;
 pub use range_regex::{generate_float_range_regex, generate_range_regex};
 pub use regex_converter::regex_to_ebnf;
 pub use regex_error::RegexError;

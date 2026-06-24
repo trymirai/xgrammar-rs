@@ -1,20 +1,20 @@
 //! The EBNF parser — a port of `EBNFParser` in `cpp/grammar_parser.cc`.
 //!
-//! Produces the raw (un-normalized) BNF AST. The four macros (`TagDispatch`, `Token`,
-//! `ExcludeToken`, `TokenTagDispatch`) are not yet ported and are reported as errors;
-//! they are a follow-up.
+//! Produces the raw (un-normalized) BNF AST, including the four macros (`TagDispatch`,
+//! `Token`, `ExcludeToken`, `TokenTagDispatch`).
 
 use super::ebnf_error::EbnfError;
 use super::ebnf_lexer::tokenize;
+use super::macro_ir::{MacroArguments, MacroValue};
 use super::parse_error::ParserError;
 use super::token::Token;
 use super::token_type::TokenType;
-use crate::grammar::{CharacterClassElement, Grammar, GrammarBuilder, GrammarExprType, NO_EXPR};
+use crate::grammar::{
+    CharacterClassElement, Grammar, GrammarBuilder, GrammarExprType, NO_EXPR, TagDispatch,
+    TokenTagDispatch,
+};
 
 const MAX_NEST_LAYER: i32 = 1000;
-
-/// Macro names that are reserved and not yet supported by this parser.
-const MACRO_NAMES: &[&str] = &["TagDispatch", "Token", "ExcludeToken", "TokenTagDispatch"];
 
 /// Parses an EBNF grammar string into the raw (un-normalized) BNF AST.
 ///
@@ -172,6 +172,321 @@ impl Parser {
         Ok(self.builder.add_rule_ref(rule_id))
     }
 
+    /// Parses a single macro value: a string, integer, boolean, identifier, or tuple.
+    fn parse_macro_value(&mut self) -> Result<MacroValue, ParserError> {
+        match self.cur().ty {
+            TokenType::StringLiteral => {
+                let value = self.cur_str();
+                self.consume(1);
+                Ok(MacroValue::Str(value))
+            }
+            TokenType::IntegerLiteral => {
+                let value = self.cur().value.as_int().unwrap_or(0);
+                self.consume(1);
+                Ok(MacroValue::Int(value))
+            }
+            TokenType::BooleanLiteral => {
+                let value = self.cur().value.as_bool().unwrap_or(false);
+                self.consume(1);
+                Ok(MacroValue::Bool(value))
+            }
+            TokenType::Identifier => {
+                let name = self.cur_str();
+                self.consume(1);
+                Ok(MacroValue::Identifier(name))
+            }
+            TokenType::LParen => {
+                self.consume(1);
+                let mut elements = Vec::new();
+                if self.cur().ty != TokenType::RParen {
+                    loop {
+                        elements.push(self.parse_macro_value()?);
+                        if self.cur().ty == TokenType::Comma {
+                            self.consume(1);
+                            if self.cur().ty == TokenType::RParen {
+                                break;
+                            }
+                        } else if self.cur().ty == TokenType::RParen {
+                            break;
+                        } else {
+                            return Err(self.error("Expect , or ) in tuple"));
+                        }
+                    }
+                }
+                self.consume(1); // Consume )
+                Ok(MacroValue::Tuple(elements))
+            }
+            _ => Err(self.error("Expect string, integer, boolean, or tuple in macro argument")),
+        }
+    }
+
+    /// Parses a macro argument list (positional and named arguments).
+    fn parse_macro_arguments(&mut self) -> Result<MacroArguments, ParserError> {
+        self.expect(TokenType::LParen, "Expect ( after macro function name")?;
+        let mut args = MacroArguments::default();
+        if self.cur().ty != TokenType::RParen {
+            loop {
+                if self.cur().ty == TokenType::Identifier && self.peek(1).ty == TokenType::Equal {
+                    let name = self.cur_str();
+                    self.consume(2); // Consume identifier and =
+                    let value = self.parse_macro_value()?;
+                    args.named.push((name, value));
+                } else {
+                    args.positional.push(self.parse_macro_value()?);
+                }
+                if self.cur().ty == TokenType::Comma {
+                    self.consume(1);
+                } else if self.cur().ty == TokenType::RParen {
+                    break;
+                } else {
+                    return Err(self.error("Expect , or ) in macro arguments"));
+                }
+            }
+        }
+        self.expect(TokenType::RParen, "Expect ) after macro arguments")?;
+        Ok(args)
+    }
+
+    fn parse_tag_dispatch(&mut self) -> Result<i32, ParserError> {
+        self.consume(1); // Consume TagDispatch operator
+        let start = self.pos;
+        let args = self.parse_macro_arguments()?;
+        let delta = start as isize - self.pos as isize;
+
+        for (name, _) in &args.named {
+            if name != "loop_after_dispatch" && name != "excludes" {
+                return Err(
+                    self.error_at(delta, format!("Unknown named argument for TagDispatch: {name}"))
+                );
+            }
+        }
+
+        let mut tag_rule_pairs = Vec::new();
+        for arg in &args.positional {
+            let MacroValue::Tuple(elements) = arg else {
+                return Err(self.error_at(delta, "Each tag dispatch element must be a tuple"));
+            };
+            if elements.len() != 2 {
+                return Err(
+                    self.error_at(delta, "Each tag dispatch element must be a pair (tag, rule)")
+                );
+            }
+            let MacroValue::Str(tag) = &elements[0] else {
+                return Err(self.error_at(delta, "Tag must be a non-empty string literal"));
+            };
+            if tag.is_empty() {
+                return Err(self.error_at(delta, "Tag must be a non-empty string literal"));
+            }
+            let MacroValue::Identifier(rule_name) = &elements[1] else {
+                return Err(self.error_at(delta, "Rule reference must be an identifier"));
+            };
+            let rule_id = self.builder.get_rule_id(rule_name);
+            if rule_id == NO_EXPR {
+                return Err(self.error_at(delta, format!("Rule \"{rule_name}\" is not defined")));
+            }
+            tag_rule_pairs.push((tag.clone().into_bytes(), rule_id));
+        }
+
+        let mut loop_after_dispatch = true;
+        if let Some(value) = args.named("loop_after_dispatch") {
+            let MacroValue::Bool(b) = value else {
+                return Err(self.error_at(delta, "loop_after_dispatch must be a boolean literal"));
+            };
+            loop_after_dispatch = *b;
+        }
+
+        let mut excludes = Vec::new();
+        if let Some(value) = args.named("excludes") {
+            let MacroValue::Tuple(elements) = value else {
+                return Err(self.error_at(delta, "excludes must be a tuple"));
+            };
+            for element in elements {
+                let MacroValue::Str(s) = element else {
+                    return Err(self.error_at(delta, "Exclude must be a non-empty string literal"));
+                };
+                if s.is_empty() {
+                    return Err(self.error_at(delta, "Exclude must be a non-empty string literal"));
+                }
+                excludes.push(s.clone().into_bytes());
+            }
+        }
+
+        for exclude in &excludes {
+            for (trigger, _) in &tag_rule_pairs {
+                if trigger.starts_with(exclude.as_slice()) {
+                    return Err(self.error_at(
+                        delta,
+                        format!(
+                            "Exclude string must not be a prefix of trigger string: {}",
+                            String::from_utf8_lossy(exclude)
+                        ),
+                    ));
+                }
+            }
+        }
+
+        let tag_dispatch = TagDispatch {
+            tag_rule_pairs,
+            loop_after_dispatch,
+            excludes,
+        };
+        Ok(self.builder.add_tag_dispatch(&tag_dispatch))
+    }
+
+    fn parse_token_set(&mut self) -> Result<i32, ParserError> {
+        self.consume(1); // Consume Token identifier
+        let start = self.pos;
+        let args = self.parse_macro_arguments()?;
+        let delta = start as isize - self.pos as isize;
+
+        if !args.named.is_empty() {
+            return Err(self.error_at(delta, "Token() does not accept named arguments"));
+        }
+        if args.positional.is_empty() {
+            return Err(self.error_at(delta, "Token() requires at least one integer argument"));
+        }
+        let mut token_ids = Vec::with_capacity(args.positional.len());
+        for arg in &args.positional {
+            let MacroValue::Int(value) = arg else {
+                return Err(self.error_at(delta, "Token() arguments must be non-negative integers"));
+            };
+            if *value < 0 {
+                return Err(self.error_at(delta, "Token() arguments must be non-negative integers"));
+            }
+            token_ids.push(*value as i32);
+        }
+        token_ids.sort_unstable();
+        token_ids.dedup();
+        Ok(self.builder.add_token_set(&token_ids))
+    }
+
+    fn parse_exclude_token(&mut self) -> Result<i32, ParserError> {
+        self.consume(1); // Consume ExcludeToken identifier
+        let start = self.pos;
+        let args = self.parse_macro_arguments()?;
+        let delta = start as isize - self.pos as isize;
+
+        if !args.named.is_empty() {
+            return Err(self.error_at(delta, "ExcludeToken() does not accept named arguments"));
+        }
+        if args.positional.is_empty() {
+            return Err(
+                self.error_at(delta, "ExcludeToken() requires at least one integer argument")
+            );
+        }
+        let mut token_ids = Vec::with_capacity(args.positional.len());
+        for arg in &args.positional {
+            let MacroValue::Int(value) = arg else {
+                return Err(
+                    self.error_at(delta, "ExcludeToken() arguments must be non-negative integers")
+                );
+            };
+            if *value < 0 {
+                return Err(
+                    self.error_at(delta, "ExcludeToken() arguments must be non-negative integers")
+                );
+            }
+            token_ids.push(*value as i32);
+        }
+        token_ids.sort_unstable();
+        token_ids.dedup();
+        Ok(self.builder.add_exclude_token_set(&token_ids))
+    }
+
+    fn parse_token_tag_dispatch(&mut self) -> Result<i32, ParserError> {
+        self.consume(1); // Consume TokenTagDispatch identifier
+        let start = self.pos;
+        let args = self.parse_macro_arguments()?;
+        let delta = start as isize - self.pos as isize;
+
+        for (name, _) in &args.named {
+            if name != "loop_after_dispatch" && name != "excludes" {
+                return Err(self.error_at(
+                    delta,
+                    format!("Unknown named argument for TokenTagDispatch: {name}"),
+                ));
+            }
+        }
+
+        let mut trigger_rule_pairs = Vec::new();
+        for arg in &args.positional {
+            let MacroValue::Tuple(elements) = arg else {
+                return Err(self.error_at(
+                    delta,
+                    "Each TokenTagDispatch element must be a pair (token_id, rule)",
+                ));
+            };
+            if elements.len() != 2 {
+                return Err(self.error_at(
+                    delta,
+                    "Each TokenTagDispatch element must be a pair (token_id, rule)",
+                ));
+            }
+            let MacroValue::Int(token_id) = &elements[0] else {
+                return Err(self.error_at(delta, "Token trigger ID must be a non-negative integer"));
+            };
+            if *token_id < 0 {
+                return Err(self.error_at(delta, "Token trigger ID must be a non-negative integer"));
+            }
+            let MacroValue::Identifier(rule_name) = &elements[1] else {
+                return Err(self.error_at(delta, "Rule reference must be an identifier"));
+            };
+            let rule_id = self.builder.get_rule_id(rule_name);
+            if rule_id == NO_EXPR {
+                return Err(self.error_at(delta, format!("Rule \"{rule_name}\" is not defined")));
+            }
+            trigger_rule_pairs.push((*token_id as i32, rule_id));
+        }
+
+        let mut loop_after_dispatch = true;
+        if let Some(value) = args.named("loop_after_dispatch") {
+            let MacroValue::Bool(b) = value else {
+                return Err(self.error_at(delta, "loop_after_dispatch must be a boolean"));
+            };
+            loop_after_dispatch = *b;
+        }
+
+        let mut excludes = Vec::new();
+        if let Some(value) = args.named("excludes") {
+            let MacroValue::Tuple(elements) = value else {
+                return Err(self.error_at(delta, "excludes must be a tuple"));
+            };
+            for element in elements {
+                let MacroValue::Int(token_id) = element else {
+                    return Err(
+                        self.error_at(delta, "Exclude token ID must be a non-negative integer")
+                    );
+                };
+                if *token_id < 0 {
+                    return Err(
+                        self.error_at(delta, "Exclude token ID must be a non-negative integer")
+                    );
+                }
+                excludes.push(*token_id as i32);
+            }
+        }
+
+        for &exclude_id in &excludes {
+            for (token_id, _) in &trigger_rule_pairs {
+                if *token_id == exclude_id {
+                    return Err(self.error_at(
+                        delta,
+                        format!(
+                            "Token trigger ID {token_id} must not overlap with exclude token ID"
+                        ),
+                    ));
+                }
+            }
+        }
+
+        let ttd = TokenTagDispatch {
+            trigger_rule_pairs,
+            loop_after_dispatch,
+            excludes,
+        };
+        Ok(self.builder.add_token_tag_dispatch(&ttd))
+    }
+
     fn parse_element(&mut self) -> Result<i32, ParserError> {
         match self.cur().ty {
             TokenType::LParen => {
@@ -192,14 +507,13 @@ impl Parser {
             }
             TokenType::LBracket => self.parse_char_class(),
             TokenType::StringLiteral => self.parse_string(),
-            TokenType::Identifier => {
-                let id = self.cur_str();
-                if MACRO_NAMES.contains(&id.as_str()) {
-                    Err(self.error(format!("macro \"{id}\" is not yet supported")))
-                } else {
-                    self.parse_rule_ref()
-                }
-            }
+            TokenType::Identifier => match self.cur_str().as_str() {
+                "TagDispatch" => self.parse_tag_dispatch(),
+                "Token" => self.parse_token_set(),
+                "ExcludeToken" => self.parse_exclude_token(),
+                "TokenTagDispatch" => self.parse_token_tag_dispatch(),
+                _ => self.parse_rule_ref(),
+            },
             _ => Err(self.error(format!("Expect element, but got {}", self.cur().lexeme))),
         }
     }

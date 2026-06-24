@@ -7,6 +7,8 @@ use super::grammar::Grammar;
 use super::grammar_expr::GrammarExpr;
 use super::grammar_expr_type::GrammarExprType;
 use super::rule::{NO_EXPR, Rule};
+use super::tag_dispatch::TagDispatch;
+use super::token_tag_dispatch::TokenTagDispatch;
 use crate::support::Compact2dArray;
 
 /// Builds a [`Grammar`] incrementally: add expressions (each returns its id), wire them
@@ -166,6 +168,39 @@ impl GrammarBuilder {
             }
         };
         self.add_repeat(ref_rule_id, min_repeat, max_repeat)
+    }
+
+    /// Adds a tag-dispatch expression from its decoded form.
+    pub fn add_tag_dispatch(&mut self, tag_dispatch: &TagDispatch) -> i32 {
+        let mut data = Vec::with_capacity(tag_dispatch.tag_rule_pairs.len() * 2 + 2);
+        for (tag, rule_id) in &tag_dispatch.tag_rule_pairs {
+            let bytes: Vec<i32> = tag.iter().map(|&b| i32::from(b)).collect();
+            data.push(self.add_byte_string_bytes(&bytes));
+            data.push(*rule_id);
+        }
+        data.push(i32::from(tag_dispatch.loop_after_dispatch));
+        let mut exclude_ids = Vec::with_capacity(tag_dispatch.excludes.len());
+        for exclude in &tag_dispatch.excludes {
+            let bytes: Vec<i32> = exclude.iter().map(|&b| i32::from(b)).collect();
+            exclude_ids.push(self.add_byte_string_bytes(&bytes));
+        }
+        let exclude_choices = self.add_choices(&exclude_ids);
+        data.push(exclude_choices);
+        self.add_grammar_expr(GrammarExprType::TagDispatch, &data)
+    }
+
+    /// Adds a token-tag-dispatch expression from its decoded form.
+    pub fn add_token_tag_dispatch(&mut self, ttd: &TokenTagDispatch) -> i32 {
+        let mut data = Vec::with_capacity(ttd.trigger_rule_pairs.len() * 2 + ttd.excludes.len() + 3);
+        data.push(ttd.trigger_rule_pairs.len() as i32);
+        for (token_id, rule_id) in &ttd.trigger_rule_pairs {
+            data.push(*token_id);
+            data.push(*rule_id);
+        }
+        data.push(i32::from(ttd.loop_after_dispatch));
+        data.push(ttd.excludes.len() as i32);
+        data.extend_from_slice(&ttd.excludes);
+        self.add_grammar_expr(GrammarExprType::TokenTagDispatch, &data)
     }
 
     /// Number of grammar expressions added so far.

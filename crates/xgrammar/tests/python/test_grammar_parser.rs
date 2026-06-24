@@ -314,3 +314,111 @@ rule1 ::= ("")
 "#
     );
 }
+
+#[test]
+fn test_question_quantifier() {
+    assert_eq!(
+        no_norm(r#"root ::= "a"?"#),
+        concat!(r#"root ::= ((root_1))"#, "\n", r#"root_1 ::= ("" | "a")"#, "\n")
+    );
+}
+
+#[test]
+fn test_character_class_star() {
+    assert_eq!(no_norm("root ::= [a-z]*"), concat!("root ::= (([a-z]*))", "\n"));
+}
+
+#[test]
+fn test_repetition_range_exact() {
+    assert_eq!(
+        no_norm(r#"root ::= "a"{3}"#),
+        concat!(r#"root ::= ((root_1{3, 3}))"#, "\n", r#"root_1 ::= "a""#, "\n")
+    );
+}
+
+#[test]
+fn test_repetition_range_min_max() {
+    assert_eq!(
+        no_norm(r#"root ::= "a"{2,4}"#),
+        concat!(r#"root ::= ((root_1{2, 4}))"#, "\n", r#"root_1 ::= "a""#, "\n")
+    );
+}
+
+#[test]
+fn test_repetition_range_min_only() {
+    assert_eq!(
+        no_norm(r#"root ::= "a"{2,}"#),
+        concat!(r#"root ::= ((root_1{2, -1}))"#, "\n", r#"root_1 ::= "a""#, "\n")
+    );
+}
+
+#[test]
+fn test_repetition_range_unbounded_roundtrip() {
+    let output_1 = from_ebnf(r#"root ::= "a"{2,}"#);
+    assert!(output_1.contains("{2, -1}"));
+    assert_eq!(from_ebnf(&output_1), output_1);
+}
+
+#[test]
+fn test_lookahead_assertion_simple() {
+    assert_eq!(
+        no_norm(r#"root ::= "a" (="b")"#),
+        concat!(r#"root ::= (("a")) (=(("b")))"#, "\n")
+    );
+}
+
+#[test]
+fn test_complex_lookahead() {
+    assert_eq!(
+        no_norm(r#"root ::= "a" (="b" "c" [0-9])"#),
+        concat!(r#"root ::= (("a")) (=(("b" "c" [0-9])))"#, "\n")
+    );
+}
+
+#[test]
+fn test_escape_sequences() {
+    assert_eq!(
+        no_norm(r#"root ::= "\n\t\r\"\\""#),
+        concat!(r#"root ::= (("\n\t\r\"\\"))"#, "\n")
+    );
+}
+
+#[test]
+fn test_unicode_escape() {
+    // © and ☃ (U+2603) are non-printable, so they render as hex / unicode escapes.
+    // Build the expectation with an explicit backslash char to avoid escaping noise.
+    let bs = char::from_u32(0x5c).unwrap();
+    let expected = format!(r#"root ::= (("ABC{bs}xa9{bs}u2603"))
+"#);
+    assert_eq!(no_norm(r#"root ::= "ABC©☃""#), expected);
+}
+
+#[test]
+fn test_forward_slash_escape_in_string_literal() {
+    assert_eq!(
+        no_norm(r#"root ::= "a\/b""#),
+        concat!(r#"root ::= (("a/b"))"#, "\n")
+    );
+}
+
+#[test]
+fn test_complex_grammar() {
+    let before = r#"root ::= expr
+expr ::= term ("+" term | "-" term)*
+term ::= factor ("*" factor | "/" factor)*
+factor ::= number | "(" expr ")"
+number ::= [0-9]+ ("." [0-9]+)?
+"#;
+    let expected = r#"root ::= ((expr))
+expr ::= ((term expr_1))
+term ::= ((factor term_1))
+factor ::= ((number) | ("(" expr ")"))
+number ::= ((number_1 number_3))
+expr_1 ::= ("" | ((("+" term) | ("-" term)) expr_1))
+term_1 ::= ("" | ((("*" factor) | ("/" factor)) term_1))
+number_1 ::= (([0-9] number_1) | [0-9])
+number_2 ::= (([0-9] number_2) | [0-9])
+number_3 ::= ("" | (("." number_2)))
+"#;
+    assert_eq!(no_norm(before), expected);
+}

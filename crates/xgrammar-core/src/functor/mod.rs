@@ -6,6 +6,7 @@
 
 mod dead_code_eliminator;
 mod grammar_normalizer;
+mod grammar_union_concat;
 mod mutator;
 mod root_rule_renamer;
 mod rule_inliner;

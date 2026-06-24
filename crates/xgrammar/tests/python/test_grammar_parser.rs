@@ -489,6 +489,19 @@ fn test_error_consecutive_quantifiers() {
 }
 
 #[test]
+fn test_char() {
+    let before = "root ::= [a-z] [A-z] \"\\u0234\" \"\\U00000345\\xff\" [-A-Z] [--] [^a] rest
+rest ::= [a-zA-Z0-9-] [\\u0234-\\U00000345] [测-试] [\\--\\]]  rest1
+rest1 ::= \"\\?\\\"\\'测试あc\" \"👀\" \"\" [a-a] [b-b]
+";
+    let expected = "root ::= (([a-z] [A-z] \"\\u0234\" \"\\u0345\\xff\" [\\-A-Z] [\\-\\-] [^a] rest))
+rest ::= (([a-zA-Z0-9\\-] [\\u0234-\\u0345] [\\u6d4b-\\u8bd5] [\\--\\]] rest1))
+rest1 ::= ((\"\\?\\\"\\'\\u6d4b\\u8bd5\\u3042c\" \"\\U0001f440\" \"a\" \"b\"))
+";
+    assert_eq!(normalized(before), expected);
+}
+
+#[test]
 fn test_bnf_comment() {
     let before = r#"# top comment
 root ::= a b # inline comment

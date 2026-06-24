@@ -5,5 +5,7 @@
 //! One dedicated type per file; re-exported here.
 
 mod compact_2d_array;
+mod dynamic_bitset;
 
 pub use compact_2d_array::{Compact2dArray, Compact2dArrayError};
+pub use dynamic_bitset::{BITS_PER_BLOCK, DynamicBitset};

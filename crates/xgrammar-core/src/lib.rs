@@ -20,6 +20,7 @@ pub mod grammar;
 pub mod matcher;
 pub mod parser;
 pub mod support;
+pub mod testing;
 pub mod tokenizer;
 
 /// The crate version, as declared in `Cargo.toml`.

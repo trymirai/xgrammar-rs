@@ -118,18 +118,7 @@ fn _generate_float_regex(
 
 #[pyfunction]
 fn _print_grammar_fsms(grammar: &Grammar) -> String {
-    let mut result = String::new();
-    for i in 0..grammar.inner.num_rules() {
-        let rule = grammar.inner.rule(i);
-        result.push_str(&format!("Rule {i}: {}, FSM: ", rule.name));
-        if let Some(fsm) = grammar.inner.per_rule_fsm(i) {
-            result.push_str(&format!("{:?}", fsm.fsm()));
-        } else {
-            result.push_str("None");
-        }
-        result.push('\n');
-    }
-    result
+    xgrammar::testing::print_grammar_fsms(&grammar.inner)
 }
 
 #[pyfunction]

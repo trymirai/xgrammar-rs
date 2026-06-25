@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use crate::{
-    error::map_error, grammar::Grammar, tokenizer_info::TokenizerInfo,
+    error::{map_deserialize_error, map_error}, grammar::Grammar, tokenizer_info::TokenizerInfo,
 };
 
 /// A grammar compiled against a tokenizer, ready to drive a matcher.
@@ -39,6 +39,26 @@ impl CompiledGrammar {
     #[bindings::export(Method)]
     pub fn memory_size_bytes(&self) -> usize {
         self.inner.memory_size_bytes()
+    }
+
+    /// Serializes the compiled grammar without embedding the full tokenizer info.
+    #[bindings::export(Method)]
+    pub fn serialize_json(&self) -> String {
+        self.inner.serialize_json()
+    }
+
+    /// Deserializes a compiled grammar bound to `tokenizer_info`.
+    #[bindings::export(Method(Factory))]
+    pub fn deserialize_json(
+        json_string: String,
+        tokenizer_info: TokenizerInfo,
+    ) -> Result<CompiledGrammar, pyo3::PyErr> {
+        xgrammar::compiler::CompiledGrammar::deserialize_json(
+            &json_string,
+            &tokenizer_info.inner,
+        )
+        .map(CompiledGrammar::wrap)
+        .map_err(map_deserialize_error)
     }
 }
 

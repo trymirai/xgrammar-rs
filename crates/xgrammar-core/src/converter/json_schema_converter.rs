@@ -255,8 +255,7 @@ impl JsonSchemaConverter {
         self.ebnf.add_rule(XML_OBJECT, &obj_body);
         self.add_cache("{\"type\":\"object\"}", XML_OBJECT);
 
-        self.ebnf
-            .add_rule(XML_VARIABLE_NAME, "[a-zA-Z_][a-zA-Z0-9_]*");
+        self.ebnf.add_rule(XML_VARIABLE_NAME, "[a-zA-Z_][a-zA-Z0-9_]*");
     }
 
     fn add_standard_basic_rules(&mut self) {
@@ -352,8 +351,7 @@ impl JsonSchemaConverter {
             return;
         }
         if self.xml_format.is_some() && self.nested_object_level > 1 {
-            self.inner_rule_cache
-                .insert(key.to_owned(), value.to_owned());
+            self.inner_rule_cache.insert(key.to_owned(), value.to_owned());
         } else {
             self.rule_cache.insert(key.to_owned(), value.to_owned());
         }
@@ -496,8 +494,8 @@ impl JsonSchemaConverter {
                 }
             }
             if let Some(pattern) = &spec.pattern {
-                let converted =
-                    regex_to_ebnf(pattern, false).expect("pattern regex is valid");
+                let converted = regex_to_ebnf(pattern, false)
+                    .expect("pattern regex is valid");
                 return converted;
             }
             if spec.min_length != 0 || spec.max_length != -1 {
@@ -684,10 +682,7 @@ impl JsonSchemaConverter {
     ) -> String {
         if self.is_xml_outer() {
             let w = self.xml_wrapper();
-            return format!(
-                "\"{}{}{}\"",
-                w.key_prefix, key, w.key_suffix
-            );
+            return format!("\"{}{}{}\"", w.key_prefix, key, w.key_suffix);
         }
         format!(
             "\"{}\"",
@@ -713,11 +708,7 @@ impl JsonSchemaConverter {
             }
             return format!(
                 "\"{}{}{}\" {ws} \"{}\" {ws} {value_rule} {ws} \"{}\"",
-                w.key_prefix,
-                key,
-                w.key_suffix,
-                w.value_prefix,
-                w.param_suffix
+                w.key_prefix, key, w.key_suffix, w.value_prefix, w.param_suffix
             );
         }
         format!(
@@ -744,10 +735,7 @@ impl JsonSchemaConverter {
             }
             return format!(
                 "\"{}\" {key_pattern} \"{}\" {ws} \"{}\" {ws} {value_rule} {ws} \"{}\"",
-                w.key_prefix,
-                w.key_suffix,
-                w.value_prefix,
-                w.param_suffix
+                w.key_prefix, w.key_suffix, w.value_prefix, w.param_suffix
             );
         }
         format!("{} {} {}", key_pattern, self.colon_pattern, value_rule)
@@ -856,8 +844,7 @@ impl JsonSchemaConverter {
                         additional.unwrap(),
                         &format!("{rule_name}_{additional_suffix}"),
                     );
-                    let key =
-                        self.get_key_pattern_excluding(properties, rule_name);
+                    let key = BASIC_STRING.to_owned();
                     additional_prop_pattern =
                         self.format_other_property(&key, &add_value_rule);
                 }
@@ -976,7 +963,7 @@ impl JsonSchemaConverter {
                     additional.unwrap(),
                     &format!("{rule_name}_{additional_suffix}"),
                 );
-                let key = self.get_key_pattern_excluding(properties, rule_name);
+                let key = BASIC_STRING.to_owned();
                 additional_prop_pattern =
                     self.format_other_property(&key, &add_value_rule);
             }
@@ -1140,7 +1127,7 @@ impl JsonSchemaConverter {
                     additional.unwrap(),
                     &format!("{rule_name}_{additional_suffix}"),
                 );
-                let key = self.get_key_pattern_excluding(properties, rule_name);
+                let key = BASIC_STRING.to_owned();
                 additional_prop_pattern =
                     self.format_other_property(&key, &add_value_rule);
             }
@@ -1534,9 +1521,7 @@ impl JsonSchemaConverter {
         if self.xml_format.is_some() {
             return match self.nested_object_level {
                 0 => XML_OBJECT.to_owned(),
-                1 => format!(
-                    "{XML_STRING} | {BASIC_ARRAY} | {BASIC_OBJECT}"
-                ),
+                1 => format!("{XML_STRING} | {BASIC_ARRAY} | {BASIC_OBJECT}"),
                 _ => format!(
                     "{BASIC_NUMBER} | {BASIC_STRING} | {BASIC_BOOLEAN} | {BASIC_NULL} | \
                      {BASIC_ARRAY} | {BASIC_OBJECT}"
@@ -1573,8 +1558,12 @@ impl JsonSchemaConverter {
                 if i != 0 {
                     result.push_str(" | ");
                 }
-                if value.len() >= 2 && value.starts_with('"') && value.ends_with('"') {
-                    let _ = write!(result, "(\"{}\")", &value[1..value.len() - 1]);
+                if value.len() >= 2
+                    && value.starts_with('"')
+                    && value.ends_with('"')
+                {
+                    let _ =
+                        write!(result, "(\"{}\")", &value[1..value.len() - 1]);
                 } else {
                     let _ = write!(result, "(\"{value}\")");
                 }

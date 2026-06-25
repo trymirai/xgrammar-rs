@@ -20,6 +20,7 @@ use super::{
         NumberSpec, ObjectSpec, Property, RefSpec, SchemaSpec, SchemaSpecPtr,
         SchemaSpecVariant, StringSpec, TypeArraySpec,
     },
+    xml_tool_calling_converter::{XmlJsonFormat, xml_wrapper},
 };
 use crate::grammar::Grammar;
 
@@ -60,6 +61,11 @@ const BASIC_OBJECT: &str = "basic_object";
 const BASIC_ESCAPE: &str = "basic_escape";
 const BASIC_STRING_SUB: &str = "basic_string_sub";
 
+const XML_STRING: &str = "xml_string";
+const XML_ANY: &str = "xml_any";
+const XML_OBJECT: &str = "xml_object";
+const XML_VARIABLE_NAME: &str = "xml_variable_name";
+
 /// Converts a JSON Schema string to an EBNF grammar.
 ///
 /// `any_whitespace` allows flexible whitespace; `indent`/`separators` control formatting;
@@ -91,6 +97,23 @@ pub fn json_schema_to_ebnf(
     Ok(converter.convert(&spec))
 }
 
+/// Converts a JSON Schema to EBNF in an XML tool-calling wire format.
+///
+/// # Errors
+/// Returns [`SchemaError`] if the schema is invalid or unsatisfiable.
+pub fn json_schema_to_ebnf_xml(
+    schema: &str,
+    format: XmlJsonFormat,
+) -> Result<String, SchemaError> {
+    let root: Value = serde_json::from_str(schema).map_err(|e| {
+        SchemaError::invalid(format!("Failed to parse JSON: {e}"))
+    })?;
+    let mut parser = SchemaParser::new(root.clone(), true);
+    let spec = parser.parse(&root, None)?;
+    let mut converter = JsonSchemaConverter::new_xml(format, parser);
+    Ok(converter.convert(&spec))
+}
+
 struct JsonSchemaConverter {
     indent_manager: IndentManager,
     any_whitespace: bool,
@@ -100,6 +123,9 @@ struct JsonSchemaConverter {
     parser: SchemaParser,
     rule_cache: HashMap<String, String>,
     uri_to_rule_name: HashMap<String, String>,
+    xml_format: Option<XmlJsonFormat>,
+    nested_object_level: u8,
+    inner_rule_cache: HashMap<String, String>,
 }
 
 impl JsonSchemaConverter {
@@ -140,13 +166,34 @@ impl JsonSchemaConverter {
             parser,
             rule_cache: HashMap::new(),
             uri_to_rule_name: HashMap::new(),
+            xml_format: None,
+            nested_object_level: 0,
+            inner_rule_cache: HashMap::new(),
         }
+    }
+
+    fn new_xml(
+        format: XmlJsonFormat,
+        parser: SchemaParser,
+    ) -> Self {
+        let mut converter = Self::new(None, None, true, None, parser);
+        converter.xml_format = Some(format);
+        converter
+    }
+
+    fn is_xml_outer(&self) -> bool {
+        self.xml_format.is_some() && self.nested_object_level <= 1
+    }
+
+    fn xml_wrapper(&self) -> super::xml_tool_calling_converter::XmlWrapper {
+        xml_wrapper(self.xml_format.expect("xml format set"))
     }
 
     fn convert(
         &mut self,
         spec: &SchemaSpecPtr,
     ) -> String {
+        self.nested_object_level = 0;
         self.add_basic_rules();
 
         let root_rule_name = self.ebnf.allocate_rule_name("root");
@@ -165,6 +212,54 @@ impl JsonSchemaConverter {
     }
 
     fn add_basic_rules(&mut self) {
+        if self.xml_format.is_some() && self.nested_object_level == 0 {
+            self.nested_object_level = 2;
+            self.add_standard_basic_rules();
+            self.nested_object_level = 1;
+            self.add_xml_outer_rules();
+            self.nested_object_level = 0;
+            return;
+        }
+        self.add_standard_basic_rules();
+    }
+
+    fn add_xml_outer_rules(&mut self) {
+        let wrapper = self.xml_wrapper();
+        self.ebnf.add_rule(
+            XML_STRING,
+            &format!(
+                "TagDispatch(loop_after_dispatch=false,excludes=(\"{}\"))",
+                wrapper.param_suffix
+            ),
+        );
+        self.add_cache("{\"type\":\"string\"}", XML_STRING);
+
+        let any_spec = SchemaSpec::make(SchemaSpecVariant::Any, "{}");
+        let any_body = self.generate_any();
+        self.ebnf.add_rule(XML_ANY, &any_body);
+        self.add_cache("{}", XML_ANY);
+
+        let obj_spec = ObjectSpec {
+            allow_additional_properties: true,
+            additional_properties_schema: Some(any_spec),
+            ..ObjectSpec::default()
+        };
+        self.nested_object_level = 0;
+        self.nested_object_level += 1;
+        let obj_body = self.generate_object(
+            &obj_spec,
+            XML_OBJECT,
+            self.nested_object_level > 1,
+        );
+        self.nested_object_level -= 1;
+        self.ebnf.add_rule(XML_OBJECT, &obj_body);
+        self.add_cache("{\"type\":\"object\"}", XML_OBJECT);
+
+        self.ebnf
+            .add_rule(XML_VARIABLE_NAME, "[a-zA-Z_][a-zA-Z0-9_]*");
+    }
+
+    fn add_standard_basic_rules(&mut self) {
         self.add_helper_rules();
 
         let saved = self.indent_manager.clone();
@@ -242,6 +337,9 @@ impl JsonSchemaConverter {
         &mut self,
         is_end: bool,
     ) -> String {
+        if self.is_xml_outer() {
+            return self.get_whitespace_pattern();
+        }
         self.indent_manager.next_separator(is_end)
     }
 
@@ -253,7 +351,12 @@ impl JsonSchemaConverter {
         if key.is_empty() {
             return;
         }
-        self.rule_cache.insert(key.to_owned(), value.to_owned());
+        if self.xml_format.is_some() && self.nested_object_level > 1 {
+            self.inner_rule_cache
+                .insert(key.to_owned(), value.to_owned());
+        } else {
+            self.rule_cache.insert(key.to_owned(), value.to_owned());
+        }
     }
 
     fn get_cache(
@@ -263,7 +366,11 @@ impl JsonSchemaConverter {
         if key.is_empty() {
             return None;
         }
-        self.rule_cache.get(key).cloned()
+        if self.xml_format.is_some() && self.nested_object_level > 1 {
+            self.inner_rule_cache.get(key).cloned()
+        } else {
+            self.rule_cache.get(key).cloned()
+        }
     }
 
     fn create_rule(
@@ -292,14 +399,30 @@ impl JsonSchemaConverter {
             SchemaSpecVariant::Boolean => Self::generate_boolean(),
             SchemaSpecVariant::Null => Self::generate_null(),
             SchemaSpecVariant::Array(s) => {
-                self.generate_array(s, rule_name_hint)
+                if self.xml_format.is_some() {
+                    self.nested_object_level += 1;
+                    let result = self.generate_array(s, rule_name_hint);
+                    self.nested_object_level -= 1;
+                    result
+                } else {
+                    self.generate_array(s, rule_name_hint)
+                }
             },
             SchemaSpecVariant::Object(s) => {
-                self.generate_object(s, rule_name_hint, true)
+                if self.xml_format.is_some() {
+                    self.nested_object_level += 1;
+                    let need_braces = self.nested_object_level > 1;
+                    let result =
+                        self.generate_object(s, rule_name_hint, need_braces);
+                    self.nested_object_level -= 1;
+                    result
+                } else {
+                    self.generate_object(s, rule_name_hint, true)
+                }
             },
             SchemaSpecVariant::Any => self.generate_any(),
-            SchemaSpecVariant::Const(s) => Self::generate_const(s),
-            SchemaSpecVariant::Enum(s) => Self::generate_enum(s),
+            SchemaSpecVariant::Const(s) => self.generate_const(s),
+            SchemaSpecVariant::Enum(s) => self.generate_enum(s),
             SchemaSpecVariant::Ref(s) => self.generate_ref(s),
             SchemaSpecVariant::AnyOf(s) => {
                 self.generate_any_of(s, rule_name_hint)
@@ -357,6 +480,35 @@ impl JsonSchemaConverter {
         &self,
         spec: &StringSpec,
     ) -> String {
+        if self.is_xml_outer() {
+            if spec.pattern.is_none()
+                && spec.format.is_none()
+                && spec.min_length == 0
+                && spec.max_length == -1
+            {
+                return XML_STRING.to_owned();
+            }
+            if let Some(format) = &spec.format {
+                if let Some(regex) = json_format_to_regex_pattern(format) {
+                    let converted = regex_to_ebnf(&regex, false)
+                        .expect("format regex is valid");
+                    return converted;
+                }
+            }
+            if let Some(pattern) = &spec.pattern {
+                let converted =
+                    regex_to_ebnf(pattern, false).expect("pattern regex is valid");
+                return converted;
+            }
+            if spec.min_length != 0 || spec.max_length != -1 {
+                let repetition = if spec.max_length == -1 {
+                    format!("{{{},}}", spec.min_length)
+                } else {
+                    format!("{{{},{}}}", spec.min_length, spec.max_length)
+                };
+                return format!("[^]{repetition}");
+            }
+        }
         if let Some(format) = &spec.format {
             if let Some(regex) = json_format_to_regex_pattern(format) {
                 let converted = regex_to_ebnf(&regex, false)
@@ -518,7 +670,25 @@ impl JsonSchemaConverter {
         }
     }
 
-    fn format_property_key(key: &str) -> String {
+    fn outer_key_pattern(&self) -> String {
+        if self.is_xml_outer() {
+            XML_VARIABLE_NAME.to_owned()
+        } else {
+            BASIC_STRING.to_owned()
+        }
+    }
+
+    fn format_property_key(
+        &self,
+        key: &str,
+    ) -> String {
+        if self.is_xml_outer() {
+            let w = self.xml_wrapper();
+            return format!(
+                "\"{}{}{}\"",
+                w.key_prefix, key, w.key_suffix
+            );
+        }
         format!(
             "\"{}\"",
             json_str_to_printable_str(
@@ -532,9 +702,27 @@ impl JsonSchemaConverter {
         key: &str,
         value_rule: &str,
     ) -> String {
+        if self.is_xml_outer() {
+            let w = self.xml_wrapper();
+            let ws = self.get_whitespace_pattern();
+            if w.value_prefix.is_empty() {
+                return format!(
+                    "\"{}{}{}\" {ws} {value_rule} {ws} \"{}\"",
+                    w.key_prefix, key, w.key_suffix, w.param_suffix
+                );
+            }
+            return format!(
+                "\"{}{}{}\" {ws} \"{}\" {ws} {value_rule} {ws} \"{}\"",
+                w.key_prefix,
+                key,
+                w.key_suffix,
+                w.value_prefix,
+                w.param_suffix
+            );
+        }
         format!(
             "{} {} {}",
-            Self::format_property_key(key),
+            self.format_property_key(key),
             self.colon_pattern,
             value_rule
         )
@@ -545,6 +733,23 @@ impl JsonSchemaConverter {
         key_pattern: &str,
         value_rule: &str,
     ) -> String {
+        if self.is_xml_outer() {
+            let w = self.xml_wrapper();
+            let ws = self.get_whitespace_pattern();
+            if w.value_prefix.is_empty() {
+                return format!(
+                    "\"{}\" {key_pattern} \"{}\" {ws} {value_rule} {ws} \"{}\"",
+                    w.key_prefix, w.key_suffix, w.param_suffix
+                );
+            }
+            return format!(
+                "\"{}\" {key_pattern} \"{}\" {ws} \"{}\" {ws} {value_rule} {ws} \"{}\"",
+                w.key_prefix,
+                w.key_suffix,
+                w.value_prefix,
+                w.param_suffix
+            );
+        }
         format!("{} {} {}", key_pattern, self.colon_pattern, value_rule)
     }
 
@@ -586,6 +791,9 @@ impl JsonSchemaConverter {
         properties: &[Property],
         rule_name: &str,
     ) -> String {
+        if self.is_xml_outer() {
+            return XML_VARIABLE_NAME.to_owned();
+        }
         if properties.is_empty() {
             return BASIC_STRING.to_owned();
         }
@@ -1147,8 +1355,10 @@ impl JsonSchemaConverter {
                         add,
                         &format!("{rule_name}_{effective_suffix}"),
                     );
-                    let add_prop = self
-                        .format_other_property(BASIC_STRING, &add_value_rule);
+                    let add_prop = self.format_other_property(
+                        &self.outer_key_pattern(),
+                        &add_value_rule,
+                    );
                     let _ = write!(pp_body, " | {add_prop}");
                 }
                 pp_override = format!("({pp_body})");
@@ -1265,8 +1475,10 @@ impl JsonSchemaConverter {
                     additional,
                     &format!("{rule_name}_{additional_suffix}"),
                 );
-                let other_property_pattern =
-                    self.format_other_property(BASIC_STRING, &add_value_rule);
+                let other_property_pattern = self.format_other_property(
+                    &self.outer_key_pattern(),
+                    &add_value_rule,
+                );
                 let sep1 = self.next_separator(false);
                 let _ = write!(result, " {sep1} {other_property_pattern} ");
                 let sep2 = self.next_separator(false);
@@ -1319,17 +1531,56 @@ impl JsonSchemaConverter {
     }
 
     fn generate_any(&self) -> String {
+        if self.xml_format.is_some() {
+            return match self.nested_object_level {
+                0 => XML_OBJECT.to_owned(),
+                1 => format!(
+                    "{XML_STRING} | {BASIC_ARRAY} | {BASIC_OBJECT}"
+                ),
+                _ => format!(
+                    "{BASIC_NUMBER} | {BASIC_STRING} | {BASIC_BOOLEAN} | {BASIC_NULL} | \
+                     {BASIC_ARRAY} | {BASIC_OBJECT}"
+                ),
+            };
+        }
         format!(
             "{BASIC_NUMBER} | {BASIC_STRING} | {BASIC_BOOLEAN} | {BASIC_NULL} | {BASIC_ARRAY} | \
              {BASIC_OBJECT}"
         )
     }
 
-    fn generate_const(spec: &ConstSpec) -> String {
+    fn generate_const(
+        &self,
+        spec: &ConstSpec,
+    ) -> String {
+        if self.is_xml_outer() {
+            let val = &spec.json_value;
+            if val.len() >= 2 && val.starts_with('"') && val.ends_with('"') {
+                return format!("\"{}\"", &val[1..val.len() - 1]);
+            }
+            return format!("\"{val}\"");
+        }
         format!("\"{}\"", json_str_to_printable_str(&spec.json_value))
     }
 
-    fn generate_enum(spec: &EnumSpec) -> String {
+    fn generate_enum(
+        &self,
+        spec: &EnumSpec,
+    ) -> String {
+        if self.is_xml_outer() {
+            let mut result = String::new();
+            for (i, value) in spec.json_values.iter().enumerate() {
+                if i != 0 {
+                    result.push_str(" | ");
+                }
+                if value.len() >= 2 && value.starts_with('"') && value.ends_with('"') {
+                    let _ = write!(result, "(\"{}\")", &value[1..value.len() - 1]);
+                } else {
+                    let _ = write!(result, "(\"{value}\")");
+                }
+            }
+            return result;
+        }
         let mut result = String::new();
         for (i, value) in spec.json_values.iter().enumerate() {
             if i != 0 {

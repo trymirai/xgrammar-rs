@@ -17,6 +17,7 @@ mod structural_tag_converter;
 mod structural_tag_error;
 mod structural_tag_format;
 mod structural_tag_parser;
+mod xml_tool_calling_converter;
 
 pub use ebnf_script_creator::EbnfScriptCreator;
 pub use json_schema_converter::json_schema_to_ebnf;
@@ -25,3 +26,8 @@ pub use regex_converter::regex_to_ebnf;
 pub use regex_error::RegexError;
 pub use schema_error::{SchemaError, SchemaErrorKind};
 pub use structural_tag_error::StructuralTagError;
+pub use xml_tool_calling_converter::{
+    deepseek_xml_tool_calling_to_ebnf, glm_xml_tool_calling_to_ebnf,
+    minimax_xml_tool_calling_to_ebnf, qwen_xml_tool_calling_to_ebnf,
+    xml_tool_calling_to_ebnf,
+};

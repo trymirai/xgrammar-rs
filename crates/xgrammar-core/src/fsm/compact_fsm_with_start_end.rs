@@ -12,6 +12,7 @@ pub struct CompactFsmWithStartEnd {
     start: i32,
     ends: Vec<bool>,
     is_dfa: bool,
+    edge_num: usize,
 }
 
 impl CompactFsmWithStartEnd {
@@ -23,11 +24,13 @@ impl CompactFsmWithStartEnd {
         ends: Vec<bool>,
         is_dfa: bool,
     ) -> Self {
+        let edge_num = fsm.num_edges();
         Self {
             fsm,
             start,
             ends,
             is_dfa,
+            edge_num,
         }
     }
 
@@ -53,6 +56,12 @@ impl CompactFsmWithStartEnd {
     #[must_use]
     pub fn is_dfa(&self) -> bool {
         self.is_dfa
+    }
+
+    /// Edge count captured when this view was built (matches C++ `edge_num_`).
+    #[must_use]
+    pub fn edge_num(&self) -> usize {
+        self.edge_num
     }
 
     /// The number of states.

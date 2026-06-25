@@ -138,7 +138,7 @@ impl CompactFsm {
 }
 
 impl CompactFsmWithStartEnd {
-    /// Serializes as `[compact_fsm, start, end_indices, is_dfa]`.
+    /// Serializes as `[compact_fsm, start, end_indices, is_dfa, edge_num]`.
     #[must_use]
     pub fn serialize_json_value(&self) -> Value {
         json!([
@@ -146,10 +146,11 @@ impl CompactFsmWithStartEnd {
             self.start(),
             ends_to_indices(self.ends()),
             self.is_dfa(),
+            self.edge_num(),
         ])
     }
 
-    /// Deserializes from `[compact_fsm, start, end_indices, is_dfa]`.
+    /// Deserializes from `[compact_fsm, start, end_indices, is_dfa, edge_num]`.
     ///
     /// # Errors
     /// Returns [`DeserializeError`] when the JSON shape is invalid.
@@ -161,9 +162,9 @@ impl CompactFsmWithStartEnd {
                 "compact fsm with start/end must be an array".to_owned(),
             )
         })?;
-        if arr.len() != 4 {
+        if arr.len() != 5 {
             return Err(DeserializeError::Format(
-                "compact fsm with start/end must have four elements".to_owned(),
+                "compact fsm with start/end must have five elements".to_owned(),
             ));
         }
         let fsm = CompactFsm::deserialize_json_value(&arr[0])?;
@@ -172,29 +173,24 @@ impl CompactFsmWithStartEnd {
         let is_dfa = arr[3].as_bool().ok_or_else(|| {
             DeserializeError::Format("expected is_dfa boolean".to_owned())
         })?;
+        let _ = i32_of(&arr[4])?;
         let ends = indices_to_ends(&end_indices, fsm.num_states())?;
         Ok(Self::new(fsm, start, ends, is_dfa))
     }
 }
 
 impl CompactFsmWithStartEndWithSize {
-    /// Serializes as `[[compact_fsm, start, end_indices, is_dfa, node_num], edge_num, node_num]`.
+    /// Serializes as `[compact_fsm_with_start_end, edge_num, node_num]`.
     #[must_use]
     pub fn serialize_json_value(&self) -> Value {
         json!([
-            [
-                self.fsm().fsm().serialize_json_value(),
-                self.fsm().start(),
-                ends_to_indices(self.fsm().ends()),
-                self.fsm().is_dfa(),
-                self.node_num(),
-            ],
+            self.fsm().serialize_json_value(),
             self.edge_num(),
             self.node_num(),
         ])
     }
 
-    /// Deserializes the C++ nested array form.
+    /// Deserializes from `[compact_fsm_with_start_end, edge_num, node_num]`.
     ///
     /// # Errors
     /// Returns [`DeserializeError`] when the JSON shape is invalid.
@@ -206,50 +202,14 @@ impl CompactFsmWithStartEndWithSize {
                 "compact fsm with start/end/size must be an array".to_owned(),
             )
         })?;
-        let (inner, edge_num, node_num) = if arr.len() == 3 {
-            (&arr[0], i32_of(&arr[1])?, i32_of(&arr[2])?)
-        } else if arr.len() == 5 {
-            let fsm = CompactFsm::deserialize_json_value(&arr[0])?;
-            let edge_num = fsm.num_edges() as i32;
-            let start = i32_of(&arr[1])?;
-            let end_indices = i32_array(&arr[2])?;
-            let is_dfa = arr[3].as_bool().ok_or_else(|| {
-                DeserializeError::Format("expected is_dfa boolean".to_owned())
-            })?;
-            let node_num = i32_of(&arr[4])?;
-            let ends = indices_to_ends(&end_indices, fsm.num_states())?;
-            return Ok(Self::new(
-                CompactFsmWithStartEnd::new(fsm, start, ends, is_dfa),
-                edge_num,
-                node_num,
-            ));
-        } else {
+        if arr.len() != 3 {
             return Err(DeserializeError::Format(
-                "compact fsm with start/end/size has unexpected length".to_owned(),
-            ));
-        };
-        let inner_arr = inner.as_array().ok_or_else(|| {
-            DeserializeError::Format(
-                "compact fsm with start/end inner must be an array".to_owned(),
-            )
-        })?;
-        if inner_arr.len() != 5 {
-            return Err(DeserializeError::Format(
-                "compact fsm with start/end inner must have five elements".to_owned(),
+                "compact fsm with start/end/size must have three elements".to_owned(),
             ));
         }
-        let fsm = CompactFsm::deserialize_json_value(&inner_arr[0])?;
-        let start = i32_of(&inner_arr[1])?;
-        let end_indices = i32_array(&inner_arr[2])?;
-        let is_dfa = inner_arr[3].as_bool().ok_or_else(|| {
-            DeserializeError::Format("expected is_dfa boolean".to_owned())
-        })?;
-        let node_num = i32_of(&inner_arr[4])?;
-        let ends = indices_to_ends(&end_indices, fsm.num_states())?;
-        Ok(Self::new(
-            CompactFsmWithStartEnd::new(fsm, start, ends, is_dfa),
-            edge_num,
-            node_num,
-        ))
+        let fsm = CompactFsmWithStartEnd::deserialize_json_value(&arr[0])?;
+        let edge_num = i32_of(&arr[1])?;
+        let node_num = i32_of(&arr[2])?;
+        Ok(Self::new(fsm, edge_num, node_num))
     }
 }

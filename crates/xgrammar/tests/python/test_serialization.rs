@@ -9,7 +9,23 @@ use xgrammar::{
     config::get_serialization_version,
     grammar::{DeserializeError, Grammar},
     matcher::GrammarMatcher,
+    tokenizer::{TokenizerInfo, VocabType},
 };
+
+fn construct_tokenizer_info() -> TokenizerInfo {
+    let vocab: Vec<String> =
+        ["1", "212", "a", "A", "b", "一", "-", "aBc", "abc"]
+            .iter()
+            .map(|s| (*s).to_owned())
+            .collect();
+    TokenizerInfo::new(
+        &vocab,
+        VocabType::ByteFallback,
+        Some(10),
+        Some(vec![0, 1]),
+        true,
+    )
+}
 
 fn construct_grammar() -> Grammar {
     Grammar::from_ebnf(
@@ -94,6 +110,51 @@ fn test_serialize_grammar_functional() {
     let recovered =
         Grammar::deserialize_json(&original.serialize_json()).unwrap();
     assert_eq!(original.to_string(), recovered.to_string());
+}
+
+#[test]
+fn test_serialize_tokenizer_info() {
+    let info = construct_tokenizer_info();
+    let actual: Value = serde_json::from_str(&info.serialize_json()).unwrap();
+    // "一" is UTF-8 [0xe4,0xb8,0x80], encoded Latin-1 as those three codepoints.
+    let han = "\u{e4}\u{b8}\u{80}";
+    let expected = json!({
+        "vocab_type": 1,
+        "vocab_size": 10,
+        "add_prefix_space": true,
+        "stop_token_ids": [0, 1],
+        "special_token_ids": [9],
+        "decoded_vocab": ["1", "212", "a", "A", "b", han, "-", "aBc", "abc"],
+        "sorted_decoded_vocab": [
+            [6, "-"], [3, "A"], [2, "a"], [7, "aBc"], [8, "abc"], [4, "b"], [5, han],
+        ],
+        "trie_subtree_nodes_range": [1, 2, 5, 4, 5, 6, 7],
+        "__VERSION__": "v11",
+    });
+    assert_eq!(actual, expected);
+}
+
+#[test]
+fn test_serialize_tokenizer_info_roundtrip() {
+    let original = construct_tokenizer_info();
+    let serialized = original.serialize_json();
+    let recovered = TokenizerInfo::deserialize_json(&serialized).unwrap();
+    assert_eq!(serialized, recovered.serialize_json());
+}
+
+#[test]
+fn test_serialize_tokenizer_info_functional() {
+    let original = construct_tokenizer_info();
+    let recovered =
+        TokenizerInfo::deserialize_json(&original.serialize_json()).unwrap();
+    assert_eq!(original.vocab_size(), recovered.vocab_size());
+    assert_eq!(original.stop_token_ids(), recovered.stop_token_ids());
+    assert_eq!(original.special_token_ids(), recovered.special_token_ids());
+    assert_eq!(original.decoded_vocab(), recovered.decoded_vocab());
+    assert_eq!(
+        original.sorted_decoded_vocab(),
+        recovered.sorted_decoded_vocab()
+    );
 }
 
 #[test]

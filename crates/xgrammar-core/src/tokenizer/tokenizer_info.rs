@@ -5,7 +5,10 @@
 //! sorted-vocabulary pseudo-trie (`sorted_decoded_vocab` + `trie_subtree_nodes_range`) the
 //! matcher walks when computing token bitmasks.
 
+use serde_json::{Value, json};
+
 use super::{token_decoder::decode_token, vocab_type::VocabType};
+use crate::{config::SERIALIZATION_VERSION, grammar::DeserializeError};
 
 /// Tokens whose presence marks a stop token when explicit ids are not supplied.
 const DETECTION_STOP_TOKENS: [&str; 8] = [
@@ -186,6 +189,159 @@ impl TokenizerInfo {
     pub fn token_id_to_sorted_vocab_index(&self) -> &[i32] {
         &self.token_id_to_sorted_vocab_index
     }
+}
+
+impl TokenizerInfo {
+    /// Rebuilds tokenizer info from already-decoded parts (used by deserialization),
+    /// recomputing the sorted vocabulary, trie ranges, and reverse index.
+    #[must_use]
+    fn from_decoded_parts(
+        decoded_vocab: Vec<Vec<u8>>,
+        vocab_type: VocabType,
+        vocab_size: i32,
+        add_prefix_space: bool,
+        stop_token_ids: Vec<i32>,
+        special_token_ids: Vec<i32>,
+    ) -> Self {
+        let mut sorted_decoded_vocab: Vec<(i32, Vec<u8>)> = Vec::new();
+        for (i, tok) in decoded_vocab.iter().enumerate() {
+            let id = i as i32;
+            if !stop_token_ids.contains(&id) && !special_token_ids.contains(&id)
+            {
+                sorted_decoded_vocab.push((id, tok.clone()));
+            }
+        }
+        sorted_decoded_vocab.sort_by(|a, b| a.1.cmp(&b.1));
+        let mut token_id_to_sorted_vocab_index =
+            vec![-1i32; vocab_size as usize];
+        for (i, (id, _)) in sorted_decoded_vocab.iter().enumerate() {
+            token_id_to_sorted_vocab_index[*id as usize] = i as i32;
+        }
+        let trie_subtree_nodes_range = build_trie_ranges(&sorted_decoded_vocab);
+        Self {
+            vocab_type,
+            vocab_size,
+            add_prefix_space,
+            decoded_vocab,
+            sorted_decoded_vocab,
+            trie_subtree_nodes_range,
+            stop_token_ids,
+            special_token_ids,
+            token_id_to_sorted_vocab_index,
+        }
+    }
+
+    /// Serializes the tokenizer info to its `"v11"` JSON form (byte strings are encoded as
+    /// Latin-1, matching the C++).
+    #[must_use]
+    pub fn serialize_json(&self) -> String {
+        let decoded: Vec<String> =
+            self.decoded_vocab.iter().map(|b| bytes_to_latin1(b)).collect();
+        let sorted: Vec<Value> = self
+            .sorted_decoded_vocab
+            .iter()
+            .map(|(id, tok)| json!([id, bytes_to_latin1(tok)]))
+            .collect();
+        let obj = json!({
+            "vocab_type": self.vocab_type as i32,
+            "vocab_size": self.vocab_size,
+            "add_prefix_space": self.add_prefix_space,
+            "stop_token_ids": self.stop_token_ids,
+            "special_token_ids": self.special_token_ids,
+            "decoded_vocab": decoded,
+            "sorted_decoded_vocab": sorted,
+            "trie_subtree_nodes_range": self.trie_subtree_nodes_range,
+            "__VERSION__": SERIALIZATION_VERSION,
+        });
+        serde_json::to_string(&obj)
+            .expect("tokenizer info JSON serialization never fails")
+    }
+
+    /// Deserializes tokenizer info from its `"v11"` JSON form.
+    ///
+    /// # Errors
+    /// Returns [`DeserializeError`] for invalid JSON, a version mismatch, or a malformed body.
+    pub fn deserialize_json(
+        json_str: &str
+    ) -> Result<TokenizerInfo, DeserializeError> {
+        let value: Value = serde_json::from_str(json_str)
+            .map_err(|e| DeserializeError::InvalidJson(e.to_string()))?;
+        match value.get("__VERSION__").and_then(Value::as_str) {
+            Some(SERIALIZATION_VERSION) => {},
+            Some(other) => {
+                return Err(DeserializeError::Version {
+                    expected: SERIALIZATION_VERSION.to_owned(),
+                    got: other.to_owned(),
+                });
+            },
+            None => {
+                return Err(DeserializeError::Format(
+                    "missing __VERSION__".to_owned(),
+                ));
+            },
+        }
+        let field = |name: &str| {
+            value.get(name).ok_or_else(|| {
+                DeserializeError::Format(format!("missing {name}"))
+            })
+        };
+        let vocab_type =
+            VocabType::try_from(field("vocab_type")?.as_i64().ok_or_else(
+                || DeserializeError::Format("vocab_type".to_owned()),
+            )?)
+            .map_err(|e| DeserializeError::Format(e.to_string()))?;
+        let vocab_size = field("vocab_size")?
+            .as_i64()
+            .ok_or_else(|| DeserializeError::Format("vocab_size".to_owned()))?
+            as i32;
+        let add_prefix_space =
+            field("add_prefix_space")?.as_bool().unwrap_or(false);
+        let stop_token_ids = i32_array(field("stop_token_ids")?)?;
+        let special_token_ids = i32_array(field("special_token_ids")?)?;
+        let decoded_vocab: Vec<Vec<u8>> = field("decoded_vocab")?
+            .as_array()
+            .ok_or_else(|| {
+                DeserializeError::Format("decoded_vocab".to_owned())
+            })?
+            .iter()
+            .map(|v| {
+                v.as_str().map(latin1_to_bytes).ok_or_else(|| {
+                    DeserializeError::Format("decoded token".to_owned())
+                })
+            })
+            .collect::<Result<_, _>>()?;
+        Ok(Self::from_decoded_parts(
+            decoded_vocab,
+            vocab_type,
+            vocab_size,
+            add_prefix_space,
+            stop_token_ids,
+            special_token_ids,
+        ))
+    }
+}
+
+/// Encodes a byte string as a Latin-1 string (each byte → the same-valued codepoint).
+fn bytes_to_latin1(bytes: &[u8]) -> String {
+    bytes.iter().map(|&b| b as char).collect()
+}
+
+/// Decodes a Latin-1 string back into its byte string (each codepoint → its low byte).
+fn latin1_to_bytes(s: &str) -> Vec<u8> {
+    s.chars().map(|c| c as u8).collect()
+}
+
+fn i32_array(value: &Value) -> Result<Vec<i32>, DeserializeError> {
+    value
+        .as_array()
+        .ok_or_else(|| DeserializeError::Format("expected array".to_owned()))?
+        .iter()
+        .map(|v| {
+            v.as_i64().map(|n| n as i32).ok_or_else(|| {
+                DeserializeError::Format("expected integer".to_owned())
+            })
+        })
+        .collect()
 }
 
 /// Whether `needle` occurs as a contiguous subsequence of `haystack` (byte `find != npos`).

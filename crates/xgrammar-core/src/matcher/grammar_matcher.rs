@@ -48,6 +48,19 @@ impl GrammarMatcher {
         Self::build(grammar, tokenizer_info, false)
     }
 
+    /// Creates a matcher over a [`CompiledGrammar`](crate::compiler::CompiledGrammar).
+    #[must_use]
+    pub fn from_compiled_grammar(
+        compiled: &crate::compiler::CompiledGrammar,
+        terminate_without_stop_token: bool,
+    ) -> Self {
+        Self::build(
+            compiled.grammar(),
+            compiled.tokenizer_info().clone(),
+            terminate_without_stop_token,
+        )
+    }
+
     fn build(
         grammar: &Grammar,
         tokenizer_info: TokenizerInfo,

@@ -11,6 +11,7 @@
 
 #![forbid(unsafe_op_in_unsafe_fn)]
 
+pub mod compiler;
 pub mod converter;
 pub mod fsm;
 pub mod functor;

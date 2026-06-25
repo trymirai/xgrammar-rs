@@ -18,6 +18,7 @@ pub mod grammar;
 pub mod matcher;
 pub mod parser;
 pub mod support;
+pub mod tokenizer;
 
 /// The crate version, as declared in `Cargo.toml`.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

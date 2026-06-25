@@ -40,11 +40,11 @@ fn bit_is_set(
 }
 
 /// The row of `bitmask` for batch entry `index`.
-fn row<'a>(
-    bitmask: &'a [i32],
+fn row(
+    bitmask: &[i32],
     vocab_size: i32,
     index: i32,
-) -> &'a [i32] {
+) -> &[i32] {
     let size = get_bitmask_size(vocab_size) as usize;
     let start = index as usize * size;
     &bitmask[start..start + size]

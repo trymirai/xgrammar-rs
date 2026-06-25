@@ -1,6 +1,8 @@
 //! `Grammar` binding — a thin opaque wrapper over [`xgrammar::grammar::Grammar`].
 
-use crate::error::XgrammarError;
+use pyo3::PyErr;
+
+use crate::error::{map_deserialize_error, map_error};
 
 /// A context-free grammar compiled from EBNF, JSON Schema, regex, or a structural tag.
 #[bindings::export(Class)]
@@ -24,10 +26,10 @@ impl Grammar {
     pub fn from_ebnf(
         ebnf_string: String,
         root_rule_name: String,
-    ) -> Result<Grammar, XgrammarError> {
+    ) -> Result<Grammar, PyErr> {
         xgrammar::grammar::Grammar::from_ebnf(&ebnf_string, &root_rule_name)
             .map(Grammar::wrap)
-            .map_err(XgrammarError::from_display)
+            .map_err(map_error)
     }
 
     /// Builds a grammar from a JSON Schema string (the C++ `Grammar::FromJSONSchema`).
@@ -41,7 +43,7 @@ impl Grammar {
         strict_mode: bool,
         max_whitespace_cnt: Option<i32>,
         print_converted_ebnf: bool,
-    ) -> Result<Grammar, XgrammarError> {
+    ) -> Result<Grammar, PyErr> {
         let seps = separators.as_ref().map(|(a, b)| (a.as_str(), b.as_str()));
         let g = xgrammar::grammar::Grammar::from_json_schema(
             &schema,
@@ -51,7 +53,7 @@ impl Grammar {
             strict_mode,
             max_whitespace_cnt,
         )
-        .map_err(XgrammarError::from_display)?;
+        .map_err(map_error)?;
         if print_converted_ebnf {
             println!("{g}");
         }
@@ -63,9 +65,9 @@ impl Grammar {
     pub fn from_regex(
         regex_string: String,
         print_converted_ebnf: bool,
-    ) -> Result<Grammar, XgrammarError> {
+    ) -> Result<Grammar, PyErr> {
         let g = xgrammar::grammar::Grammar::from_regex(&regex_string)
-            .map_err(XgrammarError::from_display)?;
+            .map_err(map_error)?;
         if print_converted_ebnf {
             println!("{g}");
         }
@@ -76,10 +78,10 @@ impl Grammar {
     #[bindings::export(Method(Factory))]
     pub fn from_structural_tag(
         structural_tag_json: String
-    ) -> Result<Grammar, XgrammarError> {
+    ) -> Result<Grammar, PyErr> {
         xgrammar::grammar::Grammar::from_structural_tag(&structural_tag_json)
             .map(Grammar::wrap)
-            .map_err(XgrammarError::from_display)
+            .map_err(map_error)
     }
 
     /// The built-in JSON grammar.
@@ -110,12 +112,10 @@ impl Grammar {
 
     /// Deserializes a grammar from its `"v11"` JSON form.
     #[bindings::export(Method(Factory))]
-    pub fn deserialize_json(
-        json_string: String
-    ) -> Result<Grammar, XgrammarError> {
+    pub fn deserialize_json(json_string: String) -> Result<Grammar, PyErr> {
         xgrammar::grammar::Grammar::deserialize_json(&json_string)
             .map(Grammar::wrap)
-            .map_err(XgrammarError::from_display)
+            .map_err(map_deserialize_error)
     }
 
     /// The EBNF (GBNF) string form of the grammar.

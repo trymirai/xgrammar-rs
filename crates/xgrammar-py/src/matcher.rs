@@ -1,4 +1,4 @@
-//! `GrammarMatcher` binding (non-tensor methods; the bitmask tensor API lands separately).
+//! `GrammarMatcher` binding.
 
 use crate::compiler::CompiledGrammar;
 
@@ -15,7 +15,7 @@ impl GrammarMatcher {
     ///
     /// `override_stop_tokens` and `max_rollback_tokens` are accepted for API parity; the
     /// rollback history is currently unbounded.
-    #[bindings::export(Method(Factory))]
+    #[bindings::export(Method(Constructor))]
     pub fn new(
         compiled_grammar: CompiledGrammar,
         _override_stop_tokens: Option<Vec<i32>>,
@@ -38,16 +38,6 @@ impl GrammarMatcher {
         _debug_print: bool,
     ) -> bool {
         self.inner.accept_token(token_id)
-    }
-
-    /// Accepts a UTF-8 string byte-by-byte. Returns whether the whole string was accepted.
-    #[bindings::export(Method)]
-    pub fn accept_string(
-        &mut self,
-        input_str: String,
-        _debug_print: bool,
-    ) -> bool {
-        self.inner.accept_string(&input_str)
     }
 
     /// Whether the matcher has reached an accepting terminal state.
@@ -95,5 +85,74 @@ impl GrammarMatcher {
     #[bindings::export(Method)]
     pub fn find_jump_forward_string(&mut self) -> Vec<u8> {
         self.inner.find_jump_forward_string()
+    }
+}
+
+#[cfg(feature = "bindings-pyo3")]
+mod matcher_pyo3_ext {
+    use pyo3::{exceptions::PyNotImplementedError, prelude::*};
+
+    use super::GrammarMatcher;
+    use crate::{
+        bitmask_util::with_writable_i32_buffer, tokenizer_info::TokenizerInfo,
+    };
+
+    #[pyo3::pymethods]
+    impl GrammarMatcher {
+        #[pyo3(name = "accept_string")]
+        fn accept_string_py(
+            &mut self,
+            input: &Bound<'_, PyAny>,
+            _debug_print: bool,
+        ) -> PyResult<bool> {
+            if input.is_instance_of::<pyo3::types::PyBytes>() {
+                Ok(self.inner.accept_bytes(&input.extract::<Vec<u8>>()?))
+            } else {
+                Ok(self.inner.accept_string(&input.extract::<String>()?))
+            }
+        }
+
+        #[pyo3(name = "fill_next_token_bitmask")]
+        fn fill_next_token_bitmask_py(
+            &mut self,
+            py: Python<'_>,
+            bitmask: &Bound<'_, PyAny>,
+            index: i32,
+            _debug_print: bool,
+        ) -> PyResult<bool> {
+            with_writable_i32_buffer(py, bitmask, |buf| {
+                Ok(self.inner.fill_next_token_bitmask(buf, index))
+            })
+        }
+
+        #[pyo3(name = "tokenizer_info")]
+        fn tokenizer_info_py(&self) -> TokenizerInfo {
+            TokenizerInfo::wrap(self.inner.tokenizer_info().clone())
+        }
+
+        #[pyo3(name = "accept_stop_token")]
+        fn accept_stop_token_py(&mut self) -> bool {
+            self.inner.accept_stop_token()
+        }
+
+        #[pyo3(name = "_debug_print_internal_state")]
+        fn debug_print_internal_state_py(&self) -> String {
+            self.inner.debug_print_internal_state()
+        }
+
+        #[pyo3(name = "traverse_draft_tree")]
+        #[allow(clippy::too_many_arguments)]
+        fn traverse_draft_tree_py(
+            &mut self,
+            _retrieve_next_token: &Bound<'_, PyAny>,
+            _retrieve_next_sibling: &Bound<'_, PyAny>,
+            _draft_tokens: &Bound<'_, PyAny>,
+            _token_bitmask: &Bound<'_, PyAny>,
+            _time_threshold: f64,
+        ) -> PyResult<bool> {
+            Err(PyNotImplementedError::new_err(
+                "traverse_draft_tree is not yet implemented in the pure-Rust core",
+            ))
+        }
     }
 }

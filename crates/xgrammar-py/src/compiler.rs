@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use crate::{
-    error::XgrammarError, grammar::Grammar, tokenizer_info::TokenizerInfo,
+    error::map_error, grammar::Grammar, tokenizer_info::TokenizerInfo,
 };
 
 /// A grammar compiled against a tokenizer, ready to drive a matcher.
@@ -52,7 +52,7 @@ pub struct GrammarCompiler {
 #[bindings::export(Implementation)]
 impl GrammarCompiler {
     /// Creates a compiler bound to `tokenizer_info`.
-    #[bindings::export(Method(Factory))]
+    #[bindings::export(Method(Constructor))]
     pub fn new(
         tokenizer_info: TokenizerInfo,
         max_threads: i32,
@@ -127,11 +127,11 @@ impl GrammarCompiler {
     pub fn compile_structural_tag(
         &self,
         structural_tag_json: String,
-    ) -> Result<CompiledGrammar, XgrammarError> {
+    ) -> Result<CompiledGrammar, pyo3::PyErr> {
         self.inner
             .compile_structural_tag(&structural_tag_json)
             .map(CompiledGrammar::wrap)
-            .map_err(XgrammarError::from_display)
+            .map_err(map_error)
     }
 
     /// Compiles the built-in JSON grammar.

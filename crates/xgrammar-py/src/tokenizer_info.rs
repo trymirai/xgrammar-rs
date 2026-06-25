@@ -1,6 +1,6 @@
 //! `TokenizerInfo` binding (and the `VocabType` enum).
 
-use crate::error::XgrammarError;
+use crate::{error::map_error, vocab_type::VocabType};
 
 /// A thin opaque wrapper over [`xgrammar::tokenizer::TokenizerInfo`].
 #[bindings::export(Class)]
@@ -17,21 +17,24 @@ impl TokenizerInfo {
     }
 }
 
+fn parse_vocab_type(
+    vocab_type: i32
+) -> Result<xgrammar::tokenizer::VocabType, pyo3::PyErr> {
+    VocabType::try_from(vocab_type).map(VocabType::to_core).map_err(map_error)
+}
+
 #[bindings::export(Implementation)]
 impl TokenizerInfo {
-    /// Builds tokenizer info from an encoded vocabulary. `vocab_type` is the integer value of
-    /// the Python `VocabType` enum (0 = RAW, 1 = BYTE_FALLBACK, 2 = BYTE_LEVEL).
-    #[bindings::export(Method(Factory))]
+    /// Builds tokenizer info from an encoded vocabulary.
+    #[bindings::export(Method(Constructor))]
     pub fn new(
         encoded_vocab: Vec<String>,
         vocab_type: i32,
         vocab_size: Option<i32>,
         stop_token_ids: Option<Vec<i32>>,
         add_prefix_space: bool,
-    ) -> Result<TokenizerInfo, XgrammarError> {
-        let vt =
-            xgrammar::tokenizer::VocabType::try_from(i64::from(vocab_type))
-                .map_err(XgrammarError::from_display)?;
+    ) -> Result<TokenizerInfo, pyo3::PyErr> {
+        let vt = parse_vocab_type(vocab_type)?;
         Ok(TokenizerInfo::wrap(xgrammar::tokenizer::TokenizerInfo::new(
             &encoded_vocab,
             vt,
@@ -46,19 +49,19 @@ impl TokenizerInfo {
     pub fn from_vocab_and_metadata(
         encoded_vocab: Vec<String>,
         metadata: String,
-    ) -> Result<TokenizerInfo, XgrammarError> {
+    ) -> Result<TokenizerInfo, pyo3::PyErr> {
         xgrammar::tokenizer::TokenizerInfo::from_vocab_and_metadata(
             &encoded_vocab,
             &metadata,
         )
         .map(TokenizerInfo::wrap)
-        .map_err(XgrammarError::from_display)
+        .map_err(map_error)
     }
 
     /// The vocabulary type, as the integer `VocabType` value.
     #[bindings::export(Method)]
     pub fn vocab_type(&self) -> i32 {
-        self.inner.vocab_type() as i32
+        VocabType::from_core(self.inner.vocab_type()) as i32
     }
 
     /// The vocabulary size (including padding tokens).
@@ -101,9 +104,26 @@ impl TokenizerInfo {
     #[bindings::export(Method(Factory))]
     pub fn deserialize_json(
         json_string: String
-    ) -> Result<TokenizerInfo, XgrammarError> {
+    ) -> Result<TokenizerInfo, pyo3::PyErr> {
         xgrammar::tokenizer::TokenizerInfo::deserialize_json(&json_string)
             .map(TokenizerInfo::wrap)
-            .map_err(XgrammarError::from_display)
+            .map_err(map_error)
+    }
+
+    /// Dumps tokenizer metadata (vocab type and prefix-space flag) as JSON.
+    #[bindings::export(Method)]
+    pub fn dump_metadata(&self) -> String {
+        self.inner.dump_metadata()
+    }
+
+    /// Detects tokenizer metadata from a Hugging Face backend JSON string.
+    #[bindings::export(Method(Factory))]
+    pub fn _detect_metadata_from_hf(
+        backend_str: String
+    ) -> Result<String, pyo3::PyErr> {
+        xgrammar::tokenizer::TokenizerInfo::detect_metadata_from_hf(
+            &backend_str,
+        )
+        .map_err(map_error)
     }
 }

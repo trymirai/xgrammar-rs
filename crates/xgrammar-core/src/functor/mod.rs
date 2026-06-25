@@ -19,6 +19,7 @@ mod structure_normalizer;
 pub use byte_string_fuser::byte_string_fuser;
 pub use dead_code_eliminator::dead_code_eliminator;
 pub use grammar_normalizer::grammar_normalizer;
+pub(crate) use grammar_union_concat::add_sub_grammar;
 pub use lookahead_assertion_analyzer::lookahead_assertion_analyzer;
 pub use mutator::{GrammarMutator, MutatorState};
 pub use repetition_range_expander::repetition_range_expander;

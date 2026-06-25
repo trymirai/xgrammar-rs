@@ -47,7 +47,7 @@ impl Grammar {
 
 /// Copies every rule of `sub` into `builder` (deduplicating names and remapping references),
 /// returning the new id of `sub`'s root rule.
-fn add_sub_grammar(
+pub(crate) fn add_sub_grammar(
     builder: &mut GrammarBuilder,
     sub: &Grammar,
 ) -> i32 {

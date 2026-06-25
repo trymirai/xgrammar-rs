@@ -21,6 +21,33 @@ use super::{
         SchemaSpecVariant, StringSpec, TypeArraySpec,
     },
 };
+use crate::grammar::Grammar;
+
+impl Grammar {
+    /// Builds a grammar from a JSON Schema string (the C++ `Grammar::FromJSONSchema`).
+    ///
+    /// # Errors
+    /// Returns a [`SchemaError`] if the schema is invalid or unsatisfiable.
+    pub fn from_json_schema(
+        schema: &str,
+        any_whitespace: bool,
+        indent: Option<i32>,
+        separators: Option<(&str, &str)>,
+        strict_mode: bool,
+        max_whitespace_cnt: Option<i32>,
+    ) -> Result<Grammar, SchemaError> {
+        let ebnf = json_schema_to_ebnf(
+            schema,
+            any_whitespace,
+            indent,
+            separators,
+            strict_mode,
+            max_whitespace_cnt,
+        )?;
+        Ok(Grammar::from_ebnf(&ebnf, "root")
+            .expect("json schema converter produced valid EBNF"))
+    }
+}
 
 const BASIC_ANY: &str = "basic_any";
 const BASIC_INTEGER: &str = "basic_integer";

@@ -5,8 +5,8 @@ use syn::Ident;
 use crate::{
     backends::Backend,
     contexts::{
-        ClassContext, EnumerationContext, EnumerationShape, ErrorContext, ImplementationContext, MethodMetadata,
-        StructureContext,
+        ClassContext, EnumerationContext, EnumerationShape, ErrorContext,
+        ImplementationContext, MethodMetadata, StructureContext,
     },
     types::MethodFlavor,
 };
@@ -60,7 +60,9 @@ impl Backend for Pyo3 {
         registration(&context.item.ident)
     }
 
-    fn implementation_companions(context: &ImplementationContext) -> TokenStream {
+    fn implementation_companions(
+        context: &ImplementationContext
+    ) -> TokenStream {
         implementation_expansion(context)
     }
 
@@ -81,8 +83,15 @@ impl Backend for Pyo3 {
         metadata: &MethodMetadata,
     ) -> TokenStream {
         match metadata.flavor {
-            MethodFlavor::Factory => factory_expansion(&context.self_type, metadata),
-            MethodFlavor::FactoryWithCallback => factory_with_callback_expansion(&context.self_type, metadata),
+            MethodFlavor::Factory => {
+                factory_expansion(&context.self_type, metadata)
+            },
+            MethodFlavor::FactoryWithCallback => {
+                factory_with_callback_expansion(&context.self_type, metadata)
+            },
+            MethodFlavor::Constructor => {
+                constructor_expansion(&context.self_type, metadata)
+            },
             _ => quote! {},
         }
     }
@@ -95,13 +104,19 @@ impl Backend for Pyo3 {
 fn implementation_expansion(context: &ImplementationContext) -> TokenStream {
     let mut wrappers: Vec<TokenStream> = Vec::new();
     for metadata in context.all_methods() {
-        if matches!(metadata.flavor, MethodFlavor::Factory | MethodFlavor::FactoryWithCallback) {
+        if matches!(
+            metadata.flavor,
+            MethodFlavor::Factory
+                | MethodFlavor::FactoryWithCallback
+                | MethodFlavor::Constructor
+        ) {
             continue;
         }
         wrappers.push(build_method_wrapper(metadata));
     }
 
-    if let Some(metadata) = context.methods_of(MethodFlavor::StreamNext).next() {
+    if let Some(metadata) = context.methods_of(MethodFlavor::StreamNext).next()
+    {
         wrappers.push(build_stream_protocol(&metadata.method));
     }
 
@@ -126,7 +141,8 @@ fn implementation_expansion(context: &ImplementationContext) -> TokenStream {
 
 fn build_stream_protocol(next_method: &syn::ImplItemFn) -> TokenStream {
     let next_ident = &next_method.sig.ident;
-    let item_repr = next_item_type_repr(&next_method.sig.output).unwrap_or_else(|| "typing.Any".to_string());
+    let item_repr = next_item_type_repr(&next_method.sig.output)
+        .unwrap_or_else(|| "typing.Any".to_string());
     let anext_repr = format!("collections.abc.Awaitable[{item_repr}]");
 
     quote! {
@@ -204,7 +220,9 @@ fn build_method_wrapper(metadata: &MethodMetadata) -> TokenStream {
             MethodFlavor::Factory => quote! { #[staticmethod] },
             MethodFlavor::Getter => quote! { #[getter] },
             MethodFlavor::Setter => quote! { #[setter] },
-            MethodFlavor::Plain | MethodFlavor::FactoryWithCallback | MethodFlavor::StreamNext => {
+            MethodFlavor::Plain
+            | MethodFlavor::FactoryWithCallback
+            | MethodFlavor::StreamNext => {
                 quote! {}
             },
         }
@@ -234,15 +252,18 @@ fn build_method_wrapper(metadata: &MethodMetadata) -> TokenStream {
         .collect();
 
     let receiver_tokens = match receiver {
-        Some(receiver_arg) if receiver_arg.mutability.is_some() => quote! { &mut self },
+        Some(receiver_arg) if receiver_arg.mutability.is_some() => {
+            quote! { &mut self }
+        },
         Some(_) => quote! { &self },
         None => quote! {},
     };
-    let receiver_separator = if receiver.is_some() && !typed_arg_tokens.is_empty() {
-        quote! { , }
-    } else {
-        quote! {}
-    };
+    let receiver_separator =
+        if receiver.is_some() && !typed_arg_tokens.is_empty() {
+            quote! { , }
+        } else {
+            quote! {}
+        };
 
     let pyo3_name_attribute = match flavor {
         MethodFlavor::Constructor => quote! {},
@@ -346,8 +367,9 @@ fn rust_return_to_python_repr_for_self(
     self_type: &syn::Type,
 ) -> String {
     let representation = rust_return_to_python_repr(output);
-    let self_name =
-        type_path_last_ident(self_type).map(|ident| ident.to_string()).unwrap_or_else(|| "typing.Any".to_string());
+    let self_name = type_path_last_ident(self_type)
+        .map(|ident| ident.to_string())
+        .unwrap_or_else(|| "typing.Any".to_string());
     representation.replace("Self", &self_name)
 }
 
@@ -363,8 +385,10 @@ fn unwrap_result(ty: &syn::Type) -> &syn::Type {
         && let Some(last) = type_path.path.segments.last()
         && last.ident == "Result"
         && let syn::PathArguments::AngleBracketed(arguments) = &last.arguments
-        && let Some(syn::GenericArgument::Type(inner)) =
-            arguments.args.iter().find(|argument| matches!(argument, syn::GenericArgument::Type(_)))
+        && let Some(syn::GenericArgument::Type(inner)) = arguments
+            .args
+            .iter()
+            .find(|argument| matches!(argument, syn::GenericArgument::Type(_)))
     {
         return inner;
     }
@@ -380,30 +404,44 @@ fn rust_type_to_python_repr(ty: &syn::Type) -> String {
             let name = last.ident.to_string();
             match name.as_str() {
                 "bool" => "builtins.bool".to_string(),
-                "i8" | "i16" | "i32" | "i64" | "i128" | "u8" | "u16" | "u32" | "u64" | "u128" | "isize" | "usize" => {
+                "i8" | "i16" | "i32" | "i64" | "i128" | "u8" | "u16"
+                | "u32" | "u64" | "u128" | "isize" | "usize" => {
                     "builtins.int".to_string()
                 },
                 "f32" | "f64" => "builtins.float".to_string(),
                 "String" | "str" => "builtins.str".to_string(),
                 "Option" => match generic_args(&last.arguments).as_slice() {
-                    [inner] => format!("{} | None", rust_type_to_python_repr(inner)),
+                    [inner] => {
+                        format!("{} | None", rust_type_to_python_repr(inner))
+                    },
                     _ => "typing.Any".to_string(),
                 },
                 "Vec" => match generic_args(&last.arguments).as_slice() {
-                    [inner] => format!("builtins.list[{}]", rust_type_to_python_repr(inner)),
+                    [inner] => format!(
+                        "builtins.list[{}]",
+                        rust_type_to_python_repr(inner)
+                    ),
                     _ => "typing.Any".to_string(),
                 },
-                "HashMap" | "BTreeMap" | "IndexMap" => match generic_args(&last.arguments).as_slice() {
-                    [key, value] => {
-                        format!("builtins.dict[{}, {}]", rust_type_to_python_repr(key), rust_type_to_python_repr(value))
-                    },
-                    _ => "typing.Any".to_string(),
+                "HashMap" | "BTreeMap" | "IndexMap" => {
+                    match generic_args(&last.arguments).as_slice() {
+                        [key, value] => {
+                            format!(
+                                "builtins.dict[{}, {}]",
+                                rust_type_to_python_repr(key),
+                                rust_type_to_python_repr(value)
+                            )
+                        },
+                        _ => "typing.Any".to_string(),
+                    }
                 },
                 _ => name,
             }
         },
         syn::Type::Tuple(tuple) if tuple.elems.is_empty() => "None".to_string(),
-        syn::Type::Reference(reference) => rust_type_to_python_repr(reference.elem.as_ref()),
+        syn::Type::Reference(reference) => {
+            rust_type_to_python_repr(reference.elem.as_ref())
+        },
         _ => "typing.Any".to_string(),
     }
 }
@@ -426,6 +464,21 @@ fn factory_expansion(
     self_type: &syn::Type,
     metadata: &MethodMetadata,
 ) -> TokenStream {
+    factory_or_constructor_expansion(self_type, metadata, false)
+}
+
+fn constructor_expansion(
+    self_type: &syn::Type,
+    metadata: &MethodMetadata,
+) -> TokenStream {
+    factory_or_constructor_expansion(self_type, metadata, true)
+}
+
+fn factory_or_constructor_expansion(
+    self_type: &syn::Type,
+    metadata: &MethodMetadata,
+    is_constructor: bool,
+) -> TokenStream {
     let method = &metadata.method;
     let method_ident = &method.sig.ident;
     let method_name = method_ident.to_string();
@@ -434,9 +487,27 @@ fn factory_expansion(
     let output = &method.sig.output;
     let asyncness = metadata.is_async();
     let arg_idents = metadata.arg_idents();
+    let body_block = &method.block;
+    let pyo3_method_kind = if is_constructor {
+        quote! { #[new] }
+    } else {
+        quote! {
+            #[staticmethod]
+            #[pyo3(name = #method_name)]
+        }
+    };
+    let invocation = if is_constructor {
+        quote! { #body_block }
+    } else {
+        quote! {
+            <#self_type>::#method_ident( #( #arg_idents ),* )
+        }
+    };
 
     if asyncness {
-        let body = if metadata.returns_result() {
+        let body = if is_constructor {
+            quote! { async move #body_block }
+        } else if metadata.returns_result() {
             quote! {
                 let __result = <#self_type>::#method_ident( #( #arg_idents ),* ).await;
                 __result.map_err(::std::convert::Into::into)
@@ -457,8 +528,7 @@ fn factory_expansion(
                 #[pyo3_stub_gen::derive::gen_stub_pymethods]
                 #[pyo3::pymethods]
                 impl #self_type {
-                    #[staticmethod]
-                    #[pyo3(name = #method_name)]
+                    #pyo3_method_kind
                     #[gen_stub(override_return_type(type_repr = #awaitable_repr, imports = ("collections.abc")))]
                     pub fn #wrapper_ident<'py>(
                         py: ::pyo3::Python<'py>,
@@ -480,10 +550,9 @@ fn factory_expansion(
                 #[pyo3_stub_gen::derive::gen_stub_pymethods]
                 #[pyo3::pymethods]
                 impl #self_type {
-                    #[staticmethod]
-                    #[pyo3(name = #method_name)]
+                    #pyo3_method_kind
                     pub fn #wrapper_ident( #inputs ) #output {
-                        <#self_type>::#method_ident( #( #arg_idents ),* )
+                        #invocation
                     }
                 }
             };
@@ -512,14 +581,20 @@ fn factory_with_callback_expansion(
             .to_compile_error();
         },
     };
-    let synthetic_idents: Vec<Ident> = (0..callback_inputs.len()).map(|index| format_ident!("arg{index}")).collect();
+    let synthetic_idents: Vec<Ident> = (0..callback_inputs.len())
+        .map(|index| format_ident!("arg{index}"))
+        .collect();
     let py_call_arguments = if synthetic_idents.is_empty() {
         quote! { () }
     } else {
         quote! { ( #( #synthetic_idents ),* , ) }
     };
-    let callback_arg_reprs: Vec<String> = callback_inputs.iter().map(rust_type_to_python_repr).collect();
-    let callable_repr = format!("collections.abc.Callable[[{}], None]", callback_arg_reprs.join(", "));
+    let callback_arg_reprs: Vec<String> =
+        callback_inputs.iter().map(rust_type_to_python_repr).collect();
+    let callable_repr = format!(
+        "collections.abc.Callable[[{}], None]",
+        callback_arg_reprs.join(", ")
+    );
 
     quote! {
         #[cfg(feature = "bindings-pyo3")]
@@ -557,8 +632,10 @@ fn struct_constructor(item_struct: &syn::ItemStruct) -> TokenStream {
         syn::Fields::Named(named) => &named.named,
         _ => return quote! {},
     };
-    let public_fields: Vec<&syn::Field> =
-        fields.iter().filter(|field| matches!(field.vis, syn::Visibility::Public(_))).collect();
+    let public_fields: Vec<&syn::Field> = fields
+        .iter()
+        .filter(|field| matches!(field.vis, syn::Visibility::Public(_)))
+        .collect();
     if public_fields.is_empty() {
         return quote! {};
     }
@@ -619,7 +696,8 @@ fn registration(type_name: &Ident) -> TokenStream {
 }
 
 fn error_implementations(type_name: &Ident) -> TokenStream {
-    let from_py_message = format!("{} cannot be received from Python", type_name);
+    let from_py_message =
+        format!("{} cannot be received from Python", type_name);
     quote! {
         #[cfg(feature = "bindings-pyo3")]
         impl From<#type_name> for ::pyo3::PyErr {

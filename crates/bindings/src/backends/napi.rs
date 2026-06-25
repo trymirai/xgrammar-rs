@@ -5,8 +5,9 @@ use syn::{Ident, Token, Variant, punctuated::Punctuated};
 use crate::{
     backends::Backend,
     contexts::{
-        AliasContext, ClassContext, EnumerationContext, EnumerationShape, ErrorContext, ErrorShape,
-        ImplementationContext, MethodMetadata, StructureContext,
+        AliasContext, ClassContext, EnumerationContext, EnumerationShape,
+        ErrorContext, ErrorShape, ImplementationContext, MethodMetadata,
+        StructureContext,
     },
     types::{ClassFlavor, MethodFlavor, StructureFlavor},
 };
@@ -56,7 +57,10 @@ impl Backend for Napi {
     fn enumeration_companions(context: &EnumerationContext) -> TokenStream {
         match context.shape {
             EnumerationShape::Unit => quote! {},
-            EnumerationShape::Data => enum_variant_classes(&context.item.ident, &context.item.variants),
+            EnumerationShape::Data => enum_variant_classes(
+                &context.item.ident,
+                &context.item.variants,
+            ),
         }
     }
 
@@ -66,7 +70,9 @@ impl Backend for Napi {
         }
     }
 
-    fn implementation_attributes(_context: &ImplementationContext) -> TokenStream {
+    fn implementation_attributes(
+        _context: &ImplementationContext
+    ) -> TokenStream {
         quote! {
             #[cfg_attr(feature = "bindings-napi", napi_derive::napi)]
         }
@@ -86,7 +92,9 @@ impl Backend for Napi {
             MethodFlavor::Setter => quote! {
                 #[cfg_attr(feature = "bindings-napi", napi(setter))]
             },
-            MethodFlavor::Factory | MethodFlavor::FactoryWithCallback => quote! {},
+            MethodFlavor::Factory | MethodFlavor::FactoryWithCallback => {
+                quote! {}
+            },
         }
     }
 
@@ -95,9 +103,15 @@ impl Backend for Napi {
         metadata: &MethodMetadata,
     ) -> TokenStream {
         match metadata.flavor {
-            MethodFlavor::Factory => factory_expansion(&context.self_type, metadata),
-            MethodFlavor::FactoryWithCallback => factory_with_callback_expansion(&context.self_type, metadata),
-            MethodFlavor::StreamNext => stream_next_generator(&context.self_type, &metadata.method),
+            MethodFlavor::Factory => {
+                factory_expansion(&context.self_type, metadata)
+            },
+            MethodFlavor::FactoryWithCallback => {
+                factory_with_callback_expansion(&context.self_type, metadata)
+            },
+            MethodFlavor::StreamNext => {
+                stream_next_generator(&context.self_type, &metadata.method)
+            },
             _ => quote! {},
         }
     }
@@ -200,8 +214,9 @@ fn enum_variant_classes(
             .to_compile_error();
         },
     };
-    let either_variant_labels: Vec<Ident> =
-        (0..variant_count).map(|index| format_ident!("{}", (b'A' + index as u8) as char)).collect();
+    let either_variant_labels: Vec<Ident> = (0..variant_count)
+        .map(|index| format_ident!("{}", (b'A' + index as u8) as char))
+        .collect();
 
     let mut variant_class_items = Vec::new();
     let mut from_variant_implementations = Vec::new();
@@ -213,12 +228,15 @@ fn enum_variant_classes(
 
     for (variant_index, variant) in variants.iter().enumerate() {
         let variant_ident = &variant.ident;
-        let variant_class_ident = format_ident!("{}{}", enum_ident, variant_ident);
+        let variant_class_ident =
+            format_ident!("{}{}", enum_ident, variant_ident);
         let either_label = &either_variant_labels[variant_index];
         union_type_params.push(quote! { #variant_class_ident });
         let named_fields = match &variant.fields {
             syn::Fields::Named(named) => &named.named,
-            _ => unreachable!("non-named variants must be rejected before reaching this function"),
+            _ => unreachable!(
+                "non-named variants must be rejected before reaching this function"
+            ),
         };
         let field_declarations: Vec<TokenStream> = named_fields
             .iter()
@@ -228,10 +246,13 @@ fn enum_variant_classes(
                 quote! { pub #field_ident: #field_type }
             })
             .collect();
-        let field_idents: Vec<&Ident> =
-            named_fields.iter().map(|field| field.ident.as_ref().expect("named field")).collect();
+        let field_idents: Vec<&Ident> = named_fields
+            .iter()
+            .map(|field| field.ident.as_ref().expect("named field"))
+            .collect();
 
-        let variant_class_value_implementations = class_value_implementations(&variant_class_ident);
+        let variant_class_value_implementations =
+            class_value_implementations(&variant_class_ident);
         variant_class_items.push(quote! {
             #[cfg(feature = "bindings-napi")]
             #[napi_derive::napi(constructor)]
@@ -299,7 +320,8 @@ fn enum_variant_classes(
         });
     }
 
-    let expected_message = format!("Expected instance of variant class for {}", enum_ident);
+    let expected_message =
+        format!("Expected instance of variant class for {}", enum_ident);
 
     let union_js_name = enum_ident.to_string();
     let union_alias_definition = match &either_type_ident {
@@ -443,7 +465,9 @@ fn factory_with_callback_expansion(
             .to_compile_error();
         },
     };
-    let synthetic_idents: Vec<Ident> = (0..callback_inputs.len()).map(|index| format_ident!("arg{index}")).collect();
+    let synthetic_idents: Vec<Ident> = (0..callback_inputs.len())
+        .map(|index| format_ident!("arg{index}"))
+        .collect();
     let napi_args_type = napi_args_tuple(&callback_inputs);
     let napi_call_value = napi_call_tuple(&synthetic_idents);
 
@@ -547,7 +571,9 @@ fn extract_option_inner_type(output: &syn::ReturnType) -> Option<syn::Type> {
         return None;
     }
     let generic_arguments = match &last_segment.arguments {
-        syn::PathArguments::AngleBracketed(angle_bracketed) => &angle_bracketed.args,
+        syn::PathArguments::AngleBracketed(angle_bracketed) => {
+            &angle_bracketed.args
+        },
         _ => return None,
     };
     for argument in generic_arguments {

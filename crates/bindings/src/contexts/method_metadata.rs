@@ -21,7 +21,10 @@ impl MethodMetadata {
             syn::Type::Path(type_path) => &type_path.path,
             _ => return false,
         };
-        path.segments.last().map(|segment| segment.ident == "Result").unwrap_or(false)
+        path.segments
+            .last()
+            .map(|segment| segment.ident == "Result")
+            .unwrap_or(false)
     }
 
     pub fn receiver(&self) -> Option<&syn::Receiver> {
@@ -76,10 +79,14 @@ fn extract_void_fn_inputs(ty: &syn::Type) -> Option<Vec<syn::Type>> {
             continue;
         };
         let segment = trait_bound.path.segments.last()?;
-        if segment.ident != "Fn" && segment.ident != "FnMut" && segment.ident != "FnOnce" {
+        if segment.ident != "Fn"
+            && segment.ident != "FnMut"
+            && segment.ident != "FnOnce"
+        {
             continue;
         }
-        let syn::PathArguments::Parenthesized(paren) = &segment.arguments else {
+        let syn::PathArguments::Parenthesized(paren) = &segment.arguments
+        else {
             continue;
         };
         let returns_unit = match &paren.output {

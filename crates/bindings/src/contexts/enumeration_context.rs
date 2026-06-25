@@ -6,7 +6,9 @@ pub enum EnumerationShape {
 }
 
 impl EnumerationShape {
-    pub fn from_variants(variants: &Punctuated<Variant, Token![,]>) -> syn::Result<Self> {
+    pub fn from_variants(
+        variants: &Punctuated<Variant, Token![,]>
+    ) -> syn::Result<Self> {
         let mut has_unit_variant = false;
         let mut has_named_variant = false;
         for variant in variants {

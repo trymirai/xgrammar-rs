@@ -36,14 +36,22 @@ impl ImplementationContext {
                     })?;
                     strip_export_attributes(&mut method.attrs);
 
-                    let extracted = matches!(flavor, MethodFlavor::Factory | MethodFlavor::FactoryWithCallback);
+                    let extracted = matches!(
+                        flavor,
+                        MethodFlavor::Factory
+                            | MethodFlavor::FactoryWithCallback
+                            | MethodFlavor::Constructor
+                    );
 
                     if !extracted {
                         let metadata_for_attrs = MethodMetadata {
                             method: method.clone(),
                             flavor,
                         };
-                        apply_backend_method_attributes(&mut method, &metadata_for_attrs)?;
+                        apply_backend_method_attributes(
+                            &mut method,
+                            &metadata_for_attrs,
+                        )?;
                     }
 
                     methods.push(MethodMetadata {
@@ -80,7 +88,9 @@ impl ImplementationContext {
 
     pub fn self_type_ident(&self) -> Option<&syn::Ident> {
         match &self.self_type {
-            syn::Type::Path(type_path) => type_path.path.segments.last().map(|segment| &segment.ident),
+            syn::Type::Path(type_path) => {
+                type_path.path.segments.last().map(|segment| &segment.ident)
+            },
             _ => None,
         }
     }

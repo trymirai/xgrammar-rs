@@ -13,8 +13,8 @@ pub use uniffi::Uniffi;
 pub use wasm::Wasm;
 
 use crate::contexts::{
-    AliasContext, ClassContext, EnumerationContext, ErrorContext, ImplementationContext, MethodMetadata,
-    StructureContext,
+    AliasContext, ClassContext, EnumerationContext, ErrorContext,
+    ImplementationContext, MethodMetadata, StructureContext,
 };
 
 pub trait Backend {
@@ -50,11 +50,15 @@ pub trait Backend {
         quote! {}
     }
 
-    fn implementation_attributes(_context: &ImplementationContext) -> TokenStream {
+    fn implementation_attributes(
+        _context: &ImplementationContext
+    ) -> TokenStream {
         quote! {}
     }
 
-    fn implementation_companions(_context: &ImplementationContext) -> TokenStream {
+    fn implementation_companions(
+        _context: &ImplementationContext
+    ) -> TokenStream {
         quote! {}
     }
 

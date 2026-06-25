@@ -3,7 +3,10 @@ use quote::quote;
 
 use crate::{
     backends::Backend,
-    contexts::{ClassContext, EnumerationContext, ErrorContext, ImplementationContext, StructureContext},
+    contexts::{
+        ClassContext, EnumerationContext, ErrorContext, ImplementationContext,
+        StructureContext,
+    },
     types::StructureFlavor,
 };
 
@@ -35,7 +38,9 @@ impl Backend for Wasm {
         }
     }
 
-    fn implementation_attributes(_context: &ImplementationContext) -> TokenStream {
+    fn implementation_attributes(
+        _context: &ImplementationContext
+    ) -> TokenStream {
         quote! {
             #[cfg_attr(feature = "bindings-wasm", wasm_bindgen::prelude::wasm_bindgen)]
         }

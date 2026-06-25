@@ -6,7 +6,10 @@
 //! tag-dispatch automata. Sequences concatenate and choices union (then simplify).
 
 use crate::{
-    fsm::{Fsm, FsmWithStartEnd, TrieFsmBuilder},
+    fsm::{
+        CompactFsm, CompactFsmWithStartEnd, CompactFsmWithStartEndWithSize,
+        Fsm, FsmWithStartEnd, TrieFsmBuilder,
+    },
     grammar::{
         Grammar, GrammarExpr, GrammarExprType, TagDispatch, TokenTagDispatch,
     },
@@ -26,6 +29,53 @@ const MAX_4_BYTES: u32 = 0xF7BF_BFBF;
 pub struct GrammarFsmBuilder;
 
 impl GrammarFsmBuilder {
+    /// Compiles every rule body into an FSM, folding them into one shared complete FSM stored
+    /// on the grammar (the C++ `GrammarFSMBuilder::Apply`).
+    ///
+    /// # Panics
+    /// Panics if any rule body fails to build an FSM (a malformed optimized grammar).
+    pub fn apply(grammar: &mut Grammar) {
+        let mut complete = Fsm::new(0);
+        let num_rules = grammar.num_rules();
+        let mut per_rule_meta: Vec<crate::fsm::FsmWithStartEndWithSize> =
+            Vec::with_capacity(num_rules as usize);
+        for i in 0..num_rules {
+            let body_id = grammar.rule(i).body_expr_id;
+            let body = grammar.expr(body_id);
+            let rule_fsm = match body.ty {
+                GrammarExprType::TagDispatch => {
+                    Self::tag_dispatch(&grammar.tag_dispatch(body_id))
+                },
+                GrammarExprType::TokenTagDispatch => Self::token_tag_dispatch(
+                    &grammar.token_tag_dispatch(body_id),
+                ),
+                _ => Self::choices(&body, grammar),
+            }
+            .expect("rule body must build an FSM after optimization");
+            per_rule_meta.push(rule_fsm.add_to_complete_fsm(&mut complete));
+        }
+
+        let compact_complete = CompactFsm::from_fsm(&complete);
+        let per_rule_fsms: Vec<Option<CompactFsmWithStartEndWithSize>> =
+            per_rule_meta
+                .iter()
+                .map(|s| {
+                    let wse = CompactFsmWithStartEnd::new(
+                        compact_complete.clone(),
+                        s.start(),
+                        s.ends().to_vec(),
+                        false,
+                    );
+                    Some(CompactFsmWithStartEndWithSize::new(
+                        wse,
+                        s.edge_num(),
+                        s.node_num(),
+                    ))
+                })
+                .collect();
+        grammar.set_fsms(compact_complete, per_rule_fsms);
+    }
+
     /// Builds the FSM for a `RuleRef` expression.
     #[must_use]
     pub fn rule_ref(expr: &GrammarExpr) -> FsmWithStartEnd {

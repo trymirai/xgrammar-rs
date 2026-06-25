@@ -108,6 +108,13 @@ impl Grammar {
         self.optimized = optimized;
     }
 
+    /// Per-rule compiled FSM slices (empty until optimized).
+    pub(crate) fn per_rule_fsms_slice(
+        &self
+    ) -> &[Option<CompactFsmWithStartEndWithSize>] {
+        &self.per_rule_fsms
+    }
+
     /// A mutable reference to a rule (used by in-place passes like the repetition normalizer).
     pub(crate) fn rule_mut(
         &mut self,

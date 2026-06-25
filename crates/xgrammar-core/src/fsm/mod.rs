@@ -11,6 +11,7 @@ mod fsm_edge;
 mod fsm_with_start_end;
 mod fsm_with_start_end_with_size;
 mod regex_fsm_builder;
+mod serialization;
 mod trie_fsm_builder;
 
 pub use compact_fsm::CompactFsm;

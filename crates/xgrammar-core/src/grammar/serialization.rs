@@ -10,7 +10,11 @@
 use serde_json::{Value, json};
 
 use super::{grammar::Grammar, rule::Rule};
-use crate::{config::SERIALIZATION_VERSION, support::Compact2dArray};
+use crate::{
+    config::SERIALIZATION_VERSION,
+    fsm::CompactFsm,
+    support::Compact2dArray,
+};
 
 /// An error from [`Grammar::deserialize_json`] (and other deserializers) — a port of the C++
 /// `SerializationError` family.
@@ -33,9 +37,16 @@ pub enum DeserializeError {
 }
 
 impl Grammar {
-    /// Serializes the grammar to its `"v11"` JSON form.
+    /// Serializes the grammar to its `"v13"` JSON form.
     #[must_use]
     pub fn serialize_json(&self) -> String {
+        serde_json::to_string(&self.serialize_json_value())
+            .expect("grammar JSON serialization never fails")
+    }
+
+    /// Serializes the grammar to a JSON value.
+    #[must_use]
+    pub fn serialize_json_value(&self) -> Value {
         // Re-encode the expression store into the C++ flat layout: each row is
         // `[type, data_len, data...]`, indexed by cumulative offsets.
         let mut offsets: Vec<i32> =
@@ -62,22 +73,38 @@ impl Grammar {
             })
             .collect();
 
-        let obj = json!({
+        let complete_fsm = if self.is_optimized() {
+            self.complete_fsm().serialize_json_value()
+        } else {
+            Value::Null
+        };
+        let per_rule_fsms: Vec<Value> = if self.is_optimized() {
+            self.per_rule_fsms_slice()
+                .iter()
+                .map(|opt| {
+                    opt.as_ref()
+                        .map(|fsm| fsm.serialize_json_value())
+                        .unwrap_or(Value::Null)
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+
+        json!({
             "rules": rules,
             "grammar_expr_data": offsets,
             "grammar_expr_indptr": flat,
             "root_rule_id": self.root_rule_id(),
-            "complete_fsm": Value::Null,
-            "per_rule_fsms": Value::Array(Vec::new()),
+            "complete_fsm": complete_fsm,
+            "per_rule_fsms": per_rule_fsms,
             "allow_empty_rule_ids": self.allow_empty_rule_ids(),
             "optimized": self.is_optimized(),
             "__VERSION__": SERIALIZATION_VERSION,
-        });
-        serde_json::to_string(&obj)
-            .expect("grammar JSON serialization never fails")
+        })
     }
 
-    /// Deserializes a grammar from its `"v11"` JSON form.
+    /// Deserializes a grammar from its `"v13"` JSON form.
     ///
     /// # Errors
     /// Returns [`DeserializeError`] for invalid JSON, a version mismatch, or a malformed body.
@@ -86,6 +113,16 @@ impl Grammar {
     ) -> Result<Grammar, DeserializeError> {
         let value: Value = serde_json::from_str(json_str)
             .map_err(|e| DeserializeError::InvalidJson(e.to_string()))?;
+        Self::deserialize_json_value(&value)
+    }
+
+    /// Deserializes a grammar from a JSON value.
+    ///
+    /// # Errors
+    /// Returns [`DeserializeError`] for a version mismatch or a malformed body.
+    pub fn deserialize_json_value(
+        value: &Value
+    ) -> Result<Grammar, DeserializeError> {
 
         match value.get("__VERSION__").and_then(Value::as_str) {
             Some(SERIALIZATION_VERSION) => {},
@@ -160,7 +197,28 @@ impl Grammar {
 
         let mut grammar = Grammar::from_parts(rules, exprs, root_rule_id);
         grammar.set_allow_empty_rule_ids(allow_empty);
-        grammar.set_optimized(optimized);
+        if optimized {
+            let complete_fsm = CompactFsm::deserialize_json_value(field("complete_fsm")?)?;
+            let per_rule_json = field("per_rule_fsms")?
+                .as_array()
+                .ok_or_else(|| DeserializeError::Format("per_rule_fsms".to_owned()))?;
+            let mut per_rule_fsms = Vec::with_capacity(per_rule_json.len());
+            for entry in per_rule_json {
+                per_rule_fsms.push(if entry.is_null() {
+                    None
+                } else {
+                    Some(
+                        crate::fsm::CompactFsmWithStartEndWithSize::deserialize_json_value(
+                            entry,
+                        )?,
+                    )
+                });
+            }
+            grammar.set_fsms(complete_fsm, per_rule_fsms);
+            grammar.set_optimized(true);
+        } else {
+            grammar.set_optimized(optimized);
+        }
         Ok(grammar)
     }
 }

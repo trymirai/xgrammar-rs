@@ -45,7 +45,7 @@ fn json_accepts(
 
 #[test]
 fn test_get_serialization_version() {
-    assert_eq!(get_serialization_version(), "v11");
+    assert_eq!(get_serialization_version(), "v13");
 }
 
 #[test]
@@ -65,7 +65,7 @@ fn test_serialize_grammar() {
         "per_rule_fsms": [],
         "allow_empty_rule_ids": [],
         "optimized": false,
-        "__VERSION__": "v11",
+        "__VERSION__": "v13",
     });
     assert_eq!(actual, expected);
 }
@@ -75,7 +75,7 @@ fn test_serialize_grammar_exception() {
     let valid = construct_grammar().serialize_json();
 
     // Wrong version → version error.
-    let bad_version = valid.replace("\"v11\"", "\"v1\"");
+    let bad_version = valid.replace("\"v13\"", "\"v1\"");
     assert!(matches!(
         Grammar::deserialize_json(&bad_version),
         Err(DeserializeError::Version { .. })
@@ -129,7 +129,7 @@ fn test_serialize_tokenizer_info() {
             [6, "-"], [3, "A"], [2, "a"], [7, "aBc"], [8, "abc"], [4, "b"], [5, han],
         ],
         "trie_subtree_nodes_range": [1, 2, 5, 4, 5, 6, 7],
-        "__VERSION__": "v11",
+        "__VERSION__": "v13",
     });
     assert_eq!(actual, expected);
 }

@@ -72,6 +72,22 @@ impl CompactFsm {
         self.edges.data_len()
     }
 
+    /// Rebuilds a compact FSM from serialized CSR parts.
+    pub(crate) fn from_parts(
+        edges: Compact2dArray<FsmEdge>,
+        edge_aux_data: Vec<i32>,
+    ) -> Self {
+        Self {
+            edges,
+            edge_aux_data,
+        }
+    }
+
+    /// Borrow the CSR edge table (used by JSON serialization).
+    pub(crate) fn edges_table(&self) -> &Compact2dArray<FsmEdge> {
+        &self.edges
+    }
+
     /// The repeat-edge aux view at `idx`.
     #[must_use]
     pub fn repeat_edge_info(

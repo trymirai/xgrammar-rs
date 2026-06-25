@@ -11,6 +11,9 @@ pub enum EbnfError {
     /// The parser rejected the token stream.
     #[error(transparent)]
     Parser(#[from] ParserError),
+    /// A normalization pass failed (mirrors C++ `XGRAMMAR_LOG(FATAL)` becoming a Python error).
+    #[error("{0}")]
+    Normalization(String),
 }
 
 impl EbnfError {
@@ -20,6 +23,7 @@ impl EbnfError {
         match self {
             EbnfError::Lexer(e) => &e.message,
             EbnfError::Parser(e) => &e.message,
+            EbnfError::Normalization(message) => message,
         }
     }
 }

@@ -27,7 +27,20 @@ impl Grammar {
     ) -> Result<Grammar, EbnfError> {
         let parsed =
             ebnf_to_grammar_no_normalization(ebnf_string, root_rule_name)?;
-        Ok(grammar_normalizer(&parsed))
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            grammar_normalizer(&parsed)
+        }))
+        .map_err(|payload| {
+            let message = if let Some(message) = payload.downcast_ref::<&str>()
+            {
+                (*message).to_owned()
+            } else if let Some(message) = payload.downcast_ref::<String>() {
+                message.clone()
+            } else {
+                "grammar normalization failed".to_owned()
+            };
+            EbnfError::Normalization(message)
+        })
     }
 
     /// The built-in JSON grammar (a port of `Grammar::BuiltinJSONGrammar`).

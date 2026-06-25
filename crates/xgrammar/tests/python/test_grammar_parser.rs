@@ -516,9 +516,13 @@ fn test_lexer_parser_errors() {
 }
 
 #[test]
-#[should_panic(expected = "Choices in lookahead assertion are not supported")]
 fn test_end_to_end_errors() {
-    let _ = Grammar::from_ebnf(r#"root ::= "a" (=("a" | "b"))"#, "root");
+    let err = Grammar::from_ebnf(r#"root ::= "a" (=("a" | "b"))"#, "root")
+        .unwrap_err();
+    assert!(
+        err.to_string()
+            .contains("Choices in lookahead assertion are not supported")
+    );
 }
 
 #[test]

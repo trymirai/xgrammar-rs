@@ -452,7 +452,7 @@ pub fn generate_float_range_regex(
             return out;
         };
         let int_part = &num_str[0..dot];
-        let frac_part = num_str[dot + 1..].as_bytes();
+        let frac_part = &num_str.as_bytes()[dot + 1..];
         for i in 0..frac_part.len() {
             let rem = precision - i as i32 - 1;
             if i == 0 {

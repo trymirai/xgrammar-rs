@@ -12,7 +12,7 @@ use super::{parser_state::ParserState, repeat_detector::RepeatDetector};
 use crate::{fsm::FsmEdge, grammar::Grammar, support::Compact2dArray};
 
 /// An incremental Earley parser over an optimized grammar's per-rule FSMs.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct EarleyParser {
     grammar: Arc<Grammar>,
     /// Whether the stop token can be accepted in this advance round.

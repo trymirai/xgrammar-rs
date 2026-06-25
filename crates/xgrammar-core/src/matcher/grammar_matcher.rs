@@ -16,7 +16,7 @@ use crate::{
 };
 
 /// Matches input against a grammar by driving an [`EarleyParser`].
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct GrammarMatcher {
     parser: EarleyParser,
     tokenizer_info: TokenizerInfo,
@@ -304,6 +304,107 @@ impl GrammarMatcher {
     pub fn reset(&mut self) {
         self.parser.reset();
         self.token_length_history.clear();
+    }
+
+    /// Rolls the matcher back by `num_tokens` accepted tokens/strings.
+    ///
+    /// # Panics
+    /// Panics if `num_tokens` exceeds the saved history.
+    pub fn rollback(
+        &mut self,
+        num_tokens: i32,
+    ) {
+        assert!(
+            num_tokens <= self.token_length_history.len() as i32,
+            "cannot rollback more tokens than are in history"
+        );
+        for _ in 0..num_tokens {
+            let steps =
+                self.token_length_history.pop().expect("history non-empty");
+            self.parser.pop_last_states(steps);
+        }
+    }
+
+    /// The maximum number of tokens that can be rolled back (always `-1`, i.e. unbounded —
+    /// matching the C++).
+    #[must_use]
+    pub fn max_rollback_tokens(&self) -> i32 {
+        -1
+    }
+
+    /// Returns a deep copy of the matcher with independent state.
+    #[must_use]
+    pub fn fork(&self) -> GrammarMatcher {
+        self.clone()
+    }
+
+    /// The stop token ids of the bound tokenizer.
+    #[must_use]
+    pub fn stop_token_ids(&self) -> &[i32] {
+        self.tokenizer_info.stop_token_ids()
+    }
+
+    /// Finds the longest string of forced (uniquely-determined) next characters from the
+    /// current state, without advancing the matcher (jump-forward decoding).
+    pub fn find_jump_forward_string(&mut self) -> Vec<u8> {
+        let mut result: Vec<u8> = Vec::new();
+        let mut num_accepted = 0;
+        loop {
+            if self.parser.is_completed() {
+                break;
+            }
+            let states = self.parser.latest_scanable_states();
+            let mut next_char: i32 = -1;
+            let mut can_continue = true;
+            for state in &states {
+                let fsm = self
+                    .parser
+                    .grammar()
+                    .per_rule_fsm(state.rule_id)
+                    .expect("per-rule FSM");
+                for edge in fsm.fsm().fsm().state_edges(state.element_id) {
+                    if !edge.is_char_range() {
+                        continue;
+                    }
+                    if edge.min != edge.max {
+                        can_continue = false;
+                        break;
+                    }
+                    if next_char == -1 {
+                        next_char = edge.min;
+                    } else if next_char != edge.min {
+                        can_continue = false;
+                        break;
+                    }
+                }
+                if !can_continue {
+                    break;
+                }
+            }
+            if next_char == -1 {
+                can_continue = false;
+            }
+            if !can_continue {
+                break;
+            }
+            result.push(next_char as u8);
+            self.parser.advance(next_char as u8);
+            num_accepted += 1;
+        }
+        self.parser.pop_last_states(num_accepted);
+        result
+    }
+
+    /// A human-readable dump of the matcher's latest internal parser states (debugging only).
+    #[must_use]
+    pub fn debug_print_internal_state(&self) -> String {
+        let states = self.parser.latest_scanable_states();
+        let mut out = format!("Latest step: {} states [\n", states.len());
+        for state in &states {
+            out.push_str(&format!("{state}, \n"));
+        }
+        out.push(']');
+        out
     }
 
     /// The underlying Earley parser.

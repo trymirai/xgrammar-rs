@@ -10,7 +10,7 @@ use std::collections::HashSet;
 use super::parser_state::ParserState;
 
 /// A set of visited parser states used to deduplicate the processing queue.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct RepeatDetector {
     visited: HashSet<ParserState>,
 }

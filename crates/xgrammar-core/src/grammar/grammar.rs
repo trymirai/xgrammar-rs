@@ -6,7 +6,10 @@ use serde::{Deserialize, Serialize};
 use super::{
     grammar_expr::GrammarExpr, grammar_expr_type::GrammarExprType, rule::Rule,
 };
-use crate::support::Compact2dArray;
+use crate::{
+    fsm::{CompactFsm, CompactFsmWithStartEndWithSize},
+    support::Compact2dArray,
+};
 
 /// A Backus–Naur Form grammar: an ordered set of [`Rule`]s plus all grammar expressions
 /// stored contiguously, with one root rule.
@@ -18,6 +21,19 @@ pub struct Grammar {
     rules: Vec<Rule>,
     exprs: Compact2dArray<i32>,
     root_rule_id: i32,
+    /// The shared FSM holding every rule's compiled automaton (empty until optimized). Not
+    /// serialized; rebuilt by the grammar optimizer.
+    #[serde(skip)]
+    complete_fsm: CompactFsm,
+    /// Per-rule compiled FSMs into [`Self::complete_fsm`] (empty until optimized).
+    #[serde(skip)]
+    per_rule_fsms: Vec<Option<CompactFsmWithStartEndWithSize>>,
+    /// Ids of rules that can match the empty string (set by the allow-empty analyzer).
+    #[serde(skip)]
+    allow_empty_rule_ids: Vec<i32>,
+    /// Whether the grammar optimizer has run (FSMs built).
+    #[serde(skip)]
+    optimized: bool,
 }
 
 impl Grammar {
@@ -32,7 +48,82 @@ impl Grammar {
             rules,
             exprs,
             root_rule_id,
+            complete_fsm: CompactFsm::default(),
+            per_rule_fsms: Vec::new(),
+            allow_empty_rule_ids: Vec::new(),
+            optimized: false,
         }
+    }
+
+    /// The shared complete FSM (valid only after optimization).
+    #[must_use]
+    pub fn complete_fsm(&self) -> &CompactFsm {
+        &self.complete_fsm
+    }
+
+    /// The compiled FSM for `rule_id`, if built.
+    #[must_use]
+    pub fn per_rule_fsm(
+        &self,
+        rule_id: i32,
+    ) -> Option<&CompactFsmWithStartEndWithSize> {
+        self.per_rule_fsms.get(rule_id as usize).and_then(Option::as_ref)
+    }
+
+    /// The ids of rules that can match the empty string.
+    #[must_use]
+    pub fn allow_empty_rule_ids(&self) -> &[i32] {
+        &self.allow_empty_rule_ids
+    }
+
+    /// Whether the grammar optimizer has run.
+    #[must_use]
+    pub fn is_optimized(&self) -> bool {
+        self.optimized
+    }
+
+    /// Installs the compiled FSMs (used by the grammar FSM builder).
+    pub(crate) fn set_fsms(
+        &mut self,
+        complete_fsm: CompactFsm,
+        per_rule_fsms: Vec<Option<CompactFsmWithStartEndWithSize>>,
+    ) {
+        self.complete_fsm = complete_fsm;
+        self.per_rule_fsms = per_rule_fsms;
+    }
+
+    /// Sets the empty-rule ids (used by the allow-empty analyzer).
+    pub(crate) fn set_allow_empty_rule_ids(
+        &mut self,
+        ids: Vec<i32>,
+    ) {
+        self.allow_empty_rule_ids = ids;
+    }
+
+    /// Marks the grammar as optimized.
+    pub(crate) fn set_optimized(
+        &mut self,
+        optimized: bool,
+    ) {
+        self.optimized = optimized;
+    }
+
+    /// A mutable reference to a rule (used by in-place passes like the repetition normalizer).
+    pub(crate) fn rule_mut(
+        &mut self,
+        rule_id: i32,
+    ) -> &mut Rule {
+        &mut self.rules[rule_id as usize]
+    }
+
+    /// Overwrites the `index`-th data element of an expression in place.
+    pub(crate) fn set_expr_data(
+        &mut self,
+        expr_id: i32,
+        index: usize,
+        value: i32,
+    ) {
+        self.exprs.row_mut(expr_id as usize)[1 + index] = value;
     }
 
     /// All rules, indexed by rule id.

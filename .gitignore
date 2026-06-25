@@ -24,3 +24,8 @@ target
 
 # C++ reference checkouts (read-only, not part of the crate)
 external/
+
+# Python bindings build artifacts (maturin / venv)
+.venv/
+**/*.so
+**/__pycache__/

@@ -1,0 +1,14 @@
+[build-system]
+requires = ["maturin>=1.7,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "xgrammar-rs"
+version = "0.3.0"
+description = "PyO3 bindings for the pure-Rust xgrammar core."
+requires-python = ">=3.9"
+
+[tool.maturin]
+module-name = "xgrammar_rs"
+manifest-path = "Cargo.toml"
+features = ["bindings-pyo3"]

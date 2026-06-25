@@ -26,6 +26,9 @@ hf = ["tokenizers"]
 xgrammar-core = { workspace = true }
 tokenizers = { version = "0.22", default-features = false, features = ["fancy-regex"], optional = true }
 
+[dev-dependencies]
+serde_json = { version = "1", features = ["preserve_order"] }
+
 [lints]
 workspace = true
 

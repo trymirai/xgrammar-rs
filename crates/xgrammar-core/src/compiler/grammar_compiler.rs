@@ -148,7 +148,10 @@ impl GrammarCompiler {
         {
             return Ok(hit.clone());
         }
-        let grammar = Grammar::from_structural_tag(structural_tag_json)?;
+        let grammar = Grammar::from_structural_tag_with_tokenizer(
+            structural_tag_json,
+            &self.tokenizer_info,
+        )?;
         let compiled = self.optimize(&grammar);
         if self.cache_enabled {
             self.cache.lock().expect("cache mutex").insert(

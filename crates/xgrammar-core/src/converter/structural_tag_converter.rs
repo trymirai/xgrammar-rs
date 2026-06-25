@@ -17,6 +17,7 @@ use super::{
 use crate::{
     functor::{add_sub_grammar, grammar_normalizer},
     grammar::{Grammar, GrammarBuilder, TagDispatch, TokenTagDispatch},
+    tokenizer::TokenizerInfo,
 };
 
 type Ist = StructuralTagError;
@@ -24,27 +25,49 @@ type Ist = StructuralTagError;
 impl Grammar {
     /// Builds a grammar from a structural-tag JSON document.
     ///
-    /// String-keyed token references require a tokenizer and are not yet supported here
-    /// (integer token ids work without one).
+    /// String-keyed token references require a tokenizer; use
+    /// [`Grammar::from_structural_tag_with_tokenizer`] for those (integer token ids work
+    /// without one).
     ///
     /// # Errors
     /// Returns a [`StructuralTagError`] if the document is invalid or unsatisfiable.
     pub fn from_structural_tag(
         json: &str
     ) -> Result<Grammar, StructuralTagError> {
-        let mut format = parse_structural_tag(json)?;
-        resolve_format(&mut format, None)?;
-        analyze(&mut format, None)?;
-        let grammar = StructuralTagConverter::new().convert(&format)?;
-        Ok(grammar_normalizer(&grammar))
+        build_structural_tag(json, None)
     }
+
+    /// Builds a grammar from a structural-tag JSON document, resolving string token
+    /// references against `tokenizer_info`'s decoded vocabulary (the C++
+    /// `Grammar::FromStructuralTag(json, tokenizer_info)`).
+    ///
+    /// # Errors
+    /// Returns a [`StructuralTagError`] if the document is invalid, unsatisfiable, or refers
+    /// to a token string absent from the vocabulary.
+    pub fn from_structural_tag_with_tokenizer(
+        json: &str,
+        tokenizer_info: &TokenizerInfo,
+    ) -> Result<Grammar, StructuralTagError> {
+        build_structural_tag(json, Some(tokenizer_info.decoded_vocab()))
+    }
+}
+
+fn build_structural_tag(
+    json: &str,
+    vocab: Option<&[Vec<u8>]>,
+) -> Result<Grammar, StructuralTagError> {
+    let mut format = parse_structural_tag(json)?;
+    resolve_format(&mut format, vocab)?;
+    analyze(&mut format, None)?;
+    let grammar = StructuralTagConverter::new().convert(&format)?;
+    Ok(grammar_normalizer(&grammar))
 }
 
 /* ============================ Token resolver ============================ */
 
 fn resolve_token(
     tf: &mut TokenFormat,
-    vocab: Option<&[String]>,
+    vocab: Option<&[Vec<u8>]>,
 ) -> Result<(), Ist> {
     if tf.resolved_token_id >= 0 {
         return Ok(());
@@ -57,7 +80,7 @@ fn resolve_token(
             "Token string resolution requires tokenizer_info",
         ));
     };
-    match vocab.iter().position(|v| v == s) {
+    match vocab.iter().position(|v| v.as_slice() == s.as_bytes()) {
         Some(i) => {
             tf.resolved_token_id = i as i32;
             Ok(())
@@ -70,7 +93,7 @@ fn resolve_token(
 
 fn resolve_vec(
     input: &[IntOrString],
-    vocab: Option<&[String]>,
+    vocab: Option<&[Vec<u8>]>,
 ) -> Result<Vec<i32>, Ist> {
     let mut out = Vec::with_capacity(input.len());
     for item in input {
@@ -82,7 +105,7 @@ fn resolve_vec(
                         "Token string resolution requires tokenizer_info",
                     ));
                 };
-                match vocab.iter().position(|v| v == s) {
+                match vocab.iter().position(|v| v.as_slice() == s.as_bytes()) {
                     Some(i) => out.push(i as i32),
                     None => {
                         return Err(Ist::invalid(format!(
@@ -98,7 +121,7 @@ fn resolve_vec(
 
 fn resolve_tag(
     tag: &mut TagFormat,
-    vocab: Option<&[String]>,
+    vocab: Option<&[Vec<u8>]>,
 ) -> Result<(), Ist> {
     if let TagBegin::Token(tf) = &mut tag.begin {
         resolve_token(tf, vocab)?;
@@ -111,7 +134,7 @@ fn resolve_tag(
 
 fn resolve_format(
     format: &mut Format,
-    vocab: Option<&[String]>,
+    vocab: Option<&[Vec<u8>]>,
 ) -> Result<(), Ist> {
     match format {
         Format::Token(tf) => resolve_token(tf, vocab),

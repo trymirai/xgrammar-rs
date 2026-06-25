@@ -80,12 +80,6 @@ impl GrammarMatcher {
     pub fn stop_token_ids(&self) -> Vec<i32> {
         self.inner.stop_token_ids().to_vec()
     }
-
-    /// The string the matcher can deterministically jump forward by, if any.
-    #[bindings::export(Method)]
-    pub fn find_jump_forward_string(&mut self) -> Vec<u8> {
-        self.inner.find_jump_forward_string()
-    }
 }
 
 #[cfg(feature = "bindings-pyo3")]
@@ -121,7 +115,9 @@ mod matcher_pyo3_ext {
             _debug_print: bool,
         ) -> PyResult<bool> {
             with_writable_i32_buffer(py, bitmask, |buf| {
-                Ok(self.inner.fill_next_token_bitmask(buf, index))
+                self.inner.fill_next_token_bitmask(buf, index).map_err(|error| {
+                    pyo3::exceptions::PyRuntimeError::new_err(error.to_string())
+                })
             })
         }
 
@@ -138,6 +134,16 @@ mod matcher_pyo3_ext {
         #[pyo3(name = "_debug_print_internal_state")]
         fn debug_print_internal_state_py(&self) -> String {
             self.inner.debug_print_internal_state()
+        }
+
+        #[pyo3(name = "find_jump_forward_string")]
+        fn find_jump_forward_string_py(&mut self) -> PyResult<String> {
+            let bytes = self.inner.find_jump_forward_string().map_err(|error| {
+                pyo3::exceptions::PyRuntimeError::new_err(error.to_string())
+            })?;
+            String::from_utf8(bytes).map_err(|error| {
+                pyo3::exceptions::PyRuntimeError::new_err(error.to_string())
+            })
         }
 
         #[pyo3(name = "traverse_draft_tree")]

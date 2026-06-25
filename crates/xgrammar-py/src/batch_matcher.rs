@@ -32,7 +32,9 @@ impl BatchGrammarMatcher {
         with_writable_i32_buffer(py, bitmask, |buf| {
             for (i, m) in matchers.iter_mut().enumerate() {
                 let index = indices.as_ref().map_or(i as i32, |idx| idx[i]);
-                m.inner.fill_next_token_bitmask(buf, index);
+                m.inner.fill_next_token_bitmask(buf, index).map_err(|error| {
+                    PyRuntimeError::new_err(error.to_string())
+                })?;
             }
             Ok(())
         })

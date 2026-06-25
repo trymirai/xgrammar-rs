@@ -30,8 +30,8 @@ impl TrieFsmBuilder {
     /// Returns `None` if construction fails the overlap constraint.
     #[must_use]
     pub fn build(
-        patterns: &[&str],
-        excluded_patterns: &[&str],
+        patterns: &[&[u8]],
+        excluded_patterns: &[&[u8]],
         end_states: Option<&mut Vec<i32>>,
         allow_overlap: bool,
         add_back_edges: bool,
@@ -86,7 +86,7 @@ impl TrieFsmBuilder {
     /// if the overlap constraint is violated.
     fn insert_pattern(
         fsm: &mut Fsm,
-        pattern: &str,
+        pattern: &[u8],
         ends: &HashSet<i32>,
         allow_overlap: bool,
     ) -> Option<i32> {
@@ -94,7 +94,7 @@ impl TrieFsmBuilder {
             return None;
         }
         let mut current = 0;
-        for byte in pattern.bytes() {
+        for &byte in pattern {
             let ch = i32::from(byte);
             let mut next = fsm.next_state(current, ch, EdgeKind::CharRange);
             if next == NO_NEXT_STATE {

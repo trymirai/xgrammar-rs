@@ -6,6 +6,7 @@
 mod fsm;
 mod fsm_edge;
 mod fsm_with_start_end;
+mod regex_fsm_builder;
 
 pub use fsm::{EdgeKind, Fsm, NO_NEXT_STATE};
 pub use fsm_edge::{
@@ -13,3 +14,4 @@ pub use fsm_edge::{
     edge_type,
 };
 pub use fsm_with_start_end::FsmWithStartEnd;
+pub use regex_fsm_builder::build_regex_fsm;

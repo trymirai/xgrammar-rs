@@ -21,3 +21,6 @@ target
 #.idea/
 *.DS_Store
 .cache
+
+# C++ reference checkouts (read-only, not part of the crate)
+external/

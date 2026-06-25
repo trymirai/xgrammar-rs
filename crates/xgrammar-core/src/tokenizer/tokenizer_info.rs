@@ -189,6 +189,26 @@ impl TokenizerInfo {
     pub fn token_id_to_sorted_vocab_index(&self) -> &[i32] {
         &self.token_id_to_sorted_vocab_index
     }
+
+    /// Dumps the tokenizer metadata as a compact JSON string (vocab type, prefix space).
+    #[must_use]
+    pub fn dump_metadata(&self) -> String {
+        super::metadata_to_json(&super::HfMetadata {
+            vocab_type: self.vocab_type,
+            add_prefix_space: self.add_prefix_space,
+        })
+    }
+
+    /// Detects tokenizer metadata from a Hugging Face backend JSON string.
+    ///
+    /// # Errors
+    /// Returns an error if `backend_str` is not valid JSON.
+    pub fn detect_metadata_from_hf(
+        backend_str: &str
+    ) -> Result<String, String> {
+        super::detect_metadata_from_hf(backend_str)
+            .map(|metadata| super::metadata_to_json(&metadata))
+    }
 }
 
 impl TokenizerInfo {

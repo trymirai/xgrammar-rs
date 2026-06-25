@@ -109,8 +109,21 @@ fn copy_expr(
         GrammarExprType::Repeat => {
             builder.add_repeat(new_rule_ids[data[0] as usize], data[1], data[2])
         },
-        // Tag-dispatch remapping needs the tag-dispatch builder (macro work); not exercised
-        // by the union/concat gates.
+        // Tag-dispatch payloads embed rule ids, which must be remapped into the new grammar.
+        GrammarExprType::TagDispatch => {
+            let mut td = sub.decode_tag_dispatch_data(&data);
+            for (_, rule_id) in &mut td.tag_rule_pairs {
+                *rule_id = new_rule_ids[*rule_id as usize];
+            }
+            builder.add_tag_dispatch(&td)
+        },
+        GrammarExprType::TokenTagDispatch => {
+            let mut ttd = Grammar::decode_token_tag_dispatch_data(&data);
+            for (_, rule_id) in &mut ttd.trigger_rule_pairs {
+                *rule_id = new_rule_ids[*rule_id as usize];
+            }
+            builder.add_token_tag_dispatch(&ttd)
+        },
         _ => builder.add_grammar_expr(ty, &data),
     }
 }

@@ -65,6 +65,33 @@ impl GrammarMutator for DeadCodeEliminator {
         let new_id = self.rule_id_map[&data[0]];
         state.builder.add_repeat(new_id, data[1], data[2])
     }
+
+    // Tag-dispatch payloads embed rule ids, which the rule remapping must also follow.
+    fn visit_tag_dispatch(
+        &mut self,
+        state: &mut MutatorState,
+        _ty: GrammarExprType,
+        data: &[i32],
+    ) -> i32 {
+        let mut td = state.base.decode_tag_dispatch_data(data);
+        for (_, rule_id) in &mut td.tag_rule_pairs {
+            *rule_id = self.rule_id_map[rule_id];
+        }
+        state.builder.add_tag_dispatch(&td)
+    }
+
+    fn visit_token_tag_dispatch(
+        &mut self,
+        state: &mut MutatorState,
+        _ty: GrammarExprType,
+        data: &[i32],
+    ) -> i32 {
+        let mut ttd = Grammar::decode_token_tag_dispatch_data(data);
+        for (_, rule_id) in &mut ttd.trigger_rule_pairs {
+            *rule_id = self.rule_id_map[rule_id];
+        }
+        state.builder.add_token_tag_dispatch(&ttd)
+    }
 }
 
 /// Returns, in ascending order, the ids of all rules reachable from the root.

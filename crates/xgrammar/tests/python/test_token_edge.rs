@@ -1,12 +1,13 @@
 //! Port of `xgrammar/tests/python/test_token_edge.py`.
 //!
-//! The parser/printer roundtrip slice plus the `accept_token`/bitmask cases over small
-//! in-memory vocabularies are ported here. The structural-tag token suites land with the
-//! structural-tag token milestone.
+//! The parser/printer roundtrip slice, the `accept_token`/bitmask cases over small in-memory
+//! vocabularies, the `TokenTagDispatch` cases, and the structural-tag token suites (JSON
+//! structural tags resolved against an in-memory vocabulary) are ported here.
 
 use std::collections::BTreeSet;
 
 use xgrammar::{
+    compiler::GrammarCompiler,
     grammar::Grammar,
     matcher::{
         GrammarMatcher, allocate_token_bitmask, get_masked_tokens_from_bitmask,
@@ -296,4 +297,361 @@ fn test_token_tag_dispatch_trigger_and_exclude() {
         "rule1 ::= \"done\"\nroot ::= TokenTagDispatch(\n  (3, rule1),\n  excludes=(4,)\n)",
     );
     assert_eq!(accepted(&mut m, 5), BTreeSet::from([0, 1, 2, 3]));
+}
+
+// --- Structural-tag token suites (JSON structural tags with token references resolved
+// against the STAG_VOCAB vocabulary, compiled and driven through the matcher). ---
+
+const STAG_VOCAB: &[&str] = &[
+    "<s>",
+    "</s>",
+    "<tool>",
+    "<code>",
+    "<end>",
+    "<think>",
+    "<think_end>",
+    "hello",
+    "world",
+    "{",
+    "}",
+    "fn(",
+    ")",
+    "x",
+    "y",
+    ",",
+    "<bad>",
+];
+
+/// Builds a matcher over a compiled structural tag using [`STAG_VOCAB`] (vocab size 17,
+/// `</s>` = stop token id 1).
+fn stag_matcher(json: &str) -> GrammarMatcher {
+    let vocab: Vec<String> =
+        STAG_VOCAB.iter().map(|s| (*s).to_owned()).collect();
+    let ti = TokenizerInfo::new(&vocab, VocabType::Raw, None, None, false);
+    let compiler = GrammarCompiler::with_defaults(ti);
+    let compiled = compiler.compile_structural_tag(json).unwrap();
+    GrammarMatcher::from_compiled_grammar(&compiled, false)
+}
+
+/// `_accept_tokens`: assert each token in `tokens` is accepted in order.
+fn accept_tokens(
+    m: &mut GrammarMatcher,
+    tokens: &[i32],
+) {
+    for &t in tokens {
+        assert!(m.accept_token(t), "failed to accept token {t}");
+    }
+}
+
+/// `_accept_and_stop`: accept all `tokens`, then the stop token, then require termination.
+fn accept_and_stop(
+    m: &mut GrammarMatcher,
+    tokens: &[i32],
+) {
+    accept_tokens(m, tokens);
+    assert!(m.accept_token(1), "failed to accept stop token");
+    assert!(m.is_terminated());
+}
+
+#[test]
+fn test_stag_token_begin_end() {
+    let json = "{\"type\":\"structural_tag\",\"format\":{\"type\":\"tag\",\"begin\":{\"type\":\"token\",\"token\":\"<tool>\"},\"content\":{\"type\":\"const_string\",\"value\":\"hello\"},\"end\":{\"type\":\"token\",\"token\":\"<end>\"}}}";
+    let mut m = stag_matcher(json);
+    accept_and_stop(&mut m, &[2, 7, 4]);
+}
+
+#[test]
+fn test_stag_exclude_token_basic() {
+    let json = "{\"type\":\"structural_tag\",\"format\":{\"type\":\"tag\",\"begin\":{\"type\":\"token\",\"token\":\"<tool>\"},\"content\":{\"type\":\"exclude_token\",\"exclude_tokens\":[16]},\"end\":{\"type\":\"token\",\"token\":\"<end>\"}}}";
+    let mut m = stag_matcher(json);
+    accept_tokens(&mut m, &[2]);
+    assert!(!m.accept_token(16));
+    assert!(!m.accept_token(4));
+    assert!(m.accept_token(7));
+    accept_and_stop(&mut m, &[4]);
+}
+
+#[test]
+fn test_stag_any_tokens_loop() {
+    let json = "{\"type\":\"structural_tag\",\"format\":{\"type\":\"tag\",\"begin\":{\"type\":\"token\",\"token\":\"<think>\"},\"content\":{\"type\":\"any_tokens\",\"exclude_tokens\":[16]},\"end\":{\"type\":\"token\",\"token\":\"<think_end>\"}}}";
+    let mut m = stag_matcher(json);
+    accept_tokens(&mut m, &[5]);
+    accept_tokens(&mut m, &[7, 8, 13, 14, 9, 10]);
+    assert!(!m.accept_token(16));
+    accept_tokens(&mut m, &[0, 3, 2]);
+    accept_and_stop(&mut m, &[6]);
+}
+
+#[test]
+fn test_stag_any_tokens_empty() {
+    let json = "{\"type\":\"structural_tag\",\"format\":{\"type\":\"tag\",\"begin\":{\"type\":\"token\",\"token\":\"<tool>\"},\"content\":{\"type\":\"any_tokens\"},\"end\":{\"type\":\"token\",\"token\":\"<end>\"}}}";
+    let mut m = stag_matcher(json);
+    accept_and_stop(&mut m, &[2, 4]);
+}
+
+#[test]
+fn test_stag_token_triggered_tags_basic() {
+    let json = "{\"type\":\"structural_tag\",\"format\":{\"type\":\"token_triggered_tags\",\"trigger_tokens\":[\"<tool>\",\"<code>\"],\"tags\":[{\"type\":\"tag\",\"begin\":{\"type\":\"token\",\"token\":\"<tool>\"},\"content\":{\"type\":\"const_string\",\"value\":\"hello\"},\"end\":{\"type\":\"token\",\"token\":\"<end>\"}},{\"type\":\"tag\",\"begin\":{\"type\":\"token\",\"token\":\"<code>\"},\"content\":{\"type\":\"const_string\",\"value\":\"world\"},\"end\":{\"type\":\"token\",\"token\":\"<end>\"}}],\"exclude_tokens\":[16]}}";
+    let mut m = stag_matcher(json);
+    assert!(!m.accept_token(16));
+    accept_tokens(&mut m, &[7, 8]);
+    accept_tokens(&mut m, &[2, 7, 4]);
+    accept_tokens(&mut m, &[13, 14]);
+    accept_tokens(&mut m, &[3, 8, 4]);
+    assert!(m.accept_token(1));
+    assert!(m.is_terminated());
+}
+
+#[test]
+fn test_stag_token_triggered_stop_after_first() {
+    let json = "{\"type\":\"structural_tag\",\"format\":{\"type\":\"token_triggered_tags\",\"trigger_tokens\":[\"<tool>\",\"<code>\"],\"tags\":[{\"type\":\"tag\",\"begin\":{\"type\":\"token\",\"token\":\"<tool>\"},\"content\":{\"type\":\"const_string\",\"value\":\"x\"},\"end\":{\"type\":\"token\",\"token\":\"<end>\"}},{\"type\":\"tag\",\"begin\":{\"type\":\"token\",\"token\":\"<code>\"},\"content\":{\"type\":\"const_string\",\"value\":\"y\"},\"end\":{\"type\":\"token\",\"token\":\"<end>\"}}],\"stop_after_first\":true}}";
+    let mut m = stag_matcher(json);
+    accept_tokens(&mut m, &[7]);
+    accept_and_stop(&mut m, &[2, 13, 4]);
+}
+
+#[test]
+fn test_stag_token_triggered_at_least_one() {
+    let json = "{\"type\":\"structural_tag\",\"format\":{\"type\":\"token_triggered_tags\",\"trigger_tokens\":[\"<tool>\"],\"tags\":[{\"type\":\"tag\",\"begin\":{\"type\":\"token\",\"token\":\"<tool>\"},\"content\":{\"type\":\"const_string\",\"value\":\"x\"},\"end\":{\"type\":\"token\",\"token\":\"<end>\"}}],\"at_least_one\":true,\"stop_after_first\":true}}";
+    let mut m = stag_matcher(json);
+    accept_and_stop(&mut m, &[2, 13, 4]);
+}
+
+#[test]
+fn test_stag_nested_token_tags_with_any_tokens() {
+    let json = "{\"type\":\"structural_tag\",\"format\":{\"type\":\"token_triggered_tags\",\"trigger_tokens\":[\"<tool>\",\"<code>\"],\"tags\":[{\"type\":\"tag\",\"begin\":{\"type\":\"token\",\"token\":\"<tool>\"},\"content\":{\"type\":\"any_tokens\",\"exclude_tokens\":[16]},\"end\":{\"type\":\"token\",\"token\":\"<end>\"}},{\"type\":\"tag\",\"begin\":{\"type\":\"token\",\"token\":\"<code>\"},\"content\":{\"type\":\"sequence\",\"elements\":[{\"type\":\"exclude_token\",\"exclude_tokens\":[16]},{\"type\":\"const_string\",\"value\":\"x\"}]},\"end\":{\"type\":\"token\",\"token\":\"<end>\"}}],\"exclude_tokens\":[16]}}";
+    let mut m = stag_matcher(json);
+    accept_tokens(&mut m, &[7, 8]);
+    accept_tokens(&mut m, &[2, 9, 10, 13, 14, 7, 4]);
+    accept_tokens(&mut m, &[14]);
+    accept_tokens(&mut m, &[3, 7, 13, 4]);
+    assert!(m.accept_token(1));
+    assert!(m.is_terminated());
+}
+
+#[test]
+fn test_stag_sequence_of_token_formats() {
+    let json = "{\"type\":\"structural_tag\",\"format\":{\"type\":\"sequence\",\"elements\":[{\"type\":\"token\",\"token\":\"<tool>\"},{\"type\":\"const_string\",\"value\":\"fn(\"},{\"type\":\"exclude_token\",\"exclude_tokens\":[16,4]},{\"type\":\"const_string\",\"value\":\")\"},{\"type\":\"token\",\"token\":\"<end>\"}]}}";
+    let mut m = stag_matcher(json);
+    accept_tokens(&mut m, &[2]);
+    accept_tokens(&mut m, &[11]);
+    assert!(!m.accept_token(16));
+    assert!(!m.accept_token(4));
+    accept_tokens(&mut m, &[7]);
+    accept_tokens(&mut m, &[12]);
+    accept_and_stop(&mut m, &[4]);
+}
+
+#[test]
+fn test_stag_or_token_and_string_paths() {
+    let json = "{\"type\":\"structural_tag\",\"format\":{\"type\":\"or\",\"elements\":[{\"type\":\"sequence\",\"elements\":[{\"type\":\"token\",\"token\":\"<tool>\"},{\"type\":\"const_string\",\"value\":\"hello\"}]},{\"type\":\"const_string\",\"value\":\"world\"}]}}";
+    let mut m = stag_matcher(json);
+    accept_and_stop(&mut m, &[2, 7]);
+    let mut m2 = stag_matcher(json);
+    accept_and_stop(&mut m2, &[8]);
+}
+
+#[test]
+fn test_stag_complex_multi_dispatch() {
+    let json = "{\"type\":\"structural_tag\",\"format\":{\"type\":\"triggered_tags\",\"triggers\":[\"<tool>\"],\"tags\":[{\"type\":\"tag\",\"begin\":\"<tool>\",\"content\":{\"type\":\"token_triggered_tags\",\"trigger_tokens\":[\"<code>\",\"<think>\"],\"tags\":[{\"type\":\"tag\",\"begin\":{\"type\":\"token\",\"token\":\"<code>\"},\"content\":{\"type\":\"any_tokens\"},\"end\":{\"type\":\"token\",\"token\":\"<end>\"}},{\"type\":\"tag\",\"begin\":{\"type\":\"token\",\"token\":\"<think>\"},\"content\":{\"type\":\"any_tokens\",\"exclude_tokens\":[16]},\"end\":{\"type\":\"token\",\"token\":\"<think_end>\"}}]},\"end\":\"<end>\"}]}}";
+    let mut m = stag_matcher(json);
+    accept_tokens(&mut m, &[7, 8]);
+    accept_tokens(&mut m, &[2]);
+    accept_tokens(&mut m, &[13, 14]);
+    accept_tokens(&mut m, &[3, 7, 8, 9, 10, 4]);
+    accept_tokens(&mut m, &[7]);
+    accept_tokens(&mut m, &[5, 13, 14, 7]);
+    assert!(!m.accept_token(16));
+    accept_tokens(&mut m, &[6]);
+    accept_tokens(&mut m, &[4]);
+    accept_tokens(&mut m, &[8]);
+    assert!(m.accept_token(1));
+    assert!(m.is_terminated());
+}
+
+#[test]
+fn test_stag_star_of_token_sequence() {
+    let json = "{\"type\":\"structural_tag\",\"format\":{\"type\":\"star\",\"content\":{\"type\":\"sequence\",\"elements\":[{\"type\":\"token\",\"token\":\"<tool>\"},{\"type\":\"const_string\",\"value\":\"x\"},{\"type\":\"token\",\"token\":\"<end>\"}]}}}";
+    let mut m = stag_matcher(json);
+    accept_tokens(&mut m, &[2, 13, 4]);
+    accept_tokens(&mut m, &[2, 13, 4]);
+    accept_tokens(&mut m, &[2, 13, 4]);
+    assert!(m.accept_token(1));
+    assert!(m.is_terminated());
+}
+
+#[test]
+fn test_stag_star_of_token_sequence_zero() {
+    let json = "{\"type\":\"structural_tag\",\"format\":{\"type\":\"star\",\"content\":{\"type\":\"sequence\",\"elements\":[{\"type\":\"token\",\"token\":\"<tool>\"},{\"type\":\"const_string\",\"value\":\"x\"}]}}}";
+    let mut m = stag_matcher(json);
+    assert!(m.accept_token(1));
+    assert!(m.is_terminated());
+}
+
+#[test]
+fn test_stag_multiple_triggered_tags_rounds() {
+    let json = "{\"type\":\"structural_tag\",\"format\":{\"type\":\"token_triggered_tags\",\"trigger_tokens\":[\"<tool>\",\"<code>\",\"<think>\"],\"tags\":[{\"type\":\"tag\",\"begin\":{\"type\":\"token\",\"token\":\"<tool>\"},\"content\":{\"type\":\"const_string\",\"value\":\"hello\"},\"end\":{\"type\":\"token\",\"token\":\"<end>\"}},{\"type\":\"tag\",\"begin\":{\"type\":\"token\",\"token\":\"<code>\"},\"content\":{\"type\":\"exclude_token\",\"exclude_tokens\":[]},\"end\":{\"type\":\"token\",\"token\":\"<end>\"}},{\"type\":\"tag\",\"begin\":{\"type\":\"token\",\"token\":\"<think>\"},\"content\":{\"type\":\"any_tokens\"},\"end\":{\"type\":\"token\",\"token\":\"<think_end>\"}}]}}";
+    let mut m = stag_matcher(json);
+    accept_tokens(&mut m, &[2, 7, 4]);
+    accept_tokens(&mut m, &[13, 14, 7]);
+    accept_tokens(&mut m, &[3, 8, 4]);
+    accept_tokens(&mut m, &[5, 7, 8, 13, 14, 9, 10, 6]);
+    accept_tokens(&mut m, &[2, 7, 4]);
+    accept_tokens(&mut m, &[8]);
+    assert!(m.accept_token(1));
+    assert!(m.is_terminated());
+}
+
+#[test]
+fn test_stag_exclude_token_with_string_excludes() {
+    let json = "{\"type\":\"structural_tag\",\"format\":{\"type\":\"tag\",\"begin\":{\"type\":\"token\",\"token\":\"<tool>\"},\"content\":{\"type\":\"exclude_token\",\"exclude_tokens\":[\"<bad>\",\"<end>\",\"<think>\"]},\"end\":{\"type\":\"token\",\"token\":\"<end>\"}}}";
+    let mut m = stag_matcher(json);
+    accept_tokens(&mut m, &[2]);
+    assert!(!m.accept_token(16));
+    assert!(!m.accept_token(4));
+    assert!(!m.accept_token(5));
+    accept_tokens(&mut m, &[7]);
+    accept_and_stop(&mut m, &[4]);
+}
+
+#[test]
+fn test_stag_token_triggered_string_token_refs() {
+    let json = "{\"type\":\"structural_tag\",\"format\":{\"type\":\"token_triggered_tags\",\"trigger_tokens\":[\"<tool>\",\"<code>\"],\"tags\":[{\"type\":\"tag\",\"begin\":{\"type\":\"token\",\"token\":\"<tool>\"},\"content\":{\"type\":\"any_tokens\",\"exclude_tokens\":[\"<bad>\"]},\"end\":{\"type\":\"token\",\"token\":\"<end>\"}},{\"type\":\"tag\",\"begin\":{\"type\":\"token\",\"token\":\"<code>\"},\"content\":{\"type\":\"const_string\",\"value\":\"y\"},\"end\":{\"type\":\"token\",\"token\":\"<end>\"}}],\"exclude_tokens\":[\"<bad>\"]}}";
+    let mut m = stag_matcher(json);
+    assert!(!m.accept_token(16));
+    accept_tokens(&mut m, &[7]);
+    accept_tokens(&mut m, &[2]);
+    assert!(!m.accept_token(16));
+    accept_tokens(&mut m, &[8, 13, 4]);
+    accept_tokens(&mut m, &[3, 14, 4]);
+    assert!(m.accept_token(1));
+    assert!(m.is_terminated());
+}
+
+#[test]
+fn test_stag_tag_with_sequence_content_mixed() {
+    let json = "{\"type\":\"structural_tag\",\"format\":{\"type\":\"tag\",\"begin\":{\"type\":\"token\",\"token\":\"<tool>\"},\"content\":{\"type\":\"sequence\",\"elements\":[{\"type\":\"token\",\"token\":\"<code>\"},{\"type\":\"exclude_token\",\"exclude_tokens\":[16]},{\"type\":\"const_string\",\"value\":\"x\"},{\"type\":\"any_tokens\",\"exclude_tokens\":[16]}]},\"end\":{\"type\":\"token\",\"token\":\"<end>\"}}}";
+    let mut m = stag_matcher(json);
+    accept_tokens(&mut m, &[2]);
+    accept_tokens(&mut m, &[3]);
+    assert!(!m.accept_token(16));
+    accept_tokens(&mut m, &[7]);
+    accept_tokens(&mut m, &[13]);
+    assert!(!m.accept_token(16));
+    accept_tokens(&mut m, &[8, 14, 5]);
+    accept_and_stop(&mut m, &[4]);
+}
+
+#[test]
+fn test_stag_or_between_token_triggered_and_string_triggered() {
+    let json = "{\"type\":\"structural_tag\",\"format\":{\"type\":\"or\",\"elements\":[{\"type\":\"token_triggered_tags\",\"trigger_tokens\":[\"<tool>\"],\"tags\":[{\"type\":\"tag\",\"begin\":{\"type\":\"token\",\"token\":\"<tool>\"},\"content\":{\"type\":\"const_string\",\"value\":\"hello\"},\"end\":{\"type\":\"token\",\"token\":\"<end>\"}}],\"stop_after_first\":true,\"at_least_one\":true},{\"type\":\"triggered_tags\",\"triggers\":[\"fn(\"],\"tags\":[{\"type\":\"tag\",\"begin\":\"fn(\",\"content\":{\"type\":\"any_text\"},\"end\":\")\"}],\"stop_after_first\":true,\"at_least_one\":true}]}}";
+    let mut m = stag_matcher(json);
+    accept_and_stop(&mut m, &[2, 7, 4]);
+    let mut m2 = stag_matcher(json);
+    accept_tokens(&mut m2, &[11]);
+    accept_tokens(&mut m2, &[7, 8]);
+    accept_and_stop(&mut m2, &[12]);
+}
+
+#[test]
+fn test_stag_deeply_nested_three_layers() {
+    let json = "{\"type\":\"structural_tag\",\"format\":{\"type\":\"triggered_tags\",\"triggers\":[\"fn(\"],\"tags\":[{\"type\":\"tag\",\"begin\":\"fn(\",\"content\":{\"type\":\"token_triggered_tags\",\"trigger_tokens\":[\"<think>\",\"<code>\"],\"tags\":[{\"type\":\"tag\",\"begin\":{\"type\":\"token\",\"token\":\"<think>\"},\"content\":{\"type\":\"any_tokens\",\"exclude_tokens\":[\"<bad>\"]},\"end\":{\"type\":\"token\",\"token\":\"<think_end>\"}},{\"type\":\"tag\",\"begin\":{\"type\":\"token\",\"token\":\"<code>\"},\"content\":{\"type\":\"exclude_token\",\"exclude_tokens\":[\"<bad>\"]},\"end\":{\"type\":\"token\",\"token\":\"<end>\"}}],\"exclude_tokens\":[\"<bad>\"]},\"end\":\")\"}]}}";
+    let mut m = stag_matcher(json);
+    accept_tokens(&mut m, &[7, 8]);
+    accept_tokens(&mut m, &[11]);
+    accept_tokens(&mut m, &[13]);
+    assert!(!m.accept_token(16));
+    accept_tokens(&mut m, &[5, 7, 8, 13, 14]);
+    assert!(!m.accept_token(16));
+    accept_tokens(&mut m, &[6]);
+    accept_tokens(&mut m, &[14]);
+    accept_tokens(&mut m, &[3]);
+    assert!(!m.accept_token(16));
+    accept_tokens(&mut m, &[7]);
+    accept_tokens(&mut m, &[4]);
+    accept_tokens(&mut m, &[12]);
+    accept_tokens(&mut m, &[8]);
+    assert!(m.accept_token(1));
+    assert!(m.is_terminated());
+}
+
+#[test]
+fn test_stag_any_tokens_all_excluded_except_end() {
+    let json = "{\"type\":\"structural_tag\",\"format\":{\"type\":\"tag\",\"begin\":{\"type\":\"token\",\"token\":\"<tool>\"},\"content\":{\"type\":\"any_tokens\",\"exclude_tokens\":[0,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]},\"end\":{\"type\":\"token\",\"token\":\"<end>\"}}}";
+    let mut m = stag_matcher(json);
+    accept_tokens(&mut m, &[2]);
+    accept_and_stop(&mut m, &[4]);
+}
+
+#[test]
+fn test_stag_token_tag_with_or_content() {
+    let json = "{\"type\":\"structural_tag\",\"format\":{\"type\":\"tag\",\"begin\":{\"type\":\"token\",\"token\":\"<tool>\"},\"content\":{\"type\":\"or\",\"elements\":[{\"type\":\"const_string\",\"value\":\"hello\"},{\"type\":\"sequence\",\"elements\":[{\"type\":\"exclude_token\",\"exclude_tokens\":[16]},{\"type\":\"const_string\",\"value\":\"world\"}]}]},\"end\":{\"type\":\"token\",\"token\":\"<end>\"}}}";
+    let mut m = stag_matcher(json);
+    accept_and_stop(&mut m, &[2, 7, 4]);
+    let mut m2 = stag_matcher(json);
+    accept_tokens(&mut m2, &[2]);
+    accept_tokens(&mut m2, &[13]);
+    accept_tokens(&mut m2, &[8]);
+    accept_and_stop(&mut m2, &[4]);
+}
+
+#[test]
+fn test_stag_mixed_begin_end_types() {
+    let json = "{\"type\":\"structural_tag\",\"format\":{\"type\":\"token_triggered_tags\",\"trigger_tokens\":[\"<tool>\",\"<code>\",\"<think>\"],\"tags\":[{\"type\":\"tag\",\"begin\":{\"type\":\"token\",\"token\":\"<tool>\"},\"content\":{\"type\":\"const_string\",\"value\":\"hello\"},\"end\":\"<end>\"},{\"type\":\"tag\",\"begin\":{\"type\":\"token\",\"token\":\"<code>\"},\"content\":{\"type\":\"exclude_token\",\"exclude_tokens\":[\"<bad>\"]},\"end\":{\"type\":\"token\",\"token\":\"<end>\"}},{\"type\":\"tag\",\"begin\":{\"type\":\"token\",\"token\":\"<think>\"},\"content\":{\"type\":\"any_tokens\",\"exclude_tokens\":[\"<bad>\"]},\"end\":\"<think_end>\"}]}}";
+    let mut m = stag_matcher(json);
+    accept_tokens(&mut m, &[2]);
+    accept_tokens(&mut m, &[7]);
+    accept_tokens(&mut m, &[4]);
+    accept_tokens(&mut m, &[13]);
+    accept_tokens(&mut m, &[3]);
+    assert!(!m.accept_token(16));
+    accept_tokens(&mut m, &[7]);
+    accept_tokens(&mut m, &[4]);
+    accept_tokens(&mut m, &[5]);
+    assert!(!m.accept_token(16));
+    accept_tokens(&mut m, &[7, 8, 13]);
+    accept_tokens(&mut m, &[6]);
+    assert!(m.accept_token(1));
+    assert!(m.is_terminated());
+}
+
+#[test]
+fn test_stag_repeated_token_triggered_tags_different_tags() {
+    let json = "{\"type\":\"structural_tag\",\"format\":{\"type\":\"token_triggered_tags\",\"trigger_tokens\":[\"<tool>\",\"<code>\",\"<think>\"],\"tags\":[{\"type\":\"tag\",\"begin\":{\"type\":\"token\",\"token\":\"<tool>\"},\"content\":{\"type\":\"const_string\",\"value\":\"x\"},\"end\":{\"type\":\"token\",\"token\":\"<end>\"}},{\"type\":\"tag\",\"begin\":{\"type\":\"token\",\"token\":\"<code>\"},\"content\":{\"type\":\"const_string\",\"value\":\"y\"},\"end\":{\"type\":\"token\",\"token\":\"<end>\"}},{\"type\":\"tag\",\"begin\":{\"type\":\"token\",\"token\":\"<think>\"},\"content\":{\"type\":\"const_string\",\"value\":\"hello\"},\"end\":{\"type\":\"token\",\"token\":\"<think_end>\"}}]}}";
+    let mut m = stag_matcher(json);
+    accept_tokens(&mut m, &[2, 13, 4]);
+    accept_tokens(&mut m, &[7]);
+    accept_tokens(&mut m, &[3, 14, 4]);
+    accept_tokens(&mut m, &[5, 7, 6]);
+    accept_tokens(&mut m, &[2, 13, 4]);
+    accept_tokens(&mut m, &[7]);
+    accept_tokens(&mut m, &[3, 14, 4]);
+    accept_tokens(&mut m, &[5, 7, 6]);
+    accept_tokens(&mut m, &[2, 13, 4]);
+    accept_tokens(&mut m, &[7]);
+    accept_tokens(&mut m, &[3, 14, 4]);
+    accept_tokens(&mut m, &[5, 7, 6]);
+    assert!(m.accept_token(1));
+    assert!(m.is_terminated());
+}
+
+#[test]
+fn test_stag_any_tokens_excludes_allow_empty_end() {
+    let json = "{\"type\":\"structural_tag\",\"format\":{\"type\":\"token_triggered_tags\",\"trigger_tokens\":[\"<tool>\"],\"tags\":[{\"begin\":{\"type\":\"token\",\"token\":\"<tool>\"},\"content\":{\"type\":\"any_tokens\",\"exclude_tokens\":[\"<tool>\",\"<bad>\"]},\"end\":\"\"}]}}";
+    let mut m = stag_matcher(json);
+    accept_tokens(&mut m, &[2, 7, 8]);
+    accept_tokens(&mut m, &[2, 13, 14]);
+    assert!(m.accept_token(1));
+    assert!(m.is_terminated());
+}
+
+#[test]
+fn test_stag_any_tokens_exclude_redispatch() {
+    let json = "{\"type\":\"structural_tag\",\"format\":{\"type\":\"token_triggered_tags\",\"trigger_tokens\":[\"<tool>\"],\"tags\":[{\"begin\":{\"type\":\"token\",\"token\":\"<tool>\"},\"content\":{\"type\":\"any_tokens\",\"exclude_tokens\":[\"<tool>\"]},\"end\":\"\"}]}}";
+    let mut m = stag_matcher(json);
+    accept_tokens(&mut m, &[2, 7]);
+    accept_tokens(&mut m, &[2, 8]);
+    accept_tokens(&mut m, &[2, 13]);
+    assert!(m.accept_token(1));
+    assert!(m.is_terminated());
 }

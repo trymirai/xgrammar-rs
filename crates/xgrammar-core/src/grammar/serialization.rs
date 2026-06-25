@@ -123,7 +123,23 @@ impl Grammar {
     pub fn deserialize_json_value(
         value: &Value
     ) -> Result<Grammar, DeserializeError> {
+        Self::deserialize_json_value_impl(value, true)
+    }
 
+    /// Deserializes a grammar nested inside a compiled grammar (no `__VERSION__` field).
+    ///
+    /// # Errors
+    /// Returns [`DeserializeError`] for a malformed body.
+    pub(crate) fn deserialize_json_value_embedded(
+        value: &Value
+    ) -> Result<Grammar, DeserializeError> {
+        Self::deserialize_json_value_impl(value, false)
+    }
+
+    fn deserialize_json_value_impl(
+        value: &Value,
+        require_version: bool,
+    ) -> Result<Grammar, DeserializeError> {
         match value.get("__VERSION__").and_then(Value::as_str) {
             Some(SERIALIZATION_VERSION) => {},
             Some(other) => {
@@ -132,11 +148,12 @@ impl Grammar {
                     got: other.to_owned(),
                 });
             },
-            None => {
+            None if require_version => {
                 return Err(DeserializeError::Format(
                     "missing __VERSION__".to_owned(),
                 ));
             },
+            None => {},
         }
 
         let field = |name: &str| {

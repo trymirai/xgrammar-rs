@@ -113,7 +113,7 @@ impl CompiledGrammar {
             DeserializeError::Format("missing tokenizer_metadata".to_owned())
         })?;
         tokenizer_info.check_metadata_match(metadata)?;
-        let grammar = Grammar::deserialize_json_value(grammar_value)?;
+        let grammar = Grammar::deserialize_json_value_embedded(grammar_value)?;
         Ok(Self::new(grammar, tokenizer_info.clone()))
     }
 }

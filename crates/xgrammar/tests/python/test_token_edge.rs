@@ -726,3 +726,283 @@ fn test_rollback() {
     assert!(m.accept_token(8));
     assert_eq!(accepted(&mut m, 10), mask_3);
 }
+
+// --- End-to-end nested-dispatch tests (step-DSL over a fresh matcher per path). ---
+
+/// One step's expectation: the accepted-token set after the step, a reject (the token must
+/// not be accepted), or a stop (accept the token, then require termination).
+enum E {
+    Set(&'static [i32]),
+    Reject,
+    Stop,
+}
+
+/// Runs one path of `(token, expectation)` steps over a fresh matcher. A `None` token only
+/// checks the current accepted set; `trailing_stop` appends an accept-stop-token + terminate
+/// after all steps (the `test_e2e_complex` driver shape).
+fn run_e2e(
+    vocab: &[&str],
+    grammar: &str,
+    vocab_size: i32,
+    steps: &[(Option<i32>, E)],
+    trailing_stop: bool,
+) {
+    let mut m = make_matcher(vocab, grammar);
+    for (tok, exp) in steps {
+        match exp {
+            E::Set(want) => {
+                if let Some(t) = tok {
+                    assert!(m.accept_token(*t), "failed to accept token {t}");
+                }
+                let want: BTreeSet<i32> = want.iter().copied().collect();
+                assert_eq!(accepted(&mut m, vocab_size), want);
+            },
+            E::Reject => {
+                assert!(!m.accept_token(tok.unwrap()));
+            },
+            E::Stop => {
+                assert!(m.accept_token(tok.unwrap()));
+                assert!(m.is_terminated());
+            },
+        }
+    }
+    if trailing_stop {
+        assert!(m.accept_token(1));
+        assert!(m.is_terminated());
+    }
+}
+
+#[test]
+fn test_e2e_complex() {
+    let vocab = [
+        "<s>",
+        "</s>",
+        "<tool>",
+        "<code>",
+        "<blocked>",
+        "hello",
+        "he",
+        "name",
+        "val",
+        "x",
+        "y",
+        "{",
+        "}",
+        ":",
+        ",",
+        "[",
+        "]",
+        ";",
+        "42",
+        "a:",
+        "{a",
+        "a}",
+        "a;",
+        "fn(",
+        ")",
+    ];
+    let grammar = "
+value ::= [a-z]+ | [0-9]+
+entry ::= [a-z]+ \":\" value
+inner ::= entry (\";\" entry)*
+body ::= \"{\" inner \"}\" | \"[\" inner \"]\"
+tool_body ::= body (\",\" body)*
+arg ::= [a-z]+
+call ::= \"fn(\" Token(9, 10) \",\" arg \")\"
+code_body ::= call (\";\" call)*
+root ::= TokenTagDispatch(
+    (2, tool_body),
+    (3, code_body),
+    excludes=(4,)
+)
+";
+    let paths: &[&[(Option<i32>, E)]] = &[
+        &[
+            (
+                None,
+                E::Set(&[
+                    0, 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17,
+                    18, 19, 20, 21, 22, 23, 24,
+                ]),
+            ),
+            (Some(2), E::Set(&[11, 15, 20])),
+            (Some(20), E::Set(&[5, 6, 7, 8, 9, 10, 13, 19])),
+            (Some(19), E::Set(&[5, 6, 7, 8, 9, 10, 18, 21, 22])),
+            (Some(18), E::Set(&[12, 17, 18])),
+            (Some(17), E::Set(&[5, 6, 7, 8, 9, 10, 19])),
+            (Some(7), E::Set(&[5, 6, 7, 8, 9, 10, 13, 19])),
+            (Some(13), E::Set(&[5, 6, 7, 8, 9, 10, 18, 21, 22])),
+            (Some(8), E::Set(&[5, 6, 7, 8, 9, 10, 12, 17, 21, 22])),
+            (
+                Some(12),
+                E::Set(&[
+                    0, 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17,
+                    18, 19, 20, 21, 22, 23, 24,
+                ]),
+            ),
+        ],
+        &[
+            (
+                None,
+                E::Set(&[
+                    0, 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17,
+                    18, 19, 20, 21, 22, 23, 24,
+                ]),
+            ),
+            (Some(3), E::Set(&[23])),
+            (Some(23), E::Set(&[9, 10])),
+            (Some(9), E::Set(&[14])),
+            (Some(14), E::Set(&[5, 6, 7, 8, 9, 10])),
+            (Some(7), E::Set(&[5, 6, 7, 8, 9, 10, 24])),
+            (
+                Some(24),
+                E::Set(&[
+                    0, 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17,
+                    18, 19, 20, 21, 22, 23, 24,
+                ]),
+            ),
+        ],
+    ];
+    for steps in paths {
+        run_e2e(&vocab, grammar, 25, steps, true);
+    }
+}
+
+#[test]
+fn test_e2e_nested_dispatch() {
+    let vocab = [
+        "<s>",
+        "</s>",
+        "<outer>",
+        "<inner>",
+        "<o_block>",
+        "<i_block>",
+        "hello",
+        "world",
+        "fn(",
+        ")",
+        "x",
+        "y",
+    ];
+    let grammar = "
+    leaf ::= Token(10, 11)
+    inner ::= TokenTagDispatch((3, leaf), excludes=(5,))
+    tool_fn ::= \"fn(\" inner \")\"
+    root ::= TokenTagDispatch((2, tool_fn), excludes=(4,))
+    ";
+    let paths: &[&[(Option<i32>, E)]] = &[
+        &[
+            (None, E::Set(&[0, 1, 2, 3, 5, 6, 7, 8, 9, 10, 11])),
+            (Some(2), E::Set(&[8])),
+            (Some(8), E::Set(&[0, 2, 3, 4, 6, 7, 8, 9, 10, 11])),
+            (Some(6), E::Set(&[0, 2, 3, 4, 6, 7, 8, 9, 10, 11])),
+            (Some(3), E::Set(&[10, 11])),
+            (Some(10), E::Set(&[0, 2, 3, 4, 6, 7, 8, 9, 10, 11])),
+            (Some(9), E::Set(&[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])),
+            (Some(1), E::Stop),
+        ],
+        &[
+            (None, E::Set(&[0, 1, 2, 3, 5, 6, 7, 8, 9, 10, 11])),
+            (Some(6), E::Set(&[0, 1, 2, 3, 5, 6, 7, 8, 9, 10, 11])),
+            (Some(5), E::Set(&[0, 1, 2, 3, 5, 6, 7, 8, 9, 10, 11])),
+            (Some(4), E::Reject),
+            (Some(1), E::Stop),
+        ],
+        &[
+            (None, E::Set(&[0, 1, 2, 3, 5, 6, 7, 8, 9, 10, 11])),
+            (Some(4), E::Reject),
+        ],
+        &[
+            (Some(2), E::Set(&[8])),
+            (Some(8), E::Set(&[0, 2, 3, 4, 6, 7, 8, 9, 10, 11])),
+            (Some(4), E::Set(&[0, 2, 3, 4, 6, 7, 8, 9, 10, 11])),
+            (Some(9), E::Set(&[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])),
+            (Some(1), E::Stop),
+        ],
+    ];
+    for steps in paths {
+        run_e2e(&vocab, grammar, 12, steps, false);
+    }
+}
+
+#[test]
+fn test_e2e_nested_exclude_loop() {
+    let vocab =
+        ["<s>", "</s>", "hello", "world", "###", "<END>", "foo", "done"];
+    let grammar = "
+    loop ::= TokenTagDispatch(excludes=(4, 5))
+    root ::= [a-z]+ loop Token(5) [a-z]+
+    ";
+    let paths: &[&[(Option<i32>, E)]] = &[&[
+        (None, E::Set(&[2, 3, 6, 7])),
+        (Some(4), E::Reject),
+        (Some(2), E::Set(&[0, 2, 3, 5, 6, 7])),
+        (Some(0), E::Set(&[0, 2, 3, 5, 6, 7])),
+        (Some(3), E::Set(&[0, 2, 3, 5, 6, 7])),
+        (Some(5), E::Set(&[2, 3, 6, 7])),
+        (Some(7), E::Set(&[1, 2, 3, 6, 7])),
+        (Some(1), E::Stop),
+    ]];
+    for steps in paths {
+        run_e2e(&vocab, grammar, 8, steps, false);
+    }
+}
+
+#[test]
+fn test_e2e_mixed_tag_and_token_dispatch() {
+    let vocab = [
+        "<s>", "</s>", "<call>", "<mid>", "<skip>", "<end>", "<bad>", "hello",
+        "world", "x", "y", "done",
+    ];
+    let grammar = "
+    leaf ::= [a-z]+
+    inner ::= TagDispatch((\"<end>\", leaf), excludes=(\"<bad>\"))
+    mid_body ::= Token(9, 10) inner
+    mid ::= TokenTagDispatch((3, mid_body), excludes=(4,))
+    root ::= TagDispatch((\"<call>\", mid), excludes=(\"<bad>\"))
+    ";
+    let paths: &[&[(Option<i32>, E)]] = &[
+        &[
+            (None, E::Set(&[0, 1, 2, 3, 4, 5, 7, 8, 9, 10, 11])),
+            (Some(7), E::Set(&[0, 1, 2, 3, 4, 5, 7, 8, 9, 10, 11])),
+            (Some(2), E::Set(&[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])),
+            (Some(3), E::Set(&[0, 1, 2, 3, 4, 5, 7, 8, 9, 10, 11])),
+            (Some(9), E::Set(&[0, 1, 2, 3, 4, 5, 7, 8, 9, 10, 11])),
+            (Some(8), E::Set(&[0, 1, 2, 3, 4, 5, 7, 8, 9, 10, 11])),
+            (Some(5), E::Set(&[0, 1, 2, 3, 4, 5, 7, 8, 9, 10, 11])),
+            (Some(11), E::Set(&[0, 1, 2, 3, 4, 5, 7, 8, 9, 10, 11])),
+            (Some(1), E::Stop),
+        ],
+        &[
+            (None, E::Set(&[0, 1, 2, 3, 4, 5, 7, 8, 9, 10, 11])),
+            (Some(7), E::Set(&[0, 1, 2, 3, 4, 5, 7, 8, 9, 10, 11])),
+            (Some(8), E::Set(&[0, 1, 2, 3, 4, 5, 7, 8, 9, 10, 11])),
+            (Some(6), E::Reject),
+            (Some(1), E::Stop),
+        ],
+        &[
+            (None, E::Set(&[0, 1, 2, 3, 4, 5, 7, 8, 9, 10, 11])),
+            (Some(6), E::Reject),
+        ],
+        &[
+            (Some(2), E::Set(&[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])),
+            (Some(6), E::Set(&[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])),
+        ],
+        &[
+            (Some(2), E::Set(&[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])),
+            (Some(3), E::Set(&[0, 1, 2, 3, 4, 5, 7, 8, 9, 10, 11])),
+            (Some(9), E::Set(&[0, 1, 2, 3, 4, 5, 7, 8, 9, 10, 11])),
+            (Some(6), E::Reject),
+        ],
+        &[(Some(4), E::Set(&[0, 1, 2, 3, 4, 5, 7, 8, 9, 10, 11]))],
+        &[
+            (Some(2), E::Set(&[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])),
+            (Some(3), E::Set(&[0, 1, 2, 3, 4, 5, 7, 8, 9, 10, 11])),
+            (Some(9), E::Set(&[0, 1, 2, 3, 4, 5, 7, 8, 9, 10, 11])),
+            (Some(4), E::Set(&[0, 1, 2, 3, 4, 5, 7, 8, 9, 10, 11])),
+        ],
+    ];
+    for steps in paths {
+        run_e2e(&vocab, grammar, 12, steps, false);
+    }
+}

@@ -160,9 +160,19 @@ impl StructureNormalizer {
             },
             // A tag dispatch is kept as the rule body directly (printed without the
             // `(( … ))` choices/sequence wrapping).
-            GrammarExprType::TagDispatch
-            | GrammarExprType::TokenTagDispatch => {
+            GrammarExprType::TagDispatch => {
                 self.rebuild_tag_dispatch(ty, &data)
+            },
+            // A token-tag dispatch is hoisted into its own rule, matching the C++
+            // `StructureNormalizer::VisitRuleBody` asymmetry.
+            GrammarExprType::TokenTagDispatch => {
+                let ttd = self.rebuild_tag_dispatch(ty, &data);
+                let rule_id = self
+                    .builder
+                    .add_rule_with_hint(&self.cur_rule_name.clone(), ttd);
+                let rule_ref = self.builder.add_rule_ref(rule_id);
+                let seq = self.builder.add_sequence(&[rule_ref]);
+                self.builder.add_choices(&[seq])
             },
         }
     }

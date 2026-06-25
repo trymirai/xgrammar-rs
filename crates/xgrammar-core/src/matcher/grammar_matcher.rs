@@ -7,7 +7,7 @@
 
 use std::sync::Arc;
 
-use super::token_bitmask::get_bitmask_size;
+use super::{matcher_error::MatcherTerminatedError, token_bitmask::get_bitmask_size};
 use crate::{
     functor::grammar_optimizer,
     grammar::Grammar,
@@ -206,11 +206,17 @@ impl GrammarMatcher {
     /// acceptable in the current state: bit set = allowed.
     ///
     /// Returns whether any token is masked out (some token is rejected).
+    ///
+    /// # Errors
+    /// Returns [`MatcherTerminatedError`] after the stop token has been accepted.
     pub fn fill_next_token_bitmask(
         &mut self,
         bitmask: &mut [i32],
         index: i32,
-    ) -> bool {
+    ) -> Result<bool, MatcherTerminatedError> {
+        if self.is_stop_token_accepted() {
+            return Err(MatcherTerminatedError);
+        }
         let vocab_size = self.tokenizer_info.vocab_size();
         let size = get_bitmask_size(vocab_size) as usize;
         let start = index as usize * size;
@@ -233,7 +239,7 @@ impl GrammarMatcher {
             }
         }
         // A token is masked unless its bit is set; report whether anything is masked.
-        (0..vocab_size).any(|t| row[(t / 32) as usize] >> (t % 32) & 1 == 0)
+        Ok((0..vocab_size).any(|t| row[(t / 32) as usize] >> (t % 32) & 1 == 0))
     }
 
     /// Whether `token_id` (with decoded bytes `decoded`) can be accepted from the current
@@ -346,7 +352,15 @@ impl GrammarMatcher {
 
     /// Finds the longest string of forced (uniquely-determined) next characters from the
     /// current state, without advancing the matcher (jump-forward decoding).
-    pub fn find_jump_forward_string(&mut self) -> Vec<u8> {
+    ///
+    /// # Errors
+    /// Returns [`MatcherTerminatedError`] after the stop token has been accepted.
+    pub fn find_jump_forward_string(
+        &mut self,
+    ) -> Result<Vec<u8>, MatcherTerminatedError> {
+        if self.is_stop_token_accepted() {
+            return Err(MatcherTerminatedError);
+        }
         let mut result: Vec<u8> = Vec::new();
         let mut num_accepted = 0;
         loop {
@@ -392,7 +406,7 @@ impl GrammarMatcher {
             num_accepted += 1;
         }
         self.parser.pop_last_states(num_accepted);
-        result
+        Ok(result)
     }
 
     /// A human-readable dump of the matcher's latest internal parser states (debugging only).

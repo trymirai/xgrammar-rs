@@ -61,7 +61,7 @@ fn rejected(
     vocab_size: i32,
 ) -> BTreeSet<i32> {
     let mut bm = allocate_token_bitmask(1, vocab_size);
-    m.fill_next_token_bitmask(&mut bm, 0);
+    m.fill_next_token_bitmask(&mut bm, 0).unwrap();
     get_masked_tokens_from_bitmask(&bm, vocab_size, 0).into_iter().collect()
 }
 
@@ -290,7 +290,7 @@ fn test_get_jump_forward_string() {
     .unwrap();
     let mut m = GrammarMatcher::from_grammar(&grammar, true);
     assert!(m.accept_string("a"));
-    assert_eq!(m.find_jump_forward_string(), b"bb");
+    assert_eq!(m.find_jump_forward_string().unwrap(), b"bb");
 }
 
 #[test]

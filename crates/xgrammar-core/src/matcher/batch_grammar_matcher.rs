@@ -4,7 +4,9 @@
 //! matchers, preserving per-matcher order. (The C++ parallelizes via a thread pool; that is a
 //! performance optimization deferred to the perf phase — the results are order-identical.)
 
-use super::grammar_matcher::GrammarMatcher;
+use super::{
+    grammar_matcher::GrammarMatcher, matcher_error::MatcherTerminatedError,
+};
 
 /// Stateless batched front end over a slice of [`GrammarMatcher`]s.
 #[derive(Debug, Clone, Copy, Default)]
@@ -71,14 +73,18 @@ impl BatchGrammarMatcher {
 
     /// Fills `bitmask` with one row per matcher: `matchers[i]` writes row `indices[i]` (or row
     /// `i` if `indices` is `None`).
+    ///
+    /// # Errors
+    /// Returns [`MatcherTerminatedError`] if any matcher has accepted the stop token.
     pub fn batch_fill_next_token_bitmask(
         matchers: &mut [GrammarMatcher],
         bitmask: &mut [i32],
         indices: Option<&[i32]>,
-    ) {
+    ) -> Result<(), MatcherTerminatedError> {
         for (i, m) in matchers.iter_mut().enumerate() {
             let index = indices.map_or(i as i32, |idx| idx[i]);
-            m.fill_next_token_bitmask(bitmask, index);
+            m.fill_next_token_bitmask(bitmask, index)?;
         }
+        Ok(())
     }
 }

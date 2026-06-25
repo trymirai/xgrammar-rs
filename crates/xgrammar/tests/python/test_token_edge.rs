@@ -39,7 +39,7 @@ fn rejected(
     vocab_size: i32,
 ) -> BTreeSet<i32> {
     let mut bitmask = allocate_token_bitmask(1, vocab_size);
-    matcher.fill_next_token_bitmask(&mut bitmask, 0);
+    matcher.fill_next_token_bitmask(&mut bitmask, 0).unwrap();
     get_masked_tokens_from_bitmask(&bitmask, vocab_size, 0)
         .into_iter()
         .collect()

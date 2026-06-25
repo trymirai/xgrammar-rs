@@ -144,7 +144,7 @@ fn test_tag_dispatch_mask_generation_correctness() {
 
     let chars: Vec<char> = input_str.chars().collect();
     for (i, c) in input_str.chars().chain(std::iter::once('0')).enumerate() {
-        m.fill_next_token_bitmask(&mut mask, 0);
+        m.fill_next_token_bitmask(&mut mask, 0).unwrap();
         let rejected: std::collections::HashSet<i32> =
             get_masked_tokens_from_bitmask(&mask, vocab_size, 0)
                 .into_iter()

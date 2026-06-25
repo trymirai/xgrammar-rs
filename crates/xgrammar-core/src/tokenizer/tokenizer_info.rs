@@ -190,13 +190,46 @@ impl TokenizerInfo {
         &self.token_id_to_sorted_vocab_index
     }
 
-    /// Dumps the tokenizer metadata as a compact JSON string (vocab type, prefix space).
+    /// Dumps the tokenizer metadata as a compact JSON string for compiled-grammar checks.
     #[must_use]
     pub fn dump_metadata(&self) -> String {
-        super::metadata_to_json(&super::HfMetadata {
-            vocab_type: self.vocab_type,
-            add_prefix_space: self.add_prefix_space,
+        serde_json::to_string(&self.metadata_value())
+            .expect("tokenizer metadata serialization never fails")
+    }
+
+    /// Returns tokenizer metadata as JSON for compiled-grammar serialization.
+    #[must_use]
+    pub fn metadata_value(&self) -> Value {
+        json!({
+            "vocab_type": self.vocab_type as i32,
+            "vocab_size": self.vocab_size,
+            "add_prefix_space": self.add_prefix_space,
+            "stop_token_ids": self.stop_token_ids,
         })
+    }
+
+    /// Returns an error when `metadata` does not match this tokenizer info.
+    ///
+    /// # Errors
+    /// Returns [`DeserializeError::Format`] when a metadata field differs.
+    pub fn check_metadata_match(
+        &self,
+        metadata: &Value,
+    ) -> Result<(), DeserializeError> {
+        let expected = self.metadata_value();
+        for key in [
+            "vocab_type",
+            "vocab_size",
+            "add_prefix_space",
+            "stop_token_ids",
+        ] {
+            if expected.get(key) != metadata.get(key) {
+                return Err(DeserializeError::Format(format!(
+                    "tokenizer metadata mismatch on {key}"
+                )));
+            }
+        }
+        Ok(())
     }
 
     /// Detects tokenizer metadata from a Hugging Face backend JSON string.

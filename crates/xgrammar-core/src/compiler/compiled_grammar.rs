@@ -5,7 +5,13 @@
 //! `fill_next_token_bitmask`; that cache is a performance optimization (the masks it yields
 //! are identical to the matcher's on-the-fly computation) and is deferred to the perf phase.
 
-use crate::{grammar::Grammar, tokenizer::TokenizerInfo};
+use serde_json::{Value, json};
+
+use crate::{
+    config::SERIALIZATION_VERSION,
+    grammar::{DeserializeError, Grammar},
+    tokenizer::TokenizerInfo,
+};
 
 /// The preprocessing result that a [`GrammarMatcher`](crate::matcher::GrammarMatcher) runs on:
 /// an optimized grammar plus its tokenizer.
@@ -52,5 +58,62 @@ impl CompiledGrammar {
             .map(|t| t.len() + 16)
             .sum();
         exprs + rules + vocab
+    }
+
+    /// Serializes the compiled grammar without embedding the full tokenizer info.
+    #[must_use]
+    pub fn serialize_json(&self) -> String {
+        serde_json::to_string(&self.serialize_json_value())
+            .expect("compiled grammar JSON serialization never fails")
+    }
+
+    /// Serializes the compiled grammar to a JSON value.
+    #[must_use]
+    pub fn serialize_json_value(&self) -> Value {
+        let mut grammar = self.grammar.serialize_json_value();
+        if let Some(obj) = grammar.as_object_mut() {
+            obj.remove("__VERSION__");
+        }
+        json!({
+            "grammar": grammar,
+            "tokenizer_metadata": self.tokenizer_info.metadata_value(),
+            "adaptive_token_mask_cache": json!([]),
+            "__VERSION__": SERIALIZATION_VERSION,
+        })
+    }
+
+    /// Deserializes a compiled grammar and binds it to `tokenizer_info`.
+    ///
+    /// # Errors
+    /// Returns [`DeserializeError`] when JSON, version, metadata, or grammar body is invalid.
+    pub fn deserialize_json(
+        json_str: &str,
+        tokenizer_info: &TokenizerInfo,
+    ) -> Result<Self, DeserializeError> {
+        let value: Value = serde_json::from_str(json_str)
+            .map_err(|error| DeserializeError::InvalidJson(error.to_string()))?;
+        match value.get("__VERSION__").and_then(Value::as_str) {
+            Some(SERIALIZATION_VERSION) => {},
+            Some(other) => {
+                return Err(DeserializeError::Version {
+                    expected: SERIALIZATION_VERSION.to_owned(),
+                    got: other.to_owned(),
+                });
+            },
+            None => {
+                return Err(DeserializeError::Format(
+                    "missing __VERSION__".to_owned(),
+                ));
+            },
+        }
+        let grammar_value = value.get("grammar").ok_or_else(|| {
+            DeserializeError::Format("missing grammar".to_owned())
+        })?;
+        let metadata = value.get("tokenizer_metadata").ok_or_else(|| {
+            DeserializeError::Format("missing tokenizer_metadata".to_owned())
+        })?;
+        tokenizer_info.check_metadata_match(metadata)?;
+        let grammar = Grammar::deserialize_json_value(grammar_value)?;
+        Ok(Self::new(grammar, tokenizer_info.clone()))
     }
 }

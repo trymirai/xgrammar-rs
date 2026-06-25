@@ -4,7 +4,107 @@
 //! (and the schema-driven tests that depend on it) land with the converter itself.
 #![allow(clippy::approx_constant)] // float literals here are test fixtures, not π/e
 
-use xgrammar::converter::{generate_float_range_regex, generate_range_regex};
+use xgrammar::converter::{
+    generate_float_range_regex, generate_range_regex, json_schema_to_ebnf,
+};
+
+const BASIC_JSON_RULES_EBNF: &str = r#"basic_escape ::= ["\\/bfnrt] | "u" [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9]
+basic_string_sub ::= ("\"" | [^\0-\x1f\"\\\r\n] basic_string_sub | "\\" basic_escape basic_string_sub) (= [ \n\t]* [,}\]:])
+basic_any ::= basic_number | basic_string | basic_boolean | basic_null | basic_array | basic_object
+basic_integer ::= ("0" | "-"? [1-9] [0-9]*)
+basic_number ::= "-"? ("0" | [1-9] [0-9]*) ("." [0-9]+)? ([eE] [+-]? [0-9]+)?
+basic_string ::= ["] basic_string_sub
+basic_boolean ::= "true" | "false"
+basic_null ::= "null"
+basic_array ::= (("[" [ \n\t]* basic_any ([ \n\t]* "," [ \n\t]* basic_any)* [ \n\t]* "]") | ("[" [ \n\t]* "]"))
+basic_object ::= ("{" [ \n\t]* basic_string [ \n\t]* ":" [ \n\t]* basic_any ([ \n\t]* "," [ \n\t]* basic_string [ \n\t]* ":" [ \n\t]* basic_any)* [ \n\t]* "}") | "{" [ \n\t]* "}"
+"#;
+
+const BASIC_JSON_RULES_EBNF_NO_SPACE: &str = r#"basic_escape ::= ["\\/bfnrt] | "u" [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9]
+basic_string_sub ::= ("\"" | [^\0-\x1f\"\\\r\n] basic_string_sub | "\\" basic_escape basic_string_sub) (= [ \n\t]* [,}\]:])
+basic_any ::= basic_number | basic_string | basic_boolean | basic_null | basic_array | basic_object
+basic_integer ::= ("0" | "-"? [1-9] [0-9]*)
+basic_number ::= "-"? ("0" | [1-9] [0-9]*) ("." [0-9]+)? ([eE] [+-]? [0-9]+)?
+basic_string ::= ["] basic_string_sub
+basic_boolean ::= "true" | "false"
+basic_null ::= "null"
+basic_array ::= (("[" "" basic_any (", " basic_any)* "" "]") | ("[" "" "]"))
+basic_object ::= ("{" "" basic_string ": " basic_any (", " basic_string ": " basic_any)* "" "}") | "{" "}"
+"#;
+
+/// Convert with the Python `check_schema_with_grammar` defaults (any_whitespace, strict).
+fn check(
+    schema: &str,
+    expected: &str,
+) {
+    let ebnf =
+        json_schema_to_ebnf(schema, true, None, None, true, None).unwrap();
+    assert_eq!(ebnf, expected);
+}
+
+/// Convert with explicit whitespace/strict settings.
+fn check_full(
+    schema: &str,
+    expected: &str,
+    any_whitespace: bool,
+    strict_mode: bool,
+) {
+    let ebnf = json_schema_to_ebnf(
+        schema,
+        any_whitespace,
+        None,
+        None,
+        strict_mode,
+        None,
+    )
+    .unwrap();
+    assert_eq!(ebnf, expected);
+}
+
+#[test]
+fn test_basic() {
+    let schema = r#"{"properties": {"integer_field": {"title": "Integer Field", "type": "integer"}, "number_field": {"title": "Number Field", "type": "number"}, "boolean_field": {"title": "Boolean Field", "type": "boolean"}, "any_array_field": {"items": {}, "title": "Any Array Field", "type": "array"}, "array_field": {"items": {"type": "string"}, "title": "Array Field", "type": "array"}, "tuple_field": {"maxItems": 3, "minItems": 3, "prefixItems": [{"type": "string"}, {"type": "integer"}, {"items": {"type": "string"}, "type": "array"}], "title": "Tuple Field", "type": "array"}, "object_field": {"additionalProperties": {"type": "integer"}, "title": "Object Field", "type": "object"}, "nested_object_field": {"additionalProperties": {"additionalProperties": {"type": "integer"}, "type": "object"}, "title": "Nested Object Field", "type": "object"}}, "required": ["integer_field", "number_field", "boolean_field", "any_array_field", "array_field", "tuple_field", "object_field", "nested_object_field"], "title": "MainModel", "type": "object"}"#;
+    let expected = format!(
+        "{BASIC_JSON_RULES_EBNF_NO_SPACE}{}",
+        r#"root_prop_3 ::= (("[" "" basic_any (", " basic_any)* "" "]") | ("[" "" "]"))
+root_prop_4 ::= (("[" "" basic_string (", " basic_string)* "" "]") | ("[" "" "]"))
+root_prop_5_item_2 ::= (("[" "" basic_string (", " basic_string)* "" "]") | ("[" "" "]"))
+root_prop_5 ::= ("[" "" (basic_string ", " basic_integer ", " root_prop_5_item_2) "" "]")
+root_prop_6 ::= ("{" "" basic_string ": " basic_integer (", " basic_string ": " basic_integer)* "" "}") | "{" "}"
+root_prop_7_addl ::= ("{" "" basic_string ": " basic_integer (", " basic_string ": " basic_integer)* "" "}") | "{" "}"
+root_prop_7 ::= ("{" "" basic_string ": " root_prop_7_addl (", " basic_string ": " root_prop_7_addl)* "" "}") | "{" "}"
+root_part_6 ::= ", " "\"nested_object_field\"" ": " root_prop_7 ""
+root_part_5 ::= ", " "\"object_field\"" ": " root_prop_6 root_part_6
+root_part_4 ::= ", " "\"tuple_field\"" ": " root_prop_5 root_part_5
+root_part_3 ::= ", " "\"array_field\"" ": " root_prop_4 root_part_4
+root_part_2 ::= ", " "\"any_array_field\"" ": " root_prop_3 root_part_3
+root_part_1 ::= ", " "\"boolean_field\"" ": " basic_boolean root_part_2
+root_part_0 ::= ", " "\"number_field\"" ": " basic_number root_part_1
+root ::= "{" "" (("\"integer_field\"" ": " basic_integer root_part_0)) "" "}"
+"#
+    );
+    check_full(schema, &expected, false, true);
+}
+
+#[test]
+fn test_min_max_length() {
+    let schema = r#"{"type": "string", "minLength": 1, "maxLength": 10}"#;
+    let expected = format!(
+        "{BASIC_JSON_RULES_EBNF}root ::= \"\\\"\" [^\"\\\\\\r\\n]{{1,10}} \"\\\"\"\n"
+    );
+    check(schema, &expected);
+}
+
+#[test]
+fn test_type_array() {
+    let schema = r#"{"type": ["integer", "string"], "minLength": 1, "maxLength": 10, "minimum": 1, "maximum": 10}"#;
+    let expected = format!(
+        "{BASIC_JSON_RULES_EBNF}root_type_0 ::= ( ( [1-9] | \"1\" \"0\" ) )\n\
+         root_type_1 ::= \"\\\"\" [^\"\\\\\\r\\n]{{1,10}} \"\\\"\"\n\
+         root ::= root_type_0 | root_type_1\n"
+    );
+    check(schema, &expected);
+}
 
 #[test]
 fn test_generate_range_regex() {

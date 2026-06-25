@@ -102,18 +102,18 @@ fn _get_allow_empty_rule_ids(compiled_grammar: &CompiledGrammar) -> Vec<i32> {
 
 #[pyfunction]
 fn _generate_range_regex(
-    start: i64,
-    end: i64,
+    start: Option<i64>,
+    end: Option<i64>,
 ) -> String {
-    xgrammar::converter::generate_range_regex(Some(start), Some(end))
+    xgrammar::converter::generate_range_regex(start, end)
 }
 
 #[pyfunction]
 fn _generate_float_regex(
-    start: f64,
-    end: f64,
+    start: Option<f64>,
+    end: Option<f64>,
 ) -> String {
-    xgrammar::converter::generate_float_range_regex(Some(start), Some(end))
+    xgrammar::converter::generate_float_range_regex(start, end)
 }
 
 #[pyfunction]

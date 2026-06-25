@@ -499,7 +499,7 @@ pub fn generate_float_range_regex(
 
     if let (Some(start), None) = (start, end) {
         let start_str = format_float(start, precision);
-        parts.push(escape_dot_for_regex(&start_str));
+        parts.push(start_str.clone());
         if start_frac > 0.0 {
             parts.extend(frac_patterns(&start_str, is_start_negative));
         }
@@ -510,7 +510,7 @@ pub fn generate_float_range_regex(
         }
     } else if let (None, Some(end)) = (start, end) {
         let end_str = format_float(end, precision);
-        parts.push(escape_dot_for_regex(&end_str));
+        parts.push(end_str.clone());
         if end_frac > 0.0 {
             parts.extend(frac_patterns(&end_str, !is_end_negative));
         }
@@ -525,18 +525,18 @@ pub fn generate_float_range_regex(
                 parts.push(start_int.to_string());
             } else {
                 let start_str = format_float(start, precision);
-                parts.push(escape_dot_for_regex(&start_str));
+                parts.push(start_str.clone());
                 let end_str = format_float(end, precision);
                 if start_str != end_str {
-                    parts.push(escape_dot_for_regex(&end_str));
+                    parts.push(end_str.clone());
                 }
             }
         } else {
             let start_str = format_float(start, precision);
-            parts.push(escape_dot_for_regex(&start_str));
+            parts.push(start_str.clone());
             let end_str = format_float(end, precision);
             if start_str != end_str {
-                parts.push(escape_dot_for_regex(&end_str));
+                parts.push(end_str.clone());
             }
             if end_int > start_int + 1 {
                 let inner = generate_range_regex(

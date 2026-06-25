@@ -107,6 +107,56 @@ fn test_type_array() {
 }
 
 #[test]
+fn test_type_array_empty() {
+    let expected = format!("{BASIC_JSON_RULES_EBNF}root ::= basic_any\n");
+    check(r#"{"type": []}"#, &expected);
+}
+
+#[test]
+fn test_empty_array() {
+    let schema = r#"{"items": {"type": "string"}, "type": "array"}"#;
+    let expected = format!(
+        "{BASIC_JSON_RULES_EBNF}{}",
+        "root ::= ((\"[\" [ \\n\\t]* basic_string ([ \\n\\t]* \",\" [ \\n\\t]* basic_string)* \
+         [ \\n\\t]* \"]\") | (\"[\" [ \\n\\t]* \"]\"))\n"
+    );
+    check(schema, &expected);
+}
+
+#[test]
+fn test_empty_object() {
+    let schema =
+        r#"{"properties": {"name": {"type": "string"}}, "type": "object"}"#;
+    let expected = format!(
+        "{BASIC_JSON_RULES_EBNF}{}",
+        "root ::= (\"{\" [ \\n\\t]* ((\"\\\"name\\\"\" [ \\n\\t]* \":\" [ \\n\\t]* basic_string \
+         \"\")) [ \\n\\t]* \"}\") | \"{\" [ \\n\\t]* \"}\"\n"
+    );
+    check(schema, &expected);
+}
+
+#[test]
+fn test_primitive_type_string() {
+    let expected = format!("{BASIC_JSON_RULES_EBNF}root ::= basic_string\n");
+    check(r#"{"type": "string"}"#, &expected);
+}
+
+#[test]
+fn test_primitive_type_object() {
+    let expected = format!("{BASIC_JSON_RULES_EBNF}root ::= basic_object\n");
+    check(r#"{"type": "object"}"#, &expected);
+}
+
+#[test]
+fn test_email_format() {
+    let schema = r#"{"type": "string", "format": "email"}"#;
+    let root = r##"root ::= "\"" ( ( [a-zA-Z0-9_!#$%&'*+/=?^`{|}~-]+ ( "." [a-zA-Z0-9_!#$%&'*+/=?^`{|}~-]+ )* ) | "\\" "\"" ( "\\" [ -~] | [ !#-[\]-~] )* "\\" "\"" ) "@" ( [A-Za-z0-9] ( [\-A-Za-z0-9]* [A-Za-z0-9] )? ) ( ( "." [A-Za-z0-9] [\-A-Za-z0-9]* [A-Za-z0-9] )* ) "\""
+"##;
+    let expected = format!("{BASIC_JSON_RULES_EBNF}{root}");
+    check(schema, &expected);
+}
+
+#[test]
 fn test_generate_range_regex() {
     // Basic range tests
     assert_eq!(generate_range_regex(Some(12), Some(16)), r"^((1[2-6]))$");

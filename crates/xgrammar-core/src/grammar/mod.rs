@@ -10,6 +10,7 @@ mod grammar_expr;
 mod grammar_expr_type;
 mod printer;
 mod rule;
+mod serialization;
 mod tag_dispatch;
 mod token_tag_dispatch;
 
@@ -19,5 +20,6 @@ pub use grammar_builder::GrammarBuilder;
 pub use grammar_expr::GrammarExpr;
 pub use grammar_expr_type::{GrammarExprType, UnknownGrammarExprType};
 pub use rule::{NO_EXPR, Rule};
+pub use serialization::DeserializeError;
 pub use tag_dispatch::TagDispatch;
 pub use token_tag_dispatch::TokenTagDispatch;

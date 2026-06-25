@@ -5,9 +5,11 @@
 
 mod fsm;
 mod fsm_edge;
+mod fsm_with_start_end;
 
 pub use fsm::{EdgeKind, Fsm, NO_NEXT_STATE};
 pub use fsm_edge::{
     ExcludeTokenEdgeRef, FsmEdge, MAX_CHAR, RepeatEdgeRef, TokenEdgeRef,
     edge_type,
 };
+pub use fsm_with_start_end::FsmWithStartEnd;

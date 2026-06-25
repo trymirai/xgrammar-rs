@@ -1,20 +1,25 @@
 //! The grammar matcher — the string/token-accepting front end over the Earley parser.
 //!
-//! This is the byte/string-accepting core of `GrammarMatcher` in `cpp/grammar_matcher.cc`
-//! (token-level masking and the tokenizer-dependent paths land with the compiler milestone).
+//! This drives the parser to accept input strings and tokens and to compute the next-token
+//! bitmask. Ported from `cpp/grammar_matcher.cc`. The token-mask computation here is the
+//! from-scratch variant (checking each candidate token against the parser); the precomputed
+//! adaptive-mask cache is a performance optimization deferred to a later milestone.
 
 use std::sync::Arc;
 
+use super::token_bitmask::get_bitmask_size;
 use crate::{
     functor::grammar_optimizer,
     grammar::Grammar,
     parser::{EarleyParser, ParserState},
+    tokenizer::{TokenizerInfo, VocabType},
 };
 
 /// Matches input against a grammar by driving an [`EarleyParser`].
 #[derive(Debug)]
 pub struct GrammarMatcher {
     parser: EarleyParser,
+    tokenizer_info: TokenizerInfo,
     terminate_without_stop_token: bool,
     /// Lengths of accepted strings/tokens, for rollback.
     token_length_history: Vec<i32>,
@@ -24,9 +29,28 @@ impl GrammarMatcher {
     /// Creates a matcher over `grammar`, optimizing it first if needed. With
     /// `terminate_without_stop_token` the matcher is considered terminated once the grammar
     /// is completed (no stop token required) — the mode used for string-acceptance testing.
+    /// The tokenizer is empty, so only string acceptance is supported.
     #[must_use]
     pub fn from_grammar(
         grammar: &Grammar,
+        terminate_without_stop_token: bool,
+    ) -> Self {
+        let empty = TokenizerInfo::new(&[], VocabType::Raw, None, None, false);
+        Self::build(grammar, empty, terminate_without_stop_token)
+    }
+
+    /// Creates a matcher over `grammar` and `tokenizer_info` (terminating on the stop token).
+    #[must_use]
+    pub fn from_grammar_and_tokenizer(
+        grammar: &Grammar,
+        tokenizer_info: TokenizerInfo,
+    ) -> Self {
+        Self::build(grammar, tokenizer_info, false)
+    }
+
+    fn build(
+        grammar: &Grammar,
+        tokenizer_info: TokenizerInfo,
         terminate_without_stop_token: bool,
     ) -> Self {
         let optimized = if grammar.is_optimized() {
@@ -41,6 +65,7 @@ impl GrammarMatcher {
         );
         Self {
             parser,
+            tokenizer_info,
             terminate_without_stop_token,
             token_length_history: Vec::new(),
         }
@@ -71,6 +96,164 @@ impl GrammarMatcher {
         }
         self.token_length_history.push(input.len() as i32);
         true
+    }
+
+    /// Accepts the token with id `token_id` (its decoded string and/or atomic-token edges).
+    ///
+    /// Stop tokens terminate the matcher; special and out-of-range tokens are rejected.
+    pub fn accept_token(
+        &mut self,
+        token_id: i32,
+    ) -> bool {
+        if self.is_stop_token_accepted() {
+            return false;
+        }
+        if token_id < 0 || token_id >= self.tokenizer_info.vocab_size() {
+            return false;
+        }
+        if self.tokenizer_info.stop_token_ids().contains(&token_id) {
+            return self.accept_stop_token();
+        }
+        if self.tokenizer_info.special_token_ids().contains(&token_id) {
+            return false;
+        }
+        let decoded =
+            self.tokenizer_info.decoded_vocab()[token_id as usize].clone();
+
+        // Phase 1: the atomic-token path (token/exclude-token edges), captured then rolled back.
+        let atomic_success = self.parser.advance_atomic_token(token_id);
+        let (atomic_states, atomic_completable, atomic_completed) =
+            if atomic_success {
+                let s = self.parser.latest_scanable_states();
+                let c = self.parser.latest_completable_states();
+                let done = self.parser.is_completed();
+                self.parser.pop_last_states(1);
+                (s, c, done)
+            } else {
+                (Vec::new(), Vec::new(), false)
+            };
+
+        // Phase 2: the byte-by-byte path from the same starting state.
+        let mut pos = 0;
+        let mut byte_ok = true;
+        for &byte in &decoded {
+            if !self.parser.advance(byte) {
+                byte_ok = false;
+                break;
+            }
+            pos += 1;
+        }
+
+        // Phase 3: combine.
+        if !byte_ok && !atomic_success {
+            self.parser.pop_last_states(pos);
+            return false;
+        }
+        if atomic_success && !byte_ok {
+            self.parser.pop_last_states(pos);
+            self.parser.advance_atomic_token(token_id);
+            self.token_length_history.push(1);
+        } else if byte_ok && !atomic_success {
+            self.token_length_history.push(decoded.len() as i32);
+        } else if decoded.is_empty() {
+            // Zero-length token: the byte path created no position, so push the atomic one.
+            self.parser.push_position(
+                &atomic_states,
+                &atomic_completable,
+                atomic_completed,
+            );
+            self.token_length_history.push(1);
+        } else {
+            // Both paths succeeded: merge the atomic states into the final byte position.
+            let mut merged = self.parser.latest_scanable_states();
+            for s in &atomic_states {
+                if !merged.contains(s) {
+                    merged.push(*s);
+                }
+            }
+            let mut merged_comp = self.parser.latest_completable_states();
+            let byte_completed = self.parser.is_completed();
+            self.parser.pop_last_states(1);
+            for cs in &atomic_completable {
+                if !merged_comp.contains(cs) {
+                    merged_comp.push(*cs);
+                }
+            }
+            self.parser.push_position(
+                &merged,
+                &merged_comp,
+                byte_completed || atomic_completed,
+            );
+            self.token_length_history.push(decoded.len() as i32);
+        }
+        true
+    }
+
+    /// Fills `bitmask` (a `1 × get_bitmask_size(vocab)` row at `index`) with the set of tokens
+    /// acceptable in the current state: bit set = allowed.
+    ///
+    /// Returns whether any token is masked out (some token is rejected).
+    pub fn fill_next_token_bitmask(
+        &mut self,
+        bitmask: &mut [i32],
+        index: i32,
+    ) -> bool {
+        let vocab_size = self.tokenizer_info.vocab_size();
+        let size = get_bitmask_size(vocab_size) as usize;
+        let start = index as usize * size;
+        let row = &mut bitmask[start..start + size];
+        row.fill(0);
+
+        let can_reach_end = self.parser.is_completed();
+        let sorted: Vec<(i32, Vec<u8>)> =
+            self.tokenizer_info.sorted_decoded_vocab().to_vec();
+        for (token_id, decoded) in &sorted {
+            if self.token_acceptable(*token_id, decoded) {
+                let id = *token_id as usize;
+                row[id / 32] |= 1 << (id % 32);
+            }
+        }
+        if can_reach_end {
+            for &id in self.tokenizer_info.stop_token_ids() {
+                let id = id as usize;
+                row[id / 32] |= 1 << (id % 32);
+            }
+        }
+        // A token is masked unless its bit is set; report whether anything is masked.
+        (0..vocab_size).any(|t| row[(t / 32) as usize] >> (t % 32) & 1 == 0)
+    }
+
+    /// Whether `token_id` (with decoded bytes `decoded`) can be accepted from the current
+    /// state, leaving the parser unchanged.
+    fn token_acceptable(
+        &mut self,
+        token_id: i32,
+        decoded: &[u8],
+    ) -> bool {
+        if self.parser.advance_atomic_token(token_id) {
+            self.parser.pop_last_states(1);
+            return true;
+        }
+        if decoded.is_empty() {
+            return false;
+        }
+        let mut pos = 0;
+        let mut ok = true;
+        for &byte in decoded {
+            if !self.parser.advance(byte) {
+                ok = false;
+                break;
+            }
+            pos += 1;
+        }
+        self.parser.pop_last_states(pos);
+        ok
+    }
+
+    /// The tokenizer info backing this matcher.
+    #[must_use]
+    pub fn tokenizer_info(&self) -> &TokenizerInfo {
+        &self.tokenizer_info
     }
 
     /// Accepts the stop token if the grammar is currently completed.

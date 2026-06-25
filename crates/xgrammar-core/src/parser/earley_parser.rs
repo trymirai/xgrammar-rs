@@ -207,6 +207,24 @@ impl EarleyParser {
         self.scanable_state_history.back().to_vec()
     }
 
+    /// The `(referenced_rule_id, parent_state)` completable pairs at the latest position.
+    #[must_use]
+    pub fn latest_completable_states(&self) -> Vec<(i32, ParserState)> {
+        self.rule_id_to_completable_states.back().to_vec()
+    }
+
+    /// Appends a fully-formed position (used by the matcher to merge token-acceptance paths).
+    pub fn push_position(
+        &mut self,
+        scanable: &[ParserState],
+        completable: &[(i32, ParserState)],
+        completed: bool,
+    ) {
+        self.scanable_state_history.push_row(scanable);
+        self.rule_id_to_completable_states.push_row(completable);
+        self.is_completed.push(completed);
+    }
+
     /// Appends one state as a new position to check (without expanding it).
     pub fn push_one_state_to_check(
         &mut self,

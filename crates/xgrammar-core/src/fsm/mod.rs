@@ -3,11 +3,15 @@
 //!
 //! One dedicated type per file; re-exported here.
 
+mod compact_fsm;
+mod compact_fsm_with_start_end;
 mod fsm;
 mod fsm_edge;
 mod fsm_with_start_end;
 mod regex_fsm_builder;
 
+pub use compact_fsm::CompactFsm;
+pub use compact_fsm_with_start_end::CompactFsmWithStartEnd;
 pub use fsm::{EdgeKind, Fsm, NO_NEXT_STATE};
 pub use fsm_edge::{
     ExcludeTokenEdgeRef, FsmEdge, MAX_CHAR, RepeatEdgeRef, TokenEdgeRef,

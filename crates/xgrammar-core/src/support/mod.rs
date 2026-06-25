@@ -10,6 +10,7 @@ mod encoding;
 mod hash;
 mod int_set;
 mod recursion_guard;
+mod union_find_set;
 
 pub use compact_2d_array::{Compact2dArray, Compact2dArrayError};
 pub use dynamic_bitset::{BITS_PER_BLOCK, DynamicBitset};
@@ -29,3 +30,4 @@ pub use recursion_guard::{
     RecursionError, RecursionGuard, get_max_recursion_depth,
     reset_recursion_depth, set_max_recursion_depth,
 };
+pub use union_find_set::UnionFindSet;

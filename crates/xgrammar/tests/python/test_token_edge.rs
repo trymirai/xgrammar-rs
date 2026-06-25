@@ -44,6 +44,15 @@ fn rejected(
         .collect()
 }
 
+/// `_get_accepted`: the complement of [`rejected`] over the vocabulary.
+fn accepted(
+    matcher: &mut GrammarMatcher,
+    vocab_size: i32,
+) -> BTreeSet<i32> {
+    let rej = rejected(matcher, vocab_size);
+    (0..vocab_size).filter(|i| !rej.contains(i)).collect()
+}
+
 #[test]
 fn test_parse_token_basic() {
     assert_eq!(
@@ -180,4 +189,111 @@ fn test_char_then_token_sequence() {
     assert!(m.accept_token(4));
     assert!(m.accept_token(STOP_TOKEN_ID));
     assert!(m.is_terminated());
+}
+
+// --- TokenTagDispatch tests ---
+
+#[test]
+fn test_token_tag_dispatch_trigger() {
+    let vocab = ["<s>", "</s>", "hello", "trigger_tok", "content"];
+    let mut m = make_matcher(
+        &vocab,
+        "triggered_rule ::= Token(4)\nroot ::= TokenTagDispatch(\n  (3, triggered_rule)\n)",
+    );
+    assert_eq!(accepted(&mut m, 5), BTreeSet::from([0, 1, 2, 3, 4]));
+    assert!(m.accept_token(3)); // dispatch trigger
+    assert_eq!(accepted(&mut m, 5), BTreeSet::from([4]));
+}
+
+#[test]
+fn test_token_tag_dispatch_multiple_triggers() {
+    let vocab = ["<s>", "</s>", "A", "B", "<tool>", "content"];
+    let mut m = make_matcher(
+        &vocab,
+        "tool_body ::= Token(5)\nother_body ::= Token(5)\nroot ::= TokenTagDispatch(\n  (3, tool_body),\n  (4, other_body)\n)",
+    );
+    assert_eq!(accepted(&mut m, 6), BTreeSet::from([0, 1, 2, 3, 4, 5]));
+    assert!(m.accept_token(3)); // dispatch to tool_body
+    assert_eq!(accepted(&mut m, 6), BTreeSet::from([5]));
+}
+
+#[test]
+fn test_token_tag_dispatch_trigger_loop() {
+    let vocab = ["<s>", "</s>", "hello", "trigger", "content"];
+    let mut m = make_matcher(
+        &vocab,
+        "body ::= Token(4)\nroot ::= TokenTagDispatch(\n  (3, body),\n  loop_after_dispatch=true\n)",
+    );
+    assert!(m.accept_token(3)); // trigger dispatches to body
+    assert!(m.accept_token(4)); // Token(4) completes body
+    assert_eq!(accepted(&mut m, 5), BTreeSet::from([0, 1, 2, 3, 4]));
+}
+
+#[test]
+fn test_token_tag_dispatch_trigger_and_exclude_no_overlap() {
+    // Trigger ids and excludes must not overlap.
+    let grammar_str = "body ::= Token(2)\nroot ::= TokenTagDispatch(\n  (3, body),\n  excludes=(3,)\n)";
+    assert!(Grammar::from_ebnf(grammar_str, "root").is_err());
+}
+
+#[test]
+fn test_token_tag_dispatch_trigger_in_bitmask() {
+    let vocab = ["<s>", "</s>", "hello", "trigger", "content"];
+    let mut m = make_matcher(
+        &vocab,
+        "body ::= Token(4)\nroot ::= TokenTagDispatch(\n  (3, body)\n)",
+    );
+    assert_eq!(accepted(&mut m, 5), BTreeSet::from([0, 1, 2, 3, 4]));
+    assert!(m.accept_token(3)); // dispatch trigger
+    assert_eq!(accepted(&mut m, 5), BTreeSet::from([4]));
+}
+
+#[test]
+fn test_token_tag_dispatch_full_combo() {
+    let vocab = ["<s>", "</s>", "hello", "B", "<tool>", "content", "blocked"];
+    let mut m = make_matcher(
+        &vocab,
+        "tool_body ::= Token(5)\nother_body ::= Token(5)\nroot ::= TokenTagDispatch(\n  (3, tool_body),\n  (4, other_body),\n  excludes=(6,)\n)",
+    );
+    assert_eq!(accepted(&mut m, 7), BTreeSet::from([0, 1, 2, 3, 4, 5]));
+}
+
+#[test]
+fn test_token_tag_dispatch_exclude_no_triggers() {
+    let vocab = ["<s>", "</s>", "hello", "world", "blocked_1", "blocked_2"];
+    let mut m = make_matcher(
+        &vocab,
+        "root ::= TokenTagDispatch(\n  excludes=(4, 5)\n)",
+    );
+    for _ in 0..3 {
+        assert_eq!(accepted(&mut m, 6), BTreeSet::from([0, 1, 2, 3]));
+        m.accept_token(2);
+    }
+}
+
+#[test]
+fn test_token_tag_dispatch_exclude_basic() {
+    let vocab = ["<s>", "</s>", "hello", "world", "bad"];
+    let mut m =
+        make_matcher(&vocab, "root ::= TokenTagDispatch(\n  excludes=(4,)\n)");
+    assert_eq!(accepted(&mut m, 5), BTreeSet::from([0, 1, 2, 3]));
+}
+
+#[test]
+fn test_token_tag_dispatch_reject_enforced_by_parser() {
+    let vocab = ["<s>", "</s>", "hello", "world", "blocked"];
+    let mut m =
+        make_matcher(&vocab, "root ::= TokenTagDispatch(\n  excludes=(4,)\n)");
+    assert!(!m.accept_token(4)); // parser must reject excluded token
+    assert!(m.accept_token(2)); // "hello" still accepted
+}
+
+#[test]
+fn test_token_tag_dispatch_trigger_and_exclude() {
+    let vocab = ["<s>", "</s>", "A", "AB", "blocked"];
+    let mut m = make_matcher(
+        &vocab,
+        "rule1 ::= \"done\"\nroot ::= TokenTagDispatch(\n  (3, rule1),\n  excludes=(4,)\n)",
+    );
+    assert_eq!(accepted(&mut m, 5), BTreeSet::from([0, 1, 2, 3]));
 }

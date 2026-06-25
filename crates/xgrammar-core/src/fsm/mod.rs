@@ -3,8 +3,10 @@
 //!
 //! One dedicated type per file; re-exported here.
 
+mod fsm;
 mod fsm_edge;
 
+pub use fsm::{EdgeKind, Fsm, NO_NEXT_STATE};
 pub use fsm_edge::{
     ExcludeTokenEdgeRef, FsmEdge, MAX_CHAR, RepeatEdgeRef, TokenEdgeRef,
     edge_type,

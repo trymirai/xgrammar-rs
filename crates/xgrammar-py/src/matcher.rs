@@ -115,9 +115,13 @@ mod matcher_pyo3_ext {
             _debug_print: bool,
         ) -> PyResult<bool> {
             with_writable_i32_buffer(py, bitmask, |buf| {
-                self.inner.fill_next_token_bitmask(buf, index).map_err(|error| {
-                    pyo3::exceptions::PyRuntimeError::new_err(error.to_string())
-                })
+                self.inner.fill_next_token_bitmask(buf, index).map_err(
+                    |error| {
+                        pyo3::exceptions::PyRuntimeError::new_err(
+                            error.to_string(),
+                        )
+                    },
+                )
             })
         }
 
@@ -138,9 +142,10 @@ mod matcher_pyo3_ext {
 
         #[pyo3(name = "find_jump_forward_string")]
         fn find_jump_forward_string_py(&mut self) -> PyResult<String> {
-            let bytes = self.inner.find_jump_forward_string().map_err(|error| {
-                pyo3::exceptions::PyRuntimeError::new_err(error.to_string())
-            })?;
+            let bytes =
+                self.inner.find_jump_forward_string().map_err(|error| {
+                    pyo3::exceptions::PyRuntimeError::new_err(error.to_string())
+                })?;
             String::from_utf8(bytes).map_err(|error| {
                 pyo3::exceptions::PyRuntimeError::new_err(error.to_string())
             })

@@ -11,9 +11,7 @@ use serde_json::{Value, json};
 
 use super::{grammar::Grammar, rule::Rule};
 use crate::{
-    config::SERIALIZATION_VERSION,
-    fsm::CompactFsm,
-    support::Compact2dArray,
+    config::SERIALIZATION_VERSION, fsm::CompactFsm, support::Compact2dArray,
 };
 
 /// An error from [`Grammar::deserialize_json`] (and other deserializers) — a port of the C++
@@ -37,7 +35,8 @@ pub enum DeserializeError {
 }
 
 impl Grammar {
-    /// Serializes the grammar to its `"v13"` JSON form.
+    /// Serializes the grammar to its `"v11"` JSON form (the C++ format — FSMs are always
+    /// `null`/`[]` in the grammar JSON; the compiler serializes them separately).
     #[must_use]
     pub fn serialize_json(&self) -> String {
         serde_json::to_string(&self.serialize_json_value())
@@ -73,23 +72,9 @@ impl Grammar {
             })
             .collect();
 
-        let complete_fsm = if self.is_optimized() {
-            self.complete_fsm().serialize_json_value()
-        } else {
-            Value::Null
-        };
-        let per_rule_fsms: Vec<Value> = if self.is_optimized() {
-            self.per_rule_fsms_slice()
-                .iter()
-                .map(|opt| {
-                    opt.as_ref()
-                        .map(|fsm| fsm.serialize_json_value())
-                        .unwrap_or(Value::Null)
-                })
-                .collect()
-        } else {
-            Vec::new()
-        };
+        // v11 format: FSMs are always null/empty in grammar JSON (rebuilt on load).
+        let complete_fsm = Value::Null;
+        let per_rule_fsms: Vec<Value> = Vec::new();
 
         json!({
             "rules": rules,
@@ -215,10 +200,12 @@ impl Grammar {
         let mut grammar = Grammar::from_parts(rules, exprs, root_rule_id);
         grammar.set_allow_empty_rule_ids(allow_empty);
         if optimized {
-            let complete_fsm = CompactFsm::deserialize_json_value(field("complete_fsm")?)?;
-            let per_rule_json = field("per_rule_fsms")?
-                .as_array()
-                .ok_or_else(|| DeserializeError::Format("per_rule_fsms".to_owned()))?;
+            let complete_fsm =
+                CompactFsm::deserialize_json_value(field("complete_fsm")?)?;
+            let per_rule_json =
+                field("per_rule_fsms")?.as_array().ok_or_else(|| {
+                    DeserializeError::Format("per_rule_fsms".to_owned())
+                })?;
             let mut per_rule_fsms = Vec::with_capacity(per_rule_json.len());
             for entry in per_rule_json {
                 per_rule_fsms.push(if entry.is_null() {

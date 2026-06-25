@@ -3,7 +3,9 @@
 use std::sync::Arc;
 
 use crate::{
-    error::{map_deserialize_error, map_error}, grammar::Grammar, tokenizer_info::TokenizerInfo,
+    error::{map_deserialize_error, map_error},
+    grammar::Grammar,
+    tokenizer_info::TokenizerInfo,
 };
 
 /// A grammar compiled against a tokenizer, ready to drive a matcher.

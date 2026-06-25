@@ -1,10 +1,6 @@
 //! Helpers for reading/writing int32 bitmask buffers from Python array-likes.
 
-use pyo3::{
-    buffer::PyBuffer,
-    exceptions::PyRuntimeError,
-    prelude::*,
-};
+use pyo3::{buffer::PyBuffer, exceptions::PyRuntimeError, prelude::*};
 
 /// Invokes `f` with a mutable view of the int32 data backing `obj`.
 ///

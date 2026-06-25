@@ -15,6 +15,7 @@ mod config;
 mod error;
 mod grammar;
 mod grammar_functor;
+mod kernels;
 mod matcher;
 mod testing;
 mod tokenizer_info;
@@ -52,6 +53,7 @@ fn xgrammar_rs(
     m.add_submodule(&testing_mod)?;
 
     let kernels_mod = pyo3::types::PyModule::new(py, "kernels")?;
+    kernels::register(&kernels_mod)?;
     m.add_submodule(&kernels_mod)?;
 
     Ok(())

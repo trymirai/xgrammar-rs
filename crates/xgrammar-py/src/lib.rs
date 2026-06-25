@@ -8,7 +8,11 @@
 #[cfg(feature = "bindings-uniffi")]
 uniffi::setup_scaffolding!();
 
+mod compiler;
+mod error;
 mod grammar;
+mod matcher;
+mod tokenizer_info;
 
 /// The compiled PyO3 extension module (`xgrammar_rs`). Each `#[bindings::export]` type
 /// registers itself via `inventory`; this loop adds them all to the module.

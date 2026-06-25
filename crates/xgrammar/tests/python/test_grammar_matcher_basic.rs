@@ -9,7 +9,8 @@ use std::collections::BTreeSet;
 use xgrammar::{
     grammar::Grammar,
     matcher::{
-        GrammarMatcher, allocate_token_bitmask, get_masked_tokens_from_bitmask,
+        BatchGrammarMatcher, GrammarMatcher, allocate_token_bitmask,
+        get_masked_tokens_from_bitmask,
     },
     tokenizer::{TokenizerInfo, VocabType},
 };
@@ -324,6 +325,136 @@ fn test_fork_initial_state() {
     assert_eq!(rejected(&mut original, 4), rejected(&mut forked, 4));
     assert!(!original.is_terminated() && !forked.is_terminated());
     assert_eq!(original.stop_token_ids(), forked.stop_token_ids());
+}
+
+#[test]
+#[allow(clippy::type_complexity)]
+fn test_batch_accept_string() {
+    let cases: &[(&[&str], &[&[u8]], &[bool])] = &[
+        (
+            &["root ::= \"a\"", "root ::= [0-9]+", "root ::= \"ab\""],
+            &[b"a", b"123", b"ab"],
+            &[true, true, true],
+        ),
+        (
+            &["root ::= \"a\"", "root ::= [0-9]+", "root ::= \"ab\""],
+            &[b"b", b"123a", b"d"],
+            &[false, false, false],
+        ),
+        (
+            &["root ::= \"a\"", "root ::= [0-9]+", "root ::= \"ab\""],
+            &[b"a", b"123a", b"ab"],
+            &[true, false, true],
+        ),
+        (&["root ::= \"a\""], &[b"a"], &[true]),
+        (&["root ::= \"a\""], &[b"b"], &[false]),
+        (
+            &[
+                "root ::= \"你好\"",
+                "root ::= \"こんにちは\"",
+                "root ::= \"안녕하세요\"",
+            ],
+            &[
+                "你好".as_bytes(),
+                "こんにちは".as_bytes(),
+                "안녕하세요".as_bytes(),
+            ],
+            &[true, true, true],
+        ),
+    ];
+    for (grammars, inputs, expecteds) in cases {
+        let mut matchers: Vec<GrammarMatcher> =
+            grammars.iter().map(|g| string_matcher(g)).collect();
+        let results =
+            BatchGrammarMatcher::batch_accept_string(&mut matchers, inputs);
+        assert_eq!(results, *expecteds, "grammars {grammars:?}");
+    }
+}
+
+#[test]
+#[allow(clippy::type_complexity)]
+fn test_batch_accept_token() {
+    let vocab = ["<s>", "</s>", "a", "b", "c", "1", "2", "3", "123a", "ab"];
+    let cases: &[(&[&str], &[i32], &[bool])] = &[
+        (
+            &["root ::= \"a\"", "root ::= [0-9]+", "root ::= \"ab\""],
+            &[2, 5, 2],
+            &[true, true, true],
+        ),
+        (
+            &["root ::= \"a\"", "root ::= [0-9]+", "root ::= \"ab\""],
+            &[3, 2, 4],
+            &[false, false, false],
+        ),
+        (
+            &["root ::= \"a\"", "root ::= [0-9]+", "root ::= \"ab\""],
+            &[2, 8, 9],
+            &[true, false, true],
+        ),
+        (&["root ::= \"a\""], &[2], &[true]),
+        (&["root ::= \"a\""], &[3], &[false]),
+    ];
+    for (grammars, inputs, expecteds) in cases {
+        let v: Vec<String> = vocab.iter().map(|s| (*s).to_owned()).collect();
+        let mut matchers: Vec<GrammarMatcher> = grammars
+            .iter()
+            .map(|g| {
+                let grammar = Grammar::from_ebnf(g, "root").unwrap();
+                let info =
+                    TokenizerInfo::new(&v, VocabType::Raw, None, None, false);
+                GrammarMatcher::from_grammar_and_tokenizer(&grammar, info)
+            })
+            .collect();
+        let results =
+            BatchGrammarMatcher::batch_accept_token(&mut matchers, inputs);
+        assert_eq!(results, *expecteds, "grammars {grammars:?}");
+    }
+}
+
+#[test]
+fn test_batch_rollback() {
+    let input_tokens =
+        ["{", "\"", "abc", "b\"", ":", "6", ", ", " ", "\"a\":true", "}"];
+    let input_ids: Vec<i32> =
+        input_tokens.iter().map(|t| idx(JSON_VOCAB, t)).collect();
+    let n = JSON_VOCAB.len() as i32;
+    let mut matchers: Vec<GrammarMatcher> =
+        (0..3).map(|_| json_matcher(JSON_VOCAB)).collect();
+    let rollback_lengths = [0, 1, 2];
+
+    for pair in input_ids.chunks(2) {
+        let (first, second) = (pair[0], pair[1]);
+        // Per matcher: rejected sets before-first, before-second, after-second.
+        let mut orig: Vec<[BTreeSet<i32>; 3]> = Vec::new();
+        for m in &mut matchers {
+            let b0 = rejected(m, n);
+            assert!(m.accept_token(first));
+            let b1 = rejected(m, n);
+            assert!(m.accept_token(second));
+            let b2 = rejected(m, n);
+            orig.push([b0, b1, b2]);
+        }
+
+        BatchGrammarMatcher::batch_rollback(&mut matchers, &rollback_lengths);
+
+        for (mi, m) in matchers.iter_mut().enumerate() {
+            match rollback_lengths[mi] {
+                0 => assert_eq!(rejected(m, n), orig[mi][2]),
+                1 => {
+                    assert_eq!(rejected(m, n), orig[mi][1]);
+                    assert!(m.accept_token(second));
+                    assert_eq!(rejected(m, n), orig[mi][2]);
+                },
+                _ => {
+                    assert_eq!(rejected(m, n), orig[mi][0]);
+                    assert!(m.accept_token(first));
+                    assert_eq!(rejected(m, n), orig[mi][1]);
+                    assert!(m.accept_token(second));
+                    assert_eq!(rejected(m, n), orig[mi][2]);
+                },
+            }
+        }
+    }
 }
 
 #[test]

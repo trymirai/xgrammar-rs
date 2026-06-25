@@ -304,6 +304,32 @@ impl FsmWithStartEnd {
         Self::new(fsm, start, ends, false)
     }
 
+    /// Appends this machine's states/edges into `complete` (a shared FSM), returning the
+    /// resulting start state, accepting set, and pre-merge sizes.
+    #[must_use]
+    pub fn add_to_complete_fsm(
+        &self,
+        complete: &mut Fsm,
+    ) -> super::fsm_with_start_end_with_size::FsmWithStartEndWithSize {
+        let offset = complete.add_fsm(&self.fsm);
+        let n = self.num_states();
+        let new_start = offset + self.start;
+        let mut new_ends = vec![false; complete.num_states() as usize];
+        for end in 0..n {
+            if self.is_end_state(end) {
+                new_ends[(offset + end) as usize] = true;
+            }
+        }
+        let edge_num: usize =
+            (0..n).map(|i| self.fsm.state_edges(i).len()).sum();
+        super::fsm_with_start_end_with_size::FsmWithStartEndWithSize::new(
+            new_start,
+            new_ends,
+            edge_num as i32,
+            n,
+        )
+    }
+
     /// Rebuilds this machine under `state_mapping` (old id → new id), collapsing the merged
     /// states. The result is not flagged as a DFA.
     #[must_use]

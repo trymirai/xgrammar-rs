@@ -7,7 +7,10 @@
 
 use std::collections::{HashSet, VecDeque};
 
-use super::{fsm::Fsm, fsm_edge::FsmEdge};
+use super::{
+    fsm::Fsm,
+    fsm_edge::{ExcludeTokenEdgeRef, FsmEdge, RepeatEdgeRef, TokenEdgeRef},
+};
 use crate::support::Compact2dArray;
 
 /// A finite-state machine stored as CSR rows of edges plus a shared auxiliary-data buffer.
@@ -61,6 +64,45 @@ impl CompactFsm {
     #[must_use]
     pub fn edge_aux_data(&self) -> &[i32] {
         &self.edge_aux_data
+    }
+
+    /// The total number of edges across all states.
+    #[must_use]
+    pub fn num_edges(&self) -> usize {
+        self.edges.data_len()
+    }
+
+    /// The repeat-edge aux view at `idx`.
+    #[must_use]
+    pub fn repeat_edge_info(
+        &self,
+        idx: i32,
+    ) -> RepeatEdgeRef<'_> {
+        RepeatEdgeRef {
+            data: &self.edge_aux_data[idx as usize..],
+        }
+    }
+
+    /// The token-edge aux view at `idx`.
+    #[must_use]
+    pub fn token_edge_info(
+        &self,
+        idx: i32,
+    ) -> TokenEdgeRef<'_> {
+        TokenEdgeRef {
+            data: &self.edge_aux_data[idx as usize..],
+        }
+    }
+
+    /// The exclude-token-edge aux view at `idx`.
+    #[must_use]
+    pub fn exclude_token_edge_info(
+        &self,
+        idx: i32,
+    ) -> ExcludeTokenEdgeRef<'_> {
+        ExcludeTokenEdgeRef {
+            data: &self.edge_aux_data[idx as usize..],
+        }
     }
 
     /// Expands `state_set` in place with all states reachable via epsilon transitions.

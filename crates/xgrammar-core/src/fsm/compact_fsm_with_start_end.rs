@@ -61,6 +61,39 @@ impl CompactFsmWithStartEnd {
         self.fsm.num_states()
     }
 
+    /// Whether `state` is an accepting state.
+    #[must_use]
+    pub fn is_end_state(
+        &self,
+        state: i32,
+    ) -> bool {
+        self.ends[state as usize]
+    }
+
+    /// Whether `state` has an outgoing character/token edge (can consume input).
+    #[must_use]
+    pub fn is_scanable_state(
+        &self,
+        state: i32,
+    ) -> bool {
+        self.fsm
+            .state_edges(state)
+            .iter()
+            .any(|e| e.is_char_range() || e.is_token() || e.is_exclude_token())
+    }
+
+    /// Whether `state` has an outgoing rule/epsilon/repeat edge (is non-terminal).
+    #[must_use]
+    pub fn is_non_terminal_state(
+        &self,
+        state: i32,
+    ) -> bool {
+        self.fsm
+            .state_edges(state)
+            .iter()
+            .any(|e| e.is_rule_ref() || e.is_epsilon() || e.is_repeat_ref())
+    }
+
     /// Whether the FSM accepts `input` (treating it as a byte sequence).
     #[must_use]
     pub fn accept_string(

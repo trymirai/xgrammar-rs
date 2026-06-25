@@ -42,11 +42,8 @@ impl TrieFsmBuilder {
         let mut collected_ends: Vec<i32> = Vec::new();
 
         for pattern in patterns {
-            let Some(end) =
-                Self::insert_pattern(&mut fsm, pattern, &ends, allow_overlap)
-            else {
-                return None;
-            };
+            let end =
+                Self::insert_pattern(&mut fsm, pattern, &ends, allow_overlap)?;
             ends.insert(end);
             collected_ends.push(end);
         }
@@ -54,14 +51,12 @@ impl TrieFsmBuilder {
         let mut dead_states: HashSet<i32> = HashSet::new();
         if add_back_edges {
             for pattern in excluded_patterns {
-                let Some(end) = Self::insert_pattern(
+                let end = Self::insert_pattern(
                     &mut fsm,
                     pattern,
                     &ends,
                     allow_overlap,
-                ) else {
-                    return None;
-                };
+                )?;
                 ends.insert(end);
                 dead_states.insert(end);
             }

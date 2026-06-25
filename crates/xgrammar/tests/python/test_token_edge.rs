@@ -655,3 +655,74 @@ fn test_stag_any_tokens_exclude_redispatch() {
     assert!(m.accept_token(1));
     assert!(m.is_terminated());
 }
+
+// --- Lookahead assertion + kToken, and rollback ---
+
+#[test]
+fn test_lookahead_exact_with_token_set() {
+    let vocab = ["<s>", "</s>", "abc", "abcd", "X"];
+    let mut m =
+        make_matcher(&vocab, "rule_a ::= [a-z]+\nroot ::= rule_a Token(4)\n");
+    assert_eq!(rejected(&mut m, 5), BTreeSet::from([0, 1, 4]));
+}
+
+#[test]
+fn test_lookahead_token_set_suffix_nonempty_rejected() {
+    let vocab = ["<s>", "</s>", "ab", "a", "X"];
+    let mut m =
+        make_matcher(&vocab, "rule_a ::= \"a\"\nroot ::= rule_a Token(4)\n");
+    assert_eq!(rejected(&mut m, 5), BTreeSet::from([0, 1, 2, 4]));
+}
+
+#[test]
+fn test_lookahead_mixed_char_and_token() {
+    let vocab = ["<s>", "</s>", "abc", "abc!", "X"];
+    let mut m = make_matcher(
+        &vocab,
+        "rule_a ::= [a-z]+\nroot ::= rule_a \"!\" Token(4)\n",
+    );
+    assert_eq!(rejected(&mut m, 5), BTreeSet::from([0, 1, 4]));
+}
+
+#[test]
+fn test_rollback() {
+    let vocab = [
+        "<s>", "</s>", "<tool>", "<code>", "hello", "world", "fn(", ")", "x",
+        "y",
+    ];
+    let grammar = "arg ::= [a-z]+\ncall ::= \"fn(\" Token(8, 9) \",\" arg \")\"\nroot ::= TokenTagDispatch(\n  (2, call),\n  excludes=(3,)\n)";
+    let mut m = make_matcher(&vocab, grammar);
+
+    let mask_0 = accepted(&mut m, 10);
+    assert!(m.accept_token(2)); // <tool> trigger
+    let mask_1 = accepted(&mut m, 10);
+    assert!(m.accept_token(6)); // fn(
+    let mask_2 = accepted(&mut m, 10);
+    assert!(m.accept_token(8)); // x (Token edge)
+    let mask_3 = accepted(&mut m, 10);
+
+    // Rollback all 3 tokens.
+    m.rollback(3);
+    assert_eq!(accepted(&mut m, 10), mask_0);
+
+    // Re-accept and verify masks match.
+    assert!(m.accept_token(2));
+    assert_eq!(accepted(&mut m, 10), mask_1);
+    assert!(m.accept_token(6));
+    assert_eq!(accepted(&mut m, 10), mask_2);
+    assert!(m.accept_token(8));
+    assert_eq!(accepted(&mut m, 10), mask_3);
+
+    // Rollback 2, then continue on a different path.
+    m.rollback(2);
+    assert_eq!(accepted(&mut m, 10), mask_1);
+    assert!(m.accept_token(6));
+    assert!(m.accept_token(9)); // y instead of x
+    assert_eq!(accepted(&mut m, 10), mask_3); // same: need ","
+
+    // Rollback 1 past the token edge, re-accept.
+    m.rollback(1);
+    assert_eq!(accepted(&mut m, 10), mask_2);
+    assert!(m.accept_token(8));
+    assert_eq!(accepted(&mut m, 10), mask_3);
+}

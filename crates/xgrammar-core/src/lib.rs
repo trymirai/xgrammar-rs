@@ -15,6 +15,7 @@ pub mod converter;
 pub mod fsm;
 pub mod functor;
 pub mod grammar;
+pub mod matcher;
 pub mod parser;
 pub mod support;
 

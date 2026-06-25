@@ -89,7 +89,62 @@ impl Grammar {
         })
     }
 
-    /// Deserializes a grammar from its `"v13"` JSON form.
+    /// Serializes the grammar to a JSON value including FSM data (for compiled grammar
+    /// serialization where the FSMs are pre-built and should be embedded).
+    #[must_use]
+    pub fn serialize_json_value_with_fsm(&self) -> Value {
+        let mut offsets: Vec<i32> =
+            Vec::with_capacity(self.num_exprs() as usize + 1);
+        let mut flat: Vec<i32> = Vec::new();
+        for id in 0..self.num_exprs() {
+            offsets.push(flat.len() as i32);
+            let expr = self.expr(id);
+            flat.push(expr.ty as i32);
+            flat.push(expr.data.len() as i32);
+            flat.extend_from_slice(expr.data);
+        }
+        let rules: Vec<Value> = self
+            .rules()
+            .iter()
+            .map(|r| {
+                json!([
+                    r.name,
+                    r.body_expr_id,
+                    r.lookahead_assertion_id,
+                    r.is_exact_lookahead
+                ])
+            })
+            .collect();
+        let complete_fsm = if self.is_optimized() {
+            self.complete_fsm().serialize_json_value()
+        } else {
+            Value::Null
+        };
+        let per_rule_fsms: Vec<Value> = if self.is_optimized() {
+            self.per_rule_fsms_slice()
+                .iter()
+                .map(|opt| {
+                    opt.as_ref()
+                        .map(|fsm| fsm.serialize_json_value())
+                        .unwrap_or(Value::Null)
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+        json!({
+            "rules": rules,
+            "grammar_expr_data": offsets,
+            "grammar_expr_indptr": flat,
+            "root_rule_id": self.root_rule_id(),
+            "complete_fsm": complete_fsm,
+            "per_rule_fsms": per_rule_fsms,
+            "allow_empty_rule_ids": self.allow_empty_rule_ids(),
+            "optimized": self.is_optimized(),
+        })
+    }
+
+    /// Deserializes a grammar from its `"v11"` JSON form.
     ///
     /// # Errors
     /// Returns [`DeserializeError`] for invalid JSON, a version mismatch, or a malformed body.

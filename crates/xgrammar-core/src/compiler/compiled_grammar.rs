@@ -70,10 +70,7 @@ impl CompiledGrammar {
     /// Serializes the compiled grammar to a JSON value.
     #[must_use]
     pub fn serialize_json_value(&self) -> Value {
-        let mut grammar = self.grammar.serialize_json_value();
-        if let Some(obj) = grammar.as_object_mut() {
-            obj.remove("__VERSION__");
-        }
+        let grammar = self.grammar.serialize_json_value_with_fsm();
         json!({
             "grammar": grammar,
             "tokenizer_metadata": self.tokenizer_info.metadata_value(),
@@ -90,8 +87,9 @@ impl CompiledGrammar {
         json_str: &str,
         tokenizer_info: &TokenizerInfo,
     ) -> Result<Self, DeserializeError> {
-        let value: Value = serde_json::from_str(json_str)
-            .map_err(|error| DeserializeError::InvalidJson(error.to_string()))?;
+        let value: Value = serde_json::from_str(json_str).map_err(|error| {
+            DeserializeError::InvalidJson(error.to_string())
+        })?;
         match value.get("__VERSION__").and_then(Value::as_str) {
             Some(SERIALIZATION_VERSION) => {},
             Some(other) => {

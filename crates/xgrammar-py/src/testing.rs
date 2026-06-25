@@ -122,29 +122,29 @@ fn _print_grammar_fsms(grammar: &Grammar) -> String {
 }
 
 #[pyfunction]
-fn _qwen_xml_tool_calling_to_ebnf(_schema: String) -> PyResult<String> {
-    Err(pyo3::exceptions::PyNotImplementedError::new_err(
-        "XML tool-calling converter not yet implemented in pure-Rust core",
-    ))
+fn _qwen_xml_tool_calling_to_ebnf(schema: String) -> PyResult<String> {
+    xgrammar::converter::qwen_xml_tool_calling_to_ebnf(&schema)
+        .map_err(map_schema_error)
 }
 
 #[pyfunction]
-fn _minimax_xml_tool_calling_to_ebnf(_schema: String) -> PyResult<String> {
-    Err(pyo3::exceptions::PyNotImplementedError::new_err(
-        "XML tool-calling converter not yet implemented in pure-Rust core",
-    ))
+fn _minimax_xml_tool_calling_to_ebnf(schema: String) -> PyResult<String> {
+    xgrammar::converter::minimax_xml_tool_calling_to_ebnf(&schema)
+        .map_err(map_schema_error)
 }
 
 #[pyfunction]
-fn _deepseek_xml_tool_calling_to_ebnf(_schema: String) -> PyResult<String> {
-    Err(pyo3::exceptions::PyNotImplementedError::new_err(
-        "XML tool-calling converter not yet implemented in pure-Rust core",
-    ))
+fn _deepseek_xml_tool_calling_to_ebnf(schema: String) -> PyResult<String> {
+    xgrammar::converter::deepseek_xml_tool_calling_to_ebnf(&schema)
+        .map_err(map_schema_error)
 }
 
 #[pyfunction]
-fn _glm_xml_tool_calling_to_ebnf(_schema: String) -> PyResult<String> {
-    Err(pyo3::exceptions::PyNotImplementedError::new_err(
-        "XML tool-calling converter not yet implemented in pure-Rust core",
-    ))
+fn _glm_xml_tool_calling_to_ebnf(schema: String) -> PyResult<String> {
+    xgrammar::converter::glm_xml_tool_calling_to_ebnf(&schema)
+        .map_err(map_schema_error)
+}
+
+fn map_schema_error(error: xgrammar::converter::SchemaError) -> PyErr {
+    pyo3::exceptions::PyValueError::new_err(error.to_string())
 }

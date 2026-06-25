@@ -13,6 +13,7 @@ use super::{
         TriggeredTagsFormat,
     },
     structural_tag_parser::parse_structural_tag,
+    xml_tool_calling_converter::xml_tool_calling_to_ebnf,
 };
 use crate::{
     functor::{add_sub_grammar, grammar_normalizer},
@@ -489,21 +490,20 @@ impl StructuralTagConverter {
                 Ok(self.builder.add_rule_with_hint("const_string", choices))
             },
             Format::JsonSchema(f) => {
-                if f.style != "json" {
-                    return Err(Ist::invalid(format!(
-                        "Unsupported parsing type: {}",
-                        f.style
-                    )));
-                }
-                let ebnf = json_schema_to_ebnf(
-                    &f.json_schema,
-                    true,
-                    None,
-                    None,
-                    true,
-                    None,
-                )
-                .map_err(|e| Ist::InvalidJsonSchema(e.to_string()))?;
+                let ebnf = if f.style == "json" {
+                    json_schema_to_ebnf(
+                        &f.json_schema,
+                        true,
+                        None,
+                        None,
+                        true,
+                        None,
+                    )
+                    .map_err(|e| Ist::InvalidJsonSchema(e.to_string()))?
+                } else {
+                    xml_tool_calling_to_ebnf(&f.json_schema, &f.style)
+                        .map_err(|e| Ist::InvalidJsonSchema(e.to_string()))?
+                };
                 let sub = Grammar::from_ebnf(&ebnf, "root")
                     .map_err(|e| Ist::InvalidJsonSchema(e.to_string()))?;
                 Ok(add_sub_grammar(&mut self.builder, &sub))

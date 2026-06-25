@@ -85,8 +85,7 @@ impl JsonSchemaConverter {
     ) -> Self {
         let item_sep = match separators {
             Some((s, _)) => s.to_owned(),
-            None if any_whitespace => ",".to_owned(),
-            None if indent.is_some() => ",".to_owned(),
+            None if any_whitespace || indent.is_some() => ",".to_owned(),
             None => ", ".to_owned(),
         };
         let colon_sep = match separators {

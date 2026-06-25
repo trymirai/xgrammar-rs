@@ -8,7 +8,9 @@ use super::{
     json_schema_converter::json_schema_to_ebnf,
     structural_tag_error::StructuralTagError,
     structural_tag_format::{
-        Format, IntOrString, TagBegin, TagEnd, TagFormat, TokenFormat,
+        Format, IntOrString, TagBegin, TagEnd, TagFormat,
+        TagsWithSeparatorFormat, TokenFormat, TokenTriggeredTagsFormat,
+        TriggeredTagsFormat,
     },
     structural_tag_parser::parse_structural_tag,
 };
@@ -652,16 +654,9 @@ impl StructuralTagConverter {
         }
     }
 
-    fn is_prefix(
-        prefix: &str,
-        full: &str,
-    ) -> bool {
-        full.starts_with(prefix)
-    }
-
     fn visit_triggered_tags(
         &mut self,
-        f: &super::structural_tag_format::TriggeredTagsFormat,
+        f: &TriggeredTagsFormat,
     ) -> Result<i32, Ist> {
         let mut trigger_to_tag_ids: Vec<Vec<usize>> =
             vec![Vec::new(); f.triggers.len()];
@@ -675,7 +670,7 @@ impl StructuralTagConverter {
             };
             let mut matched: Option<usize> = None;
             for (it_trigger, trigger) in f.triggers.iter().enumerate() {
-                if Self::is_prefix(trigger, tag_begin) {
+                if tag_begin.starts_with(trigger) {
                     if matched.is_some() {
                         return Err(Ist::invalid(
                             "One tag matches multiple triggers in a triggered tags format",
@@ -765,7 +760,7 @@ impl StructuralTagConverter {
 
     fn visit_tags_with_separator(
         &mut self,
-        f: &super::structural_tag_format::TagsWithSeparatorFormat,
+        f: &TagsWithSeparatorFormat,
     ) -> Result<i32, Ist> {
         let mut choice_ids = Vec::with_capacity(f.tags.len());
         for tag in &f.tags {
@@ -818,7 +813,7 @@ impl StructuralTagConverter {
 
     fn visit_token_triggered_tags(
         &mut self,
-        f: &super::structural_tag_format::TokenTriggeredTagsFormat,
+        f: &TokenTriggeredTagsFormat,
     ) -> Result<i32, Ist> {
         let mut trigger_to_tag_ids: Vec<Vec<usize>> =
             vec![Vec::new(); f.trigger_tokens.len()];

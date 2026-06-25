@@ -4,11 +4,15 @@
 //! States are integer ids; each state owns a `Vec<FsmEdge>`. Aux-bearing edges (repeat,
 //! token, exclude-token) index into the shared `edge_aux_data` buffer.
 
-use std::collections::{HashSet, VecDeque};
+use std::{
+    collections::{HashSet, VecDeque},
+    fmt::Write,
+};
 
 use super::fsm_edge::{
     ExcludeTokenEdgeRef, FsmEdge, RepeatEdgeRef, TokenEdgeRef, edge_type,
 };
+use crate::support::escape_codepoint;
 
 /// Sentinel returned by [`Fsm::next_state`] when no transition exists.
 pub const NO_NEXT_STATE: i32 = -1;
@@ -81,6 +85,93 @@ impl Fsm {
     #[must_use]
     pub fn edge_aux_data(&self) -> &[i32] {
         &self.edge_aux_data
+    }
+
+    /// Replaces the shared auxiliary-data buffer.
+    pub fn set_edge_aux_data(
+        &mut self,
+        data: Vec<i32>,
+    ) {
+        self.edge_aux_data = data;
+    }
+
+    /// Renders the given `states` (or all states, if `None`) as a multi-line edge listing —
+    /// a port of `EdgesToString`.
+    #[must_use]
+    pub fn edges_to_string(
+        &self,
+        states: Option<&[i32]>,
+    ) -> String {
+        let mut result = String::from("[\n");
+        let render = |result: &mut String, state: i32| {
+            let _ = write!(result, "{state}: [");
+            let edges = &self.edges[state as usize];
+            for (j, edge) in edges.iter().enumerate() {
+                if edge.min >= 0 && edge.min != edge.max {
+                    let lo = escape_codepoint(edge.min, &[]);
+                    let hi = escape_codepoint(edge.max, &[]);
+                    let _ = write!(result, "[{lo}-{hi}]->{}", edge.target);
+                } else if edge.min >= 0 {
+                    let c = escape_codepoint(edge.min, &[]);
+                    let _ = write!(result, "'{c}'->{}", edge.target);
+                } else if edge.is_rule_ref() {
+                    let _ =
+                        write!(result, "Rule({})->{}", edge.max, edge.target);
+                } else if edge.is_epsilon() {
+                    let _ = write!(result, "Eps->{}", edge.target);
+                } else if edge.is_eos() {
+                    let _ = write!(result, "EOS->{}", edge.target);
+                } else if edge.is_repeat_ref() {
+                    let info = self.repeat_edge_info(edge.max);
+                    let _ = write!(
+                        result,
+                        "Repeat(rule={}, min={}, max={})->{}",
+                        info.rule_id(),
+                        info.lower(),
+                        info.upper(),
+                        edge.target
+                    );
+                } else if edge.is_token() {
+                    let info = self.token_edge_info(edge.max);
+                    result.push_str("Token(");
+                    for (k, id) in info.token_ids().iter().enumerate() {
+                        if k > 0 {
+                            result.push_str(", ");
+                        }
+                        let _ = write!(result, "{id}");
+                    }
+                    let _ = write!(result, ")->{}", edge.target);
+                } else if edge.is_exclude_token() {
+                    let info = self.exclude_token_edge_info(edge.max);
+                    result.push_str("ExcludeToken(");
+                    for (k, id) in info.token_ids().iter().enumerate() {
+                        if k > 0 {
+                            result.push_str(", ");
+                        }
+                        let _ = write!(result, "{id}");
+                    }
+                    let _ = write!(result, ")->{}", edge.target);
+                }
+                if j < edges.len() - 1 {
+                    result.push_str(", ");
+                }
+            }
+            result.push_str("]\n");
+        };
+        match states {
+            Some(states) => {
+                for &state in states {
+                    render(&mut result, state);
+                }
+            },
+            None => {
+                for state in 0..self.num_states() {
+                    render(&mut result, state);
+                }
+            },
+        }
+        result.push(']');
+        result
     }
 
     /// Adds a new state, returning its id.

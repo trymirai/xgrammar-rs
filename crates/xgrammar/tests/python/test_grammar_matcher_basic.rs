@@ -29,3 +29,24 @@ fn test_accept_string() {
         assert_eq!(m.accept_bytes(input), accepted, "input {input:?}");
     }
 }
+
+/// `_is_grammar_accept_string(json_grammar, ...)` against the built-in JSON grammar.
+fn json_accepts(input: &str) -> bool {
+    let grammar = Grammar::builtin_json_grammar();
+    let mut m = GrammarMatcher::from_grammar(&grammar, true);
+    m.accept_string(input) && m.is_terminated()
+}
+
+#[test]
+fn test_grammar_accept() {
+    for input in [r#"{"name": "John"}"#, r#"{ "name" : "John" }"#] {
+        assert!(json_accepts(input), "should accept {input:?}");
+    }
+}
+
+#[test]
+fn test_grammar_refuse() {
+    for input in [r#"{ name: "John" }"#, r#"{ "name": "John" } "#] {
+        assert!(!json_accepts(input), "should refuse {input:?}");
+    }
+}

@@ -81,6 +81,14 @@ impl Fsm {
         &self.edges[state as usize]
     }
 
+    /// A mutable reference to the outgoing edge list of `state`.
+    pub fn state_edges_mut(
+        &mut self,
+        state: i32,
+    ) -> &mut Vec<FsmEdge> {
+        &mut self.edges[state as usize]
+    }
+
     /// The shared auxiliary-data buffer.
     #[must_use]
     pub fn edge_aux_data(&self) -> &[i32] {

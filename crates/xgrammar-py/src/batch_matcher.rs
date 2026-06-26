@@ -58,8 +58,7 @@ impl BatchGrammarMatcher {
                 .iter_mut()
                 .enumerate()
                 .map(|(i, m)| {
-                    let index =
-                        indices.as_ref().map_or(i as i32, |idx| idx[i]);
+                    let index = indices.as_ref().map_or(i as i32, |idx| idx[i]);
                     Work {
                         matcher: &mut m.inner as *mut _,
                         buf: buf_ptr,
@@ -93,8 +92,8 @@ impl BatchGrammarMatcher {
                             let buf_slice = std::slice::from_raw_parts_mut(
                                 w.buf, w.buf_len,
                             );
-                            let _ =
-                                matcher.fill_next_token_bitmask(buf_slice, w.index);
+                            let _ = matcher
+                                .fill_next_token_bitmask(buf_slice, w.index);
                         }
                     });
                 });

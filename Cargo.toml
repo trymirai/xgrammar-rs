@@ -23,6 +23,7 @@ authors = ["Eugene Bokhan <eugenebokhan@gmail.com>"]
 
 [workspace.dependencies]
 xgrammar-core = { path = "crates/xgrammar-core", version = "0.3.0" }
+getrandom = { version = "0.3", features = ["wasm_js"] }
 xgrammar = { path = "crates/xgrammar", version = "0.3.0" }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
@@ -75,3 +76,4 @@ strip = true
 # Optimize dependencies even in dev builds — the parsing/automata tests are heavy.
 [profile.dev.package."*"]
 opt-level = 3
+

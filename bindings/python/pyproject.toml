@@ -1,0 +1,21 @@
+[build-system]
+requires = ["maturin>=1.7,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "xgrammar-rs"
+version = "0.3.0"
+description = "PyO3 bindings for the pure-Rust xgrammar core."
+license = { text = "Apache-2.0" }
+requires-python = ">=3.9"
+classifiers = [
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+[tool.maturin]
+module-name = "xgrammar_rs"
+manifest-path = "../../crates/xgrammar-py/Cargo.toml"
+features = ["bindings-pyo3"]
+python-source = "../../external/xgrammar/python"

@@ -1,0 +1,6 @@
+# For wasm32-unknown-unknown, getrandom needs the wasm_js feature flag.
+[target.wasm32-unknown-unknown]
+rustflags = []
+
+[unstable]
+# (no unstable features needed currently)

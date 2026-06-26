@@ -17,6 +17,8 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 ahash = { workspace = true }
 smallvec = { workspace = true }
+# Needed by ahash on wasm32-unknown-unknown (enables JS random source).
+getrandom = { workspace = true }
 
 [lints]
 workspace = true

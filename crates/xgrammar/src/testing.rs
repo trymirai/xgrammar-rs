@@ -1,16 +1,15 @@
 //! Test and debug helpers re-exported for bindings and integration tests.
 
-use crate::{
-    fsm::CompactFsmWithStartEnd,
-    grammar::Grammar,
-};
+use crate::{fsm::CompactFsmWithStartEnd, grammar::Grammar};
 
 fn format_compact_fsm_with_start_end(fsm: &CompactFsmWithStartEnd) -> String {
     let end_states: Vec<String> = fsm
         .ends()
         .iter()
         .enumerate()
-        .filter_map(|(state, &accepting)| accepting.then_some(state.to_string()))
+        .filter_map(|(state, &accepting)| {
+            accepting.then_some(state.to_string())
+        })
         .collect();
     format!(
         "FSM(num_states={}, start={}, end=[{}], edges={})",

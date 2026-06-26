@@ -1,12 +1,27 @@
-//! Efficient, flexible and portable **structured generation** for Rust.
+//! Pure-Rust core of [XGrammar](https://github.com/mlc-ai/xgrammar) — an efficient,
+//! flexible and portable engine for structured generation.
 //!
-//! `xgrammar` is a pure-Rust reimplementation of [XGrammar](https://github.com/mlc-ai/xgrammar).
-//! It builds the constrained-decoding grammar, compiles it against a tokenizer, and produces
-//! token bitmasks for masking LLM logits — with no C/C++ dependency, on every platform Rust
-//! targets (including `wasm32`).
+//! This crate is a from-scratch Rust reimplementation of the xgrammar C++ core. It
+//! carries no C/C++ dependency and builds with `cargo` alone on every supported target
+//! (macOS, Linux, Windows, iOS, `wasm32`).
 //!
-//! The public API is re-exported from [`xgrammar_core`]; this crate adds the optional
-//! HuggingFace tokenizer integration (`hf`/`tokenizers` feature) and the cross-language
-//! bindings layer.
+//! Modules are introduced milestone by milestone:
+//! `support` → `grammar` → `parser` → `converter` → `fsm` → `compiler` → `matcher`
+//! → `tokenizer` → `error`.
 
-pub use xgrammar_core::*;
+#![forbid(unsafe_op_in_unsafe_fn)]
+
+pub mod compiler;
+pub mod config;
+pub mod converter;
+pub mod fsm;
+pub mod functor;
+pub mod grammar;
+pub mod matcher;
+pub mod parser;
+pub mod support;
+pub mod testing;
+pub mod tokenizer;
+
+/// The crate version, as declared in `Cargo.toml`.
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");

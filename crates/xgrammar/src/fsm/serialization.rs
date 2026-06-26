@@ -35,8 +35,7 @@ fn serialize_edges(edges: &crate::support::Compact2dArray<FsmEdge>) -> Value {
     let data: Vec<Value> = edges
         .iter()
         .flat_map(|row| {
-            row.iter()
-                .map(|edge| json!([edge.min, edge.max, edge.target]))
+            row.iter().map(|edge| json!([edge.min, edge.max, edge.target]))
         })
         .collect();
     json!({
@@ -49,26 +48,27 @@ fn deserialize_edges(
     value: &Value
 ) -> Result<crate::support::Compact2dArray<FsmEdge>, DeserializeError> {
     let obj = value.as_object().ok_or_else(|| {
-        DeserializeError::Format("compact fsm edges must be an object".to_owned())
+        DeserializeError::Format(
+            "compact fsm edges must be an object".to_owned(),
+        )
     })?;
     let data = obj.get("data_").ok_or_else(|| {
         DeserializeError::Format("missing compact fsm data_".to_owned())
     })?;
-    let indptr = i32_array(
-        obj.get("indptr_")
-            .ok_or_else(|| DeserializeError::Format("missing compact fsm indptr_".to_owned()))?,
-    )?;
+    let indptr = i32_array(obj.get("indptr_").ok_or_else(|| {
+        DeserializeError::Format("missing compact fsm indptr_".to_owned())
+    })?)?;
     let rows = data.as_array().ok_or_else(|| {
-        DeserializeError::Format("compact fsm data_ must be an array".to_owned())
+        DeserializeError::Format(
+            "compact fsm data_ must be an array".to_owned(),
+        )
     })?;
     let mut edges = crate::support::Compact2dArray::<FsmEdge>::new();
     for state in 0..indptr.len().saturating_sub(1) {
         let start = indptr[state] as usize;
         let end = indptr[state + 1] as usize;
-        let row: Result<Vec<FsmEdge>, DeserializeError> = rows[start..end]
-            .iter()
-            .map(parse_edge)
-            .collect();
+        let row: Result<Vec<FsmEdge>, DeserializeError> =
+            rows[start..end].iter().map(parse_edge).collect();
         edges.push_row(&row?);
     }
     Ok(edges)
@@ -83,11 +83,7 @@ fn parse_edge(value: &Value) -> Result<FsmEdge, DeserializeError> {
             "fsm edge must have three elements".to_owned(),
         ));
     }
-    Ok(FsmEdge::new(
-        i32_of(&arr[0])?,
-        i32_of(&arr[1])?,
-        i32_of(&arr[2])?,
-    ))
+    Ok(FsmEdge::new(i32_of(&arr[0])?, i32_of(&arr[1])?, i32_of(&arr[2])?))
 }
 
 fn i32_of(value: &Value) -> Result<i32, DeserializeError> {
@@ -130,9 +126,12 @@ impl CompactFsm {
         let edges = obj.get("edges").ok_or_else(|| {
             DeserializeError::Format("missing compact fsm edges".to_owned())
         })?;
-        let edge_aux_data = i32_array(obj.get("edge_aux_data").ok_or_else(|| {
-            DeserializeError::Format("missing compact fsm edge_aux_data".to_owned())
-        })?)?;
+        let edge_aux_data =
+            i32_array(obj.get("edge_aux_data").ok_or_else(|| {
+                DeserializeError::Format(
+                    "missing compact fsm edge_aux_data".to_owned(),
+                )
+            })?)?;
         Ok(Self::from_parts(deserialize_edges(edges)?, edge_aux_data))
     }
 }
@@ -204,7 +203,8 @@ impl CompactFsmWithStartEndWithSize {
         })?;
         if arr.len() != 3 {
             return Err(DeserializeError::Format(
-                "compact fsm with start/end/size must have three elements".to_owned(),
+                "compact fsm with start/end/size must have three elements"
+                    .to_owned(),
             ));
         }
         let fsm = CompactFsmWithStartEnd::deserialize_json_value(&arr[0])?;

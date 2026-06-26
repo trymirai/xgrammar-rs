@@ -1,7 +1,6 @@
 [workspace]
 resolver = "3"
 members = [
-    "crates/xgrammar-core",
     "crates/xgrammar",
     "crates/bindings",
     "crates/bindings-types",
@@ -22,7 +21,6 @@ homepage = "https://github.com/trymirai/xgrammar-rs"
 authors = ["Eugene Bokhan <eugenebokhan@gmail.com>"]
 
 [workspace.dependencies]
-xgrammar-core = { path = "crates/xgrammar-core", version = "0.3.0" }
 getrandom = { version = "0.3", features = ["wasm_js"] }
 xgrammar = { path = "crates/xgrammar", version = "0.3.0" }
 serde = { version = "1", features = ["derive"] }

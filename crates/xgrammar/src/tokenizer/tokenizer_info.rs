@@ -217,12 +217,9 @@ impl TokenizerInfo {
         metadata: &Value,
     ) -> Result<(), DeserializeError> {
         let expected = self.metadata_value();
-        for key in [
-            "vocab_type",
-            "vocab_size",
-            "add_prefix_space",
-            "stop_token_ids",
-        ] {
+        for key in
+            ["vocab_type", "vocab_size", "add_prefix_space", "stop_token_ids"]
+        {
             if expected.get(key) != metadata.get(key) {
                 return Err(DeserializeError::Format(format!(
                     "tokenizer metadata mismatch on {key}"

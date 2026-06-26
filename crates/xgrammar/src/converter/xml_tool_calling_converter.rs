@@ -1,7 +1,9 @@
 //! XML-style function-call schema converters (Qwen, MiniMax, DeepSeek, GLM) — a port of
 //! `XMLToolCallingConverter` in `cpp/json_schema_converter_ext.{h,cc}`.
 
-use super::{json_schema_converter::json_schema_to_ebnf_xml, schema_error::SchemaError};
+use super::{
+    json_schema_converter::json_schema_to_ebnf_xml, schema_error::SchemaError,
+};
 
 /// Which XML tool-calling wire format to emit.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -56,15 +58,17 @@ pub(crate) fn xml_wrapper(format: XmlJsonFormat) -> XmlWrapper {
 }
 
 /// Parses a style string into [`XmlJsonFormat`].
-pub(crate) fn xml_format_from_style(style: &str) -> Result<XmlJsonFormat, SchemaError> {
+pub(crate) fn xml_format_from_style(
+    style: &str
+) -> Result<XmlJsonFormat, SchemaError> {
     match style {
         "qwen_xml" => Ok(XmlJsonFormat::Qwen),
         "minimax_xml" => Ok(XmlJsonFormat::MiniMax),
         "deepseek_xml" => Ok(XmlJsonFormat::DeepSeek),
         "glm_xml" => Ok(XmlJsonFormat::Glm),
-        other => Err(SchemaError::invalid(format!(
-            "unsupported xml style: {other}"
-        ))),
+        other => {
+            Err(SchemaError::invalid(format!("unsupported xml style: {other}")))
+        },
     }
 }
 
@@ -83,7 +87,9 @@ pub fn xml_tool_calling_to_ebnf(
 ///
 /// # Errors
 /// Returns [`SchemaError`] when the schema is invalid.
-pub fn qwen_xml_tool_calling_to_ebnf(schema: &str) -> Result<String, SchemaError> {
+pub fn qwen_xml_tool_calling_to_ebnf(
+    schema: &str
+) -> Result<String, SchemaError> {
     json_schema_to_ebnf_xml(schema, XmlJsonFormat::Qwen)
 }
 
@@ -91,7 +97,9 @@ pub fn qwen_xml_tool_calling_to_ebnf(schema: &str) -> Result<String, SchemaError
 ///
 /// # Errors
 /// Returns [`SchemaError`] when the schema is invalid.
-pub fn minimax_xml_tool_calling_to_ebnf(schema: &str) -> Result<String, SchemaError> {
+pub fn minimax_xml_tool_calling_to_ebnf(
+    schema: &str
+) -> Result<String, SchemaError> {
     json_schema_to_ebnf_xml(schema, XmlJsonFormat::MiniMax)
 }
 
@@ -99,7 +107,9 @@ pub fn minimax_xml_tool_calling_to_ebnf(schema: &str) -> Result<String, SchemaEr
 ///
 /// # Errors
 /// Returns [`SchemaError`] when the schema is invalid.
-pub fn deepseek_xml_tool_calling_to_ebnf(schema: &str) -> Result<String, SchemaError> {
+pub fn deepseek_xml_tool_calling_to_ebnf(
+    schema: &str
+) -> Result<String, SchemaError> {
     json_schema_to_ebnf_xml(schema, XmlJsonFormat::DeepSeek)
 }
 
@@ -107,6 +117,8 @@ pub fn deepseek_xml_tool_calling_to_ebnf(schema: &str) -> Result<String, SchemaE
 ///
 /// # Errors
 /// Returns [`SchemaError`] when the schema is invalid.
-pub fn glm_xml_tool_calling_to_ebnf(schema: &str) -> Result<String, SchemaError> {
+pub fn glm_xml_tool_calling_to_ebnf(
+    schema: &str
+) -> Result<String, SchemaError> {
     json_schema_to_ebnf_xml(schema, XmlJsonFormat::Glm)
 }

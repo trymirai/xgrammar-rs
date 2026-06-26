@@ -7,7 +7,9 @@
 
 use std::sync::Arc;
 
-use super::{matcher_error::MatcherTerminatedError, token_bitmask::get_bitmask_size};
+use super::{
+    matcher_error::MatcherTerminatedError, token_bitmask::get_bitmask_size,
+};
 use crate::{
     functor::grammar_optimizer,
     grammar::Grammar,
@@ -356,7 +358,7 @@ impl GrammarMatcher {
     /// # Errors
     /// Returns [`MatcherTerminatedError`] after the stop token has been accepted.
     pub fn find_jump_forward_string(
-        &mut self,
+        &mut self
     ) -> Result<Vec<u8>, MatcherTerminatedError> {
         if self.is_stop_token_accepted() {
             return Err(MatcherTerminatedError);

@@ -398,10 +398,6 @@ pub fn generate_range_regex(
     format!("^({})$", parts.join("|"))
 }
 
-fn escape_dot_for_regex(s: &str) -> String {
-    s.replace('.', "\\.")
-}
-
 fn format_float(
     value: f64,
     precision: i32,

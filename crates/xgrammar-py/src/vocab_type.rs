@@ -1,15 +1,19 @@
 //! Python `VocabType` enum — mirrors [`xgrammar::tokenizer::VocabType`].
 
 /// How a tokenizer vocabulary is encoded (RAW, BYTE_FALLBACK, BYTE_LEVEL).
+///
+/// No explicit discriminants — NAPI's string-enum codegen rejects them. The numeric
+/// mapping (0/1/2) lives in [`VocabType::to_core`] / [`VocabType::from_core`] and the
+/// `TryFrom<i32>` impl, which the Python layer relies on.
 #[bindings::export(Enumeration)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VocabType {
     /// Tokens are used verbatim.
-    Raw = 0,
+    Raw,
     /// SentencePiece-style byte fallback encoding.
-    ByteFallback = 1,
+    ByteFallback,
     /// GPT-2-style byte-level encoding.
-    ByteLevel = 2,
+    ByteLevel,
 }
 
 impl VocabType {

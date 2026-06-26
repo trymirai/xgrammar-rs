@@ -1,7 +1,5 @@
 //! `Grammar` binding — a thin opaque wrapper over [`xgrammar::grammar::Grammar`].
 
-use pyo3::PyErr;
-
 use crate::error::{map_deserialize_error, map_error};
 
 /// A context-free grammar compiled from EBNF, JSON Schema, regex, or a structural tag.
@@ -26,7 +24,7 @@ impl Grammar {
     pub fn from_ebnf(
         ebnf_string: String,
         root_rule_name: String,
-    ) -> Result<Grammar, PyErr> {
+    ) -> Result<Grammar, crate::error::BindingError> {
         xgrammar::grammar::Grammar::from_ebnf(&ebnf_string, &root_rule_name)
             .map(Grammar::wrap)
             .map_err(map_error)
@@ -43,7 +41,7 @@ impl Grammar {
         strict_mode: bool,
         max_whitespace_cnt: Option<i32>,
         print_converted_ebnf: bool,
-    ) -> Result<Grammar, PyErr> {
+    ) -> Result<Grammar, crate::error::BindingError> {
         let seps = separators.as_ref().map(|(a, b)| (a.as_str(), b.as_str()));
         let g = xgrammar::grammar::Grammar::from_json_schema(
             &schema,
@@ -65,7 +63,7 @@ impl Grammar {
     pub fn from_regex(
         regex_string: String,
         print_converted_ebnf: bool,
-    ) -> Result<Grammar, PyErr> {
+    ) -> Result<Grammar, crate::error::BindingError> {
         let g = xgrammar::grammar::Grammar::from_regex(&regex_string)
             .map_err(map_error)?;
         if print_converted_ebnf {
@@ -78,7 +76,7 @@ impl Grammar {
     #[bindings::export(Method(Factory))]
     pub fn from_structural_tag(
         structural_tag_json: String
-    ) -> Result<Grammar, PyErr> {
+    ) -> Result<Grammar, crate::error::BindingError> {
         xgrammar::grammar::Grammar::from_structural_tag(&structural_tag_json)
             .map(Grammar::wrap)
             .map_err(map_error)
@@ -112,7 +110,9 @@ impl Grammar {
 
     /// Deserializes a grammar from its `"v11"` JSON form.
     #[bindings::export(Method(Factory))]
-    pub fn deserialize_json(json_string: String) -> Result<Grammar, PyErr> {
+    pub fn deserialize_json(
+        json_string: String
+    ) -> Result<Grammar, crate::error::BindingError> {
         xgrammar::grammar::Grammar::deserialize_json(&json_string)
             .map(Grammar::wrap)
             .map_err(map_deserialize_error)

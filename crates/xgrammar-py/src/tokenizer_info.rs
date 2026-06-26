@@ -19,7 +19,7 @@ impl TokenizerInfo {
 
 fn parse_vocab_type(
     vocab_type: i32
-) -> Result<xgrammar::tokenizer::VocabType, pyo3::PyErr> {
+) -> Result<xgrammar::tokenizer::VocabType, crate::error::BindingError> {
     VocabType::try_from(vocab_type).map(VocabType::to_core).map_err(map_error)
 }
 
@@ -33,7 +33,7 @@ impl TokenizerInfo {
         vocab_size: Option<i32>,
         stop_token_ids: Option<Vec<i32>>,
         add_prefix_space: bool,
-    ) -> Result<TokenizerInfo, pyo3::PyErr> {
+    ) -> Result<TokenizerInfo, crate::error::BindingError> {
         let vt = parse_vocab_type(vocab_type)?;
         Ok(TokenizerInfo::wrap(xgrammar::tokenizer::TokenizerInfo::new(
             &encoded_vocab,
@@ -49,7 +49,7 @@ impl TokenizerInfo {
     pub fn from_vocab_and_metadata(
         encoded_vocab: Vec<String>,
         metadata: String,
-    ) -> Result<TokenizerInfo, pyo3::PyErr> {
+    ) -> Result<TokenizerInfo, crate::error::BindingError> {
         xgrammar::tokenizer::TokenizerInfo::from_vocab_and_metadata(
             &encoded_vocab,
             &metadata,
@@ -104,7 +104,7 @@ impl TokenizerInfo {
     #[bindings::export(Method(Factory))]
     pub fn deserialize_json(
         json_string: String
-    ) -> Result<TokenizerInfo, pyo3::PyErr> {
+    ) -> Result<TokenizerInfo, crate::error::BindingError> {
         xgrammar::tokenizer::TokenizerInfo::deserialize_json(&json_string)
             .map(TokenizerInfo::wrap)
             .map_err(map_error)
@@ -120,7 +120,7 @@ impl TokenizerInfo {
     #[bindings::export(Method(Factory))]
     pub fn _detect_metadata_from_hf(
         backend_str: String
-    ) -> Result<String, pyo3::PyErr> {
+    ) -> Result<String, crate::error::BindingError> {
         xgrammar::tokenizer::TokenizerInfo::detect_metadata_from_hf(
             &backend_str,
         )

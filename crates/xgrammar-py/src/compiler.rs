@@ -54,7 +54,7 @@ impl CompiledGrammar {
     pub fn deserialize_json(
         json_string: String,
         tokenizer_info: TokenizerInfo,
-    ) -> Result<CompiledGrammar, pyo3::PyErr> {
+    ) -> Result<CompiledGrammar, crate::error::BindingError> {
         xgrammar::compiler::CompiledGrammar::deserialize_json(
             &json_string,
             &tokenizer_info.inner,
@@ -149,7 +149,7 @@ impl GrammarCompiler {
     pub fn compile_structural_tag(
         &self,
         structural_tag_json: String,
-    ) -> Result<CompiledGrammar, pyo3::PyErr> {
+    ) -> Result<CompiledGrammar, crate::error::BindingError> {
         self.inner
             .compile_structural_tag(&structural_tag_json)
             .map(CompiledGrammar::wrap)

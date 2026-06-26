@@ -8,18 +8,29 @@
 #[cfg(feature = "bindings-uniffi")]
 uniffi::setup_scaffolding!();
 
-mod batch_matcher;
-mod bitmask_util;
+// Core types — exported to every backend via `#[bindings::export]`.
 mod compiler;
-mod config;
 mod error;
 mod grammar;
-mod grammar_functor;
-mod kernels;
 mod matcher;
-mod testing;
 mod tokenizer_info;
 mod vocab_type;
+
+// PyO3-only surface: the torch/DLPack bitmask helpers, the `testing`/`config`/`kernels`
+// submodules, and the batch matcher. These use the CPython C-API directly and only exist
+// for the Python backend; the other backends expose the core grammar API only.
+#[cfg(feature = "bindings-pyo3")]
+mod batch_matcher;
+#[cfg(feature = "bindings-pyo3")]
+mod bitmask_util;
+#[cfg(feature = "bindings-pyo3")]
+mod config;
+#[cfg(feature = "bindings-pyo3")]
+mod grammar_functor;
+#[cfg(feature = "bindings-pyo3")]
+mod kernels;
+#[cfg(feature = "bindings-pyo3")]
+mod testing;
 
 /// The compiled PyO3 extension module (`xgrammar_rs`). Each `#[bindings::export]` type
 /// registers itself via `inventory`; this loop adds them all to the module.

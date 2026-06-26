@@ -4,7 +4,9 @@ use pyo3::{exceptions::PyRuntimeError, prelude::*, types::PyModuleMethods};
 
 use crate::{bitmask_util::with_writable_i32_buffer, matcher::GrammarMatcher};
 
-/// Batched matcher front-end (thread pool deferred to the perf milestone).
+/// Batched matcher front-end. `batch_fill_next_token_bitmask` uses rayon to
+/// fill bitmask rows in parallel — each matcher operates on its own row (no
+/// aliasing), so concurrent writes are safe.
 #[pyclass]
 pub struct BatchGrammarMatcher {
     max_threads: i32,
@@ -28,14 +30,76 @@ impl BatchGrammarMatcher {
         indices: Option<Vec<i32>>,
         _debug_print: bool,
     ) -> PyResult<()> {
-        let _ = self.max_threads;
+        let n_threads = self.max_threads as usize;
+
         with_writable_i32_buffer(py, bitmask, |buf| {
-            for (i, m) in matchers.iter_mut().enumerate() {
-                let index = indices.as_ref().map_or(i as i32, |idx| idx[i]);
-                m.inner.fill_next_token_bitmask(buf, index).map_err(
-                    |error| PyRuntimeError::new_err(error.to_string()),
-                )?;
+            // Collect (raw_matcher_ptr, bitmask_row_index) pairs.
+            // SAFETY invariants maintained throughout:
+            //  1. Each pointer is unique — they come from distinct `PyRefMut`
+            //     borrows, which are exclusive references.
+            //  2. Each matcher writes to a distinct row of `buf` (unique index).
+            //  3. `buf` lives for the entire duration of this closure.
+            struct Work {
+                matcher: *mut xgrammar::matcher::GrammarMatcher,
+                buf: *mut i32,
+                buf_len: usize,
+                index: i32,
             }
+
+            // SAFETY: GrammarMatcher contains only Rust types (Arc<Grammar>,
+            // per-matcher parser state). It is Send. The buf pointer is also
+            // only accessed through non-overlapping ranges.
+            unsafe impl Send for Work {}
+
+            let buf_ptr = buf.as_mut_ptr();
+            let buf_len = buf.len();
+
+            let work: Vec<Work> = matchers
+                .iter_mut()
+                .enumerate()
+                .map(|(i, m)| {
+                    let index =
+                        indices.as_ref().map_or(i as i32, |idx| idx[i]);
+                    Work {
+                        matcher: &mut m.inner as *mut _,
+                        buf: buf_ptr,
+                        buf_len,
+                        index,
+                    }
+                })
+                .collect();
+
+            // Release the GIL while doing parallel Rust work.
+            // In pyo3 0.28, `Python::detach` is the GIL-release API
+            // (renamed from `allow_threads` in earlier versions).
+            py.detach(|| {
+                use rayon::prelude::*;
+
+                let pool = rayon::ThreadPoolBuilder::new()
+                    .num_threads(n_threads)
+                    .build()
+                    .unwrap_or_else(|_| {
+                        rayon::ThreadPoolBuilder::new()
+                            .build()
+                            .expect("rayon pool")
+                    });
+
+                pool.install(|| {
+                    work.into_par_iter().for_each(|w| {
+                        // SAFETY: no two Work items share the same matcher ptr
+                        // or the same bitmask row (index is unique per item).
+                        unsafe {
+                            let matcher = &mut *w.matcher;
+                            let buf_slice = std::slice::from_raw_parts_mut(
+                                w.buf, w.buf_len,
+                            );
+                            let _ =
+                                matcher.fill_next_token_bitmask(buf_slice, w.index);
+                        }
+                    });
+                });
+            });
+
             Ok(())
         })
     }

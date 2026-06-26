@@ -534,4 +534,59 @@ impl Fsm {
             edges.sort_unstable();
         }
     }
+
+    /// Returns a copy of this FSM with states renumbered in BFS order starting
+    /// from `root`. Also returns the old-to-new state mapping.
+    ///
+    /// The returned mapping has entry `old_to_new[old_id] = new_id`; unreachable
+    /// states are assigned the highest ids.
+    #[must_use]
+    pub fn bfs_renumber(
+        &self,
+        root: i32,
+    ) -> (Self, Vec<i32>) {
+        use std::collections::VecDeque;
+        let n = self.num_states() as usize;
+        let mut old_to_new = vec![-1i32; n];
+        let mut queue: VecDeque<i32> = VecDeque::new();
+        let mut next_id = 0i32;
+        queue.push_back(root);
+        old_to_new[root as usize] = next_id;
+        next_id += 1;
+        while let Some(state) = queue.pop_front() {
+            // Visit targets in edge-scan order (edges are already sorted by
+            // range, so this matches C++ ToCompact + BFS discovery order).
+            for e in self.state_edges(state) {
+                let t = e.target as usize;
+                if old_to_new[t] == -1 {
+                    old_to_new[t] = next_id;
+                    next_id += 1;
+                    queue.push_back(e.target);
+                }
+            }
+        }
+        // Assign remaining unreachable states.
+        for id in &mut old_to_new {
+            if *id == -1 {
+                *id = next_id;
+                next_id += 1;
+            }
+        }
+        // Build the new FSM with remapped edges.
+        let mut new_edges: Vec<Vec<FsmEdge>> = vec![Vec::new(); n];
+        for old in 0..n {
+            let new = old_to_new[old] as usize;
+            for e in self.state_edges(old as i32) {
+                new_edges[new].push(FsmEdge {
+                    min: e.min,
+                    max: e.max,
+                    target: old_to_new[e.target as usize],
+                });
+            }
+        }
+        for edges in &mut new_edges {
+            edges.sort_unstable();
+        }
+        (Fsm::from_edges(new_edges, self.edge_aux_data.clone()), old_to_new)
+    }
 }

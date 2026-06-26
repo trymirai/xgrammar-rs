@@ -1041,6 +1041,30 @@ impl FsmWithStartEnd {
             .rebuild_with_mapping(&state_mapping, partitions.len() as i32))
     }
 
+    /// Renumbers states so the start state becomes 0 and all states are
+    /// numbered in BFS-from-start discovery order. Edges must be pre-sorted
+    /// (they are after `merge_equivalent_states`).
+    ///
+    /// This matches the C++ per-rule FSM numbering convention: after building
+    /// a rule's FSM, the start state is always 0, so that concatenating rule
+    /// FSMs into the complete FSM gives predictable state numbers.
+    #[must_use]
+    pub fn bfs_renumber_from_start(&self) -> Self {
+        let (new_fsm, old_to_new) = self.fsm.bfs_renumber(self.start);
+        let new_start = old_to_new[self.start as usize];
+        let new_ends: Vec<bool> = {
+            let n = new_fsm.num_states() as usize;
+            let mut v = vec![false; n];
+            for (old, &is_end) in self.ends.iter().enumerate() {
+                if is_end {
+                    v[old_to_new[old] as usize] = true;
+                }
+            }
+            v
+        };
+        Self::new(new_fsm, new_start, new_ends, self.is_dfa)
+    }
+
     /// Renders this machine the way the C++ `ToString` does (used by tests as the oracle).
     #[must_use]
     pub fn to_string_repr(&self) -> String {

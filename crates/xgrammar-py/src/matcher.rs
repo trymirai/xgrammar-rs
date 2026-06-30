@@ -1,5 +1,8 @@
 //! `GrammarMatcher` binding.
 
+// Used by the `new` constructor signature. Only PyO3 emits a constructor companion; the other
+// backends drop the (extracted) constructor, leaving this import unused there.
+#[cfg_attr(not(feature = "bindings-pyo3"), allow(unused_imports))]
 use crate::compiler::CompiledGrammar;
 
 /// Drives constrained decoding over a compiled grammar.
@@ -17,7 +20,7 @@ impl GrammarMatcher {
     /// rollback history is currently unbounded.
     #[bindings::export(Method(Constructor))]
     pub fn new(
-        compiled_grammar: CompiledGrammar,
+        compiled_grammar: &CompiledGrammar,
         _override_stop_tokens: Option<Vec<i32>>,
         terminate_without_stop_token: bool,
         _max_rollback_tokens: i32,

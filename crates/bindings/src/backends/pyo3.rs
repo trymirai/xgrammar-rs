@@ -483,11 +483,47 @@ fn factory_or_constructor_expansion(
     let method_ident = &method.sig.ident;
     let method_name = method_ident.to_string();
     let wrapper_ident = format_ident!("{}_bindings_pyo3", method_ident);
-    let inputs = &method.sig.inputs;
     let output = &method.sig.output;
     let asyncness = metadata.is_async();
     let arg_idents = metadata.arg_idents();
     let body_block = &method.block;
+
+    // pyo3 cannot extract a bare `&T` (reference to an exported class) as a pymethod
+    // argument, so the wrapper takes every argument by value (`strip_outer_ref`). Factory
+    // wrappers re-borrow when forwarding to the inherent method (which keeps the original
+    // `&T` signature, re-emitted by the `Rust` backend); constructor wrappers run the
+    // original body inline, so each former-reference argument is shadow-rebound to a
+    // reference first.
+    let typed_args = metadata.typed_args();
+    let inputs: Vec<TokenStream> = typed_args
+        .iter()
+        .map(|pat_type| {
+            let pattern = &pat_type.pat;
+            let owned_type = strip_outer_ref(&pat_type.ty);
+            quote! { #pattern: #owned_type }
+        })
+        .collect();
+    let arg_call_tokens: Vec<TokenStream> = typed_args
+        .iter()
+        .zip(arg_idents.iter())
+        .map(|(pat_type, ident)| {
+            if matches!(pat_type.ty.as_ref(), syn::Type::Reference(_)) {
+                quote! { &#ident }
+            } else {
+                quote! { #ident }
+            }
+        })
+        .collect();
+    let reborrow_shadows: Vec<TokenStream> = typed_args
+        .iter()
+        .zip(arg_idents.iter())
+        .filter(|(pat_type, _)| {
+            matches!(pat_type.ty.as_ref(), syn::Type::Reference(_))
+        })
+        .map(|(_, ident)| quote! { let #ident = &#ident; })
+        .collect();
+    let inputs = quote! { #( #inputs ),* };
+
     let pyo3_method_kind = if is_constructor {
         quote! { #[new] }
     } else {
@@ -497,24 +533,24 @@ fn factory_or_constructor_expansion(
         }
     };
     let invocation = if is_constructor {
-        quote! { #body_block }
+        quote! { #( #reborrow_shadows )* #body_block }
     } else {
         quote! {
-            <#self_type>::#method_ident( #( #arg_idents ),* )
+            <#self_type>::#method_ident( #( #arg_call_tokens ),* )
         }
     };
 
     if asyncness {
         let body = if is_constructor {
-            quote! { async move #body_block }
+            quote! { async move { #( #reborrow_shadows )* #body_block } }
         } else if metadata.returns_result() {
             quote! {
-                let __result = <#self_type>::#method_ident( #( #arg_idents ),* ).await;
+                let __result = <#self_type>::#method_ident( #( #arg_call_tokens ),* ).await;
                 __result.map_err(::std::convert::Into::into)
             }
         } else {
             quote! {
-                let __value = <#self_type>::#method_ident( #( #arg_idents ),* ).await;
+                let __value = <#self_type>::#method_ident( #( #arg_call_tokens ),* ).await;
                 ::std::result::Result::<_, ::pyo3::PyErr>::Ok(__value)
             }
         };

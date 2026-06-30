@@ -17,6 +17,8 @@ pub enum VocabType {
 }
 
 impl VocabType {
+    // Reached only through the `new` constructor (PyO3-only companion) on non-PyO3 backends.
+    #[cfg_attr(not(feature = "bindings-pyo3"), allow(dead_code))]
     pub(crate) fn to_core(self) -> xgrammar::tokenizer::VocabType {
         match self {
             Self::Raw => xgrammar::tokenizer::VocabType::Raw,

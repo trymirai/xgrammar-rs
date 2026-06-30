@@ -37,12 +37,16 @@ impl Grammar {
         schema: String,
         any_whitespace: bool,
         indent: Option<i32>,
-        separators: Option<(String, String)>,
+        separator_item: Option<String>,
+        separator_kv: Option<String>,
         strict_mode: bool,
         max_whitespace_cnt: Option<i32>,
         print_converted_ebnf: bool,
     ) -> Result<Grammar, crate::error::BindingError> {
-        let seps = separators.as_ref().map(|(a, b)| (a.as_str(), b.as_str()));
+        let seps = match (&separator_item, &separator_kv) {
+            (Some(a), Some(b)) => Some((a.as_str(), b.as_str())),
+            _ => None,
+        };
         let g = xgrammar::grammar::Grammar::from_json_schema(
             &schema,
             any_whitespace,
@@ -89,17 +93,34 @@ impl Grammar {
     }
 
     /// A grammar accepting any string accepted by one of `grammars`.
+    ///
+    /// Takes the serialized JSON form of each grammar (`Vec<String>`) rather than opaque
+    /// handles: a `Vec` of handles cannot be passed uniformly across every binding backend.
     #[bindings::export(Method(Factory))]
-    pub fn union(grammars: Vec<Grammar>) -> Grammar {
-        let gs: Vec<_> = grammars.into_iter().map(|g| g.inner).collect();
-        Grammar::wrap(xgrammar::grammar::Grammar::union(&gs))
+    pub fn union(
+        grammars: Vec<String>
+    ) -> Result<Grammar, crate::error::BindingError> {
+        let gs = grammars
+            .iter()
+            .map(|j| xgrammar::grammar::Grammar::deserialize_json(j))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(map_deserialize_error)?;
+        Ok(Grammar::wrap(xgrammar::grammar::Grammar::union(&gs)))
     }
 
     /// A grammar accepting the in-order concatenation of strings from `grammars`.
+    ///
+    /// Takes the serialized JSON form of each grammar (`Vec<String>`); see [`Grammar::union`].
     #[bindings::export(Method(Factory))]
-    pub fn concat(grammars: Vec<Grammar>) -> Grammar {
-        let gs: Vec<_> = grammars.into_iter().map(|g| g.inner).collect();
-        Grammar::wrap(xgrammar::grammar::Grammar::concat(&gs))
+    pub fn concat(
+        grammars: Vec<String>
+    ) -> Result<Grammar, crate::error::BindingError> {
+        let gs = grammars
+            .iter()
+            .map(|j| xgrammar::grammar::Grammar::deserialize_json(j))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(map_deserialize_error)?;
+        Ok(Grammar::wrap(xgrammar::grammar::Grammar::concat(&gs)))
     }
 
     /// Serializes the grammar to its `"v11"` JSON form.

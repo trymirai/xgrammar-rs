@@ -16,7 +16,7 @@ impl Backend for Wasm {
     fn structure_attributes(context: &StructureContext) -> TokenStream {
         match context.flavor {
             StructureFlavor::Plain => quote! {
-                #[cfg_attr(feature = "bindings-wasm", derive(tsify::Tsify))]
+                #[cfg_attr(feature = "bindings-wasm", derive(tsify::Tsify, serde::Serialize, serde::Deserialize))]
                 #[cfg_attr(feature = "bindings-wasm", tsify(into_wasm_abi, from_wasm_abi))]
             },
             StructureFlavor::Class => quote! {
@@ -33,7 +33,7 @@ impl Backend for Wasm {
 
     fn enumeration_attributes(_context: &EnumerationContext) -> TokenStream {
         quote! {
-            #[cfg_attr(feature = "bindings-wasm", derive(tsify::Tsify))]
+            #[cfg_attr(feature = "bindings-wasm", derive(tsify::Tsify, serde::Serialize, serde::Deserialize))]
             #[cfg_attr(feature = "bindings-wasm", tsify(into_wasm_abi, from_wasm_abi))]
         }
     }

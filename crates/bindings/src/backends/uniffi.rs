@@ -111,6 +111,7 @@ fn factory_expansion(
     quote! {
         #[cfg(feature = "bindings-uniffi")]
         #export_attribute
+        #[allow(non_snake_case)]
         pub #asyncness fn #fn_name( #inputs ) #output {
             <#self_type>::#method_ident( #( #arg_idents ),* )#forward_await
         }

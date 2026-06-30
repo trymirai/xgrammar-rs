@@ -17,6 +17,8 @@ impl TokenizerInfo {
     }
 }
 
+// Called from the `new` constructor body, which only PyO3 emits a companion for.
+#[cfg_attr(not(feature = "bindings-pyo3"), allow(dead_code))]
 fn parse_vocab_type(
     vocab_type: i32
 ) -> Result<xgrammar::tokenizer::VocabType, crate::error::BindingError> {
@@ -77,6 +79,10 @@ impl TokenizerInfo {
     }
 
     /// The decoded byte string of each token id.
+    ///
+    /// Omitted on the wasm backend, which cannot return `Vec<Vec<u8>>` directly; the Python
+    /// tests only exercise this under PyO3.
+    #[cfg(not(feature = "bindings-wasm"))]
     #[bindings::export(Method)]
     pub fn decoded_vocab(&self) -> Vec<Vec<u8>> {
         self.inner.decoded_vocab().to_vec()

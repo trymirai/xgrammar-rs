@@ -39,8 +39,8 @@ impl CompiledGrammar {
 
     /// Approximate in-memory size of the compiled grammar, in bytes.
     #[bindings::export(Method)]
-    pub fn memory_size_bytes(&self) -> usize {
-        self.inner.memory_size_bytes()
+    pub fn memory_size_bytes(&self) -> u64 {
+        self.inner.memory_size_bytes() as u64
     }
 
     /// Serializes the compiled grammar without embedding the full tokenizer info.
@@ -53,7 +53,7 @@ impl CompiledGrammar {
     #[bindings::export(Method(Factory))]
     pub fn deserialize_json(
         json_string: String,
-        tokenizer_info: TokenizerInfo,
+        tokenizer_info: &TokenizerInfo,
     ) -> Result<CompiledGrammar, crate::error::BindingError> {
         xgrammar::compiler::CompiledGrammar::deserialize_json(
             &json_string,
@@ -76,14 +76,14 @@ impl GrammarCompiler {
     /// Creates a compiler bound to `tokenizer_info`.
     #[bindings::export(Method(Constructor))]
     pub fn new(
-        tokenizer_info: TokenizerInfo,
+        tokenizer_info: &TokenizerInfo,
         max_threads: i32,
         cache_enabled: bool,
         cache_limit_bytes: i64,
     ) -> GrammarCompiler {
         GrammarCompiler {
             inner: Arc::new(xgrammar::compiler::GrammarCompiler::new(
-                tokenizer_info.inner,
+                tokenizer_info.inner.clone(),
                 max_threads,
                 cache_enabled,
                 cache_limit_bytes,
@@ -95,7 +95,7 @@ impl GrammarCompiler {
     #[bindings::export(Method)]
     pub fn compile_grammar_ebnf(
         &self,
-        grammar: Grammar,
+        grammar: &Grammar,
     ) -> CompiledGrammar {
         CompiledGrammar::wrap(self.inner.compile_grammar(&grammar.inner))
     }
@@ -120,11 +120,15 @@ impl GrammarCompiler {
         schema: String,
         any_whitespace: bool,
         indent: Option<i32>,
-        separators: Option<(String, String)>,
+        separator_item: Option<String>,
+        separator_kv: Option<String>,
         strict_mode: bool,
         max_whitespace_cnt: Option<i32>,
     ) -> CompiledGrammar {
-        let seps = separators.as_ref().map(|(a, b)| (a.as_str(), b.as_str()));
+        let seps = match (&separator_item, &separator_kv) {
+            (Some(a), Some(b)) => Some((a.as_str(), b.as_str())),
+            _ => None,
+        };
         CompiledGrammar::wrap(self.inner.compile_json_schema(
             &schema,
             any_whitespace,

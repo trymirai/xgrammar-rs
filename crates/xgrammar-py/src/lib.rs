@@ -12,9 +12,15 @@ uniffi::setup_scaffolding!();
 mod compiler;
 mod error;
 mod grammar;
-mod matcher;
 mod tokenizer_info;
 mod vocab_type;
+
+// The `GrammarMatcher` drives constrained decoding through `&mut self` methods. UniFFI
+// exposes objects as `Arc<T>` and cannot borrow them mutably, so the matcher is omitted from
+// the UniFFI surface (a working UniFFI matcher would need interior mutability — a follow-up).
+// PyO3 / NAPI / wasm all support `&mut self` and keep the matcher.
+#[cfg(not(feature = "bindings-uniffi"))]
+mod matcher;
 
 // PyO3-only surface: the torch/DLPack bitmask helpers, the `testing`/`config`/`kernels`
 // submodules, and the batch matcher. These use the CPython C-API directly and only exist

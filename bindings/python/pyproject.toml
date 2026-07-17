@@ -38,6 +38,7 @@ test = [
     "pytest",
     "sentencepiece",
     "tiktoken",
+    "ruff>=0.14.0",
 ]
 metal = [
     # transformers >=5.13 breaks `import mlx_lm` (match upstream xgrammar).
@@ -55,3 +56,47 @@ module-name = "xgrammar.xgrammar_rs"
 manifest-path = "../../crates/xgrammar-py/Cargo.toml"
 features = ["bindings-pyo3"]
 python-source = "."
+
+[tool.ruff]
+target-version = "py38"
+line-length = 119
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+    "C408",
+    "C901",
+    "D",
+    "EM101",
+    "EM102",
+    "ERA001",
+    "FIX002",
+    "F722",
+    "FBT001",
+    "FBT002",
+    "N812",
+    "PD008",
+    "PGH003",
+    "PLC0415",
+    "PLR0904",
+    "PLR0912",
+    "PLR0913",
+    "PLR0915",
+    "PLR0917",
+    "PLR2004",
+    "PLR6301",
+    "PLW0108",
+    "PT",
+    "PTH123",
+    "RET503",
+    "RET504",
+    "RUF005",
+    "S",
+    "SIM108",
+    "T20",
+    "TD003",
+    "TRY003",
+    "CPY001",
+    "COM812",
+    "TC003",
+]

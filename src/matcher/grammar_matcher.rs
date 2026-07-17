@@ -22,6 +22,13 @@ pub struct GrammarMatcher {
     stored_stop_token_ids: Box<[i32]>,
 }
 
+// SAFETY: the wrapped C++ matcher is plain heap state with no thread affinity
+// and no thread-local state, and all mutating access goes through exclusive
+// (`&mut`) methods, so moving it to another thread is sound. cxx marks opaque
+// C++ types as `!Send`, which is why this has to be declared manually.
+// Not `Sync`: concurrent access through shared references is not supported.
+unsafe impl Send for GrammarMatcher {}
+
 impl GrammarMatcher {
     /// Construct the grammar matcher.
     ///

@@ -1,3 +1,0 @@
-[submodule "build/wasi-sdk"]
-	path = crates/legacy/build/wasi-sdk
-	url = https://github.com/WebAssembly/wasi-sdk.git

@@ -7,10 +7,8 @@ members = [
     "crates/xgrammar-py",
     "crates/cli-tools",
 ]
-# `crates/legacy` is the retired cxx-backed crate, kept for differential testing
-# and reference; it is built on demand, not as part of the workspace.
 # Upstream C++/Python reference lives in gitignored `external/xgrammar` (see xgrammar.rev).
-exclude = ["crates/legacy", "external"]
+exclude = ["external"]
 
 [workspace.package]
 version = "0.3.0"

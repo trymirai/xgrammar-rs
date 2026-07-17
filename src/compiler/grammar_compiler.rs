@@ -73,6 +73,7 @@ impl GrammarCompiler {
     ///   elements, such like keys, values, separators and so on. If `None`, there is no limit
     ///   on the number of whitespace characters. If specified, it will limit the number of
     ///   whitespace characters to at most `max_whitespace_cnt`. It should be a positive integer.
+    /// - `any_order`: Whether object properties may appear in any order.
     ///
     /// # Returns
     ///
@@ -82,33 +83,6 @@ impl GrammarCompiler {
     ///
     /// Returns an error if the JSON schema is invalid or compilation fails.
     pub fn compile_json_schema(
-        &mut self,
-        schema: &str,
-        any_whitespace: bool,
-        indent: Option<i32>,
-        separators: Option<(impl AsRef<str>, impl AsRef<str>)>,
-        strict_mode: bool,
-        max_whitespace_cnt: Option<i32>,
-    ) -> Result<CompiledGrammar, String> {
-        self.compile_json_schema_impl(
-            schema,
-            any_whitespace,
-            indent,
-            separators,
-            strict_mode,
-            max_whitespace_cnt,
-            false,
-        )
-    }
-
-    /// Compile a JSON schema, optionally allowing object properties in any order.
-    ///
-    /// When `any_order` is true, an object may contain its declared properties in any order.
-    /// Required-property tracking is relaxed: duplicate properties are allowed and a different
-    /// required property may be absent as long as the object has enough entries.
-    ///
-    /// The remaining parameters have the same meaning as in [`Self::compile_json_schema`].
-    pub fn compile_json_schema_with_any_order(
         &mut self,
         schema: &str,
         any_whitespace: bool,

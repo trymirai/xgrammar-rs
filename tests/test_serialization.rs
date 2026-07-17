@@ -253,6 +253,7 @@ fn test_serialize_compiled_grammar_with_hf_tokenizer() {
             None::<(&str, &str)>,
             true,
             None,
+            false,
         )
         .unwrap();
 
@@ -309,6 +310,7 @@ fn test_serialize_grammar_utf8() {
         None::<(&str, &str)>,
         true,
         None,
+        false,
         false,
     )
     .unwrap();

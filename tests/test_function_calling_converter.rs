@@ -1,8 +1,21 @@
 use serial_test::serial;
 use xgrammar::{
     Grammar, GrammarCompiler, GrammarMatcher, TokenizerInfo, VocabType,
-    testing::qwen_xml_tool_calling_to_ebnf,
+    testing::json_schema_to_ebnf,
 };
+
+fn qwen_xml_ebnf(schema: &str) -> String {
+    json_schema_to_ebnf(
+        schema,
+        true,
+        None,
+        None::<(&str, &str)>,
+        true,
+        None,
+        "qwen_xml",
+        false,
+    )
+}
 
 fn matcher_from_grammar(grammar: &Grammar) -> GrammarMatcher {
     // Minimal tokenizer info is sufficient for string acceptance tests
@@ -58,7 +71,7 @@ fn test_string_schema() {
 
     let schema = r#"{"type":"object","properties":{"name":{"type":"string"},"age":{"type":"integer"}},"required":["name","age"]}"#;
 
-    let ebnf_grammar = qwen_xml_tool_calling_to_ebnf(schema);
+    let ebnf_grammar = qwen_xml_ebnf(schema);
     let grammar = Grammar::from_ebnf(&ebnf_grammar, "root").unwrap();
     for (input_str, accepted) in test_cases {
         assert_eq!(
@@ -86,7 +99,7 @@ fn test_additional_properties_schema() {
 
     let schema = r#"{"type":"object","properties":{"name":{"type":"string"},"age":{"type":"integer"}},"required":["name","age"],"additionalProperties":true}"#;
 
-    let ebnf_grammar = qwen_xml_tool_calling_to_ebnf(schema);
+    let ebnf_grammar = qwen_xml_ebnf(schema);
     let grammar = Grammar::from_ebnf(&ebnf_grammar, "root").unwrap();
     for (input_str, accepted) in test_cases {
         assert_eq!(
@@ -114,7 +127,7 @@ fn test_not_required_properties_schema() {
 
     let schema = r#"{"type":"object","properties":{"name":{"type":"string"},"age":{"type":"integer"}},"additionalProperties":true}"#;
 
-    let ebnf_grammar = qwen_xml_tool_calling_to_ebnf(schema);
+    let ebnf_grammar = qwen_xml_ebnf(schema);
     let grammar = Grammar::from_ebnf(&ebnf_grammar, "root").unwrap();
     for (input_str, accepted) in test_cases {
         assert_eq!(
@@ -149,7 +162,7 @@ fn test_part_required_properties_schema() {
 
     let schema = r#"{"type":"object","properties":{"name":{"type":"string"},"age":{"type":"integer"}},"required":["name"],"additionalProperties":true}"#;
 
-    let ebnf_grammar = qwen_xml_tool_calling_to_ebnf(schema);
+    let ebnf_grammar = qwen_xml_ebnf(schema);
     let grammar = Grammar::from_ebnf(&ebnf_grammar, "root").unwrap();
     for (input_str, accepted) in test_cases {
         assert_eq!(
@@ -187,7 +200,7 @@ fn test_inner_object_schema() {
 
     let schema = r#"{"type":"object","properties":{"address":{"type":"object","properties":{"street":{"type":"string"},"city":{"type":"string"}},"required":["street","city"]}},"required":["address"]}"#;
 
-    let ebnf_grammar = qwen_xml_tool_calling_to_ebnf(schema);
+    let ebnf_grammar = qwen_xml_ebnf(schema);
     let grammar = Grammar::from_ebnf(&ebnf_grammar, "root").unwrap();
     for (input_str, accepted) in test_cases {
         assert_eq!(
@@ -220,7 +233,7 @@ fn test_numbers_schema() {
 
     let schema = r#"{"type":"object","properties":{"name":{"type":"string"},"age":{"type":"integer"},"ID":{"type":"integer"},"is_student":{"type":"boolean"}},"maxProperties":3,"minProperties":2}"#;
 
-    let ebnf_grammar = qwen_xml_tool_calling_to_ebnf(schema);
+    let ebnf_grammar = qwen_xml_ebnf(schema);
     let grammar = Grammar::from_ebnf(&ebnf_grammar, "root").unwrap();
     for (input_str, accepted) in test_cases {
         assert_eq!(
@@ -273,7 +286,7 @@ fn test_string_format_length_schema() {
 
     let schema = r#"{"type":"object","properties":{"name":{"type":"string","minLength":1},"contact_info":{"type":"object","properties":{"phone":{"type":"string","pattern":"[0-9]{5}$"},"email":{"type":"string","format":"email"}},"required":["phone","email"]}},"required":["name","contact_info"]}"#;
 
-    let ebnf_grammar = qwen_xml_tool_calling_to_ebnf(schema);
+    let ebnf_grammar = qwen_xml_ebnf(schema);
     let grammar = Grammar::from_ebnf(&ebnf_grammar, "root").unwrap();
     for (input_str, accepted) in test_cases {
         assert_eq!(
@@ -289,7 +302,7 @@ fn test_string_format_length_schema() {
 #[serial]
 fn test_non_object_function_calling_schemas() {
     for schema in ["{}", r#"{"type":"string"}"#] {
-        let ebnf = qwen_xml_tool_calling_to_ebnf(schema);
+        let ebnf = qwen_xml_ebnf(schema);
         assert!(!ebnf.is_empty(), "schema should produce EBNF: {schema}");
         Grammar::from_ebnf(&ebnf, "root").unwrap();
     }
@@ -298,6 +311,6 @@ fn test_non_object_function_calling_schemas() {
 #[test]
 #[serial]
 fn test_invalid_function_calling_json() {
-    let ebnf = qwen_xml_tool_calling_to_ebnf("{");
+    let ebnf = qwen_xml_ebnf("{");
     assert!(ebnf.is_empty() || Grammar::from_ebnf(&ebnf, "root").is_err());
 }

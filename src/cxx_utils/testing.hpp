@@ -25,7 +25,9 @@ inline std::unique_ptr<std::string> json_schema_to_ebnf(
     const std::string& separator_colon,
     bool strict_mode,
     bool has_max_whitespace_cnt,
-    int32_t max_whitespace_cnt
+    int32_t max_whitespace_cnt,
+    const std::string& json_format,
+    bool any_order
 ) {
   try {
     std::optional<int> indent_opt = std::nullopt;
@@ -44,17 +46,21 @@ inline std::unique_ptr<std::string> json_schema_to_ebnf(
       max_whitespace_cnt_opt = static_cast<int>(max_whitespace_cnt);
     }
 
-    return make_unique(
-        xgrammar::JSONSchemaToEBNF(
-            schema,
-            any_whitespace,
-            indent_opt,
-            separators_opt,
-            strict_mode,
-            max_whitespace_cnt_opt,
-            xgrammar::JSONFormat::kJSON
-        )
-    );
+    auto json_format_opt = xgrammar::JSONFormatFromString(json_format);
+    if (!json_format_opt.has_value()) {
+      return make_unique(std::string());
+    }
+
+    return make_unique(xgrammar::JSONSchemaToEBNF(
+        schema,
+        any_whitespace,
+        indent_opt,
+        separators_opt,
+        strict_mode,
+        max_whitespace_cnt_opt,
+        *json_format_opt,
+        any_order
+    ));
   } catch (...) {
     return make_unique(std::string());
   }
@@ -70,16 +76,6 @@ inline std::unique_ptr<xgrammar::Grammar> ebnf_to_grammar_no_normalization(
     );
   } catch (...) {
     return nullptr;
-  }
-}
-
-inline std::unique_ptr<std::string> qwen_xml_tool_calling_to_ebnf(
-    const std::string& schema
-) {
-  try {
-    return make_unique(xgrammar::QwenXMLToolCallingToEBNF(schema));
-  } catch (...) {
-    return make_unique(std::string());
   }
 }
 

@@ -78,7 +78,7 @@ fn test_escaped_char_class() {
     let regex = r"\w\w\W\d\D\s\S";
     let instance = "A_ 1b 0";
     let grammar_str = testing::regex_to_ebnf(regex, true).unwrap();
-    let expected_grammar = r#"root ::= [a-zA-Z0-9_] [a-zA-Z0-9_] [^a-zA-Z0-9_] [0-9] [^0-9] [\f\n\r\t\v\u0020\u00a0] [^[\f\n\r\t\v\u0020\u00a0]
+    let expected_grammar = r#"root ::= [a-zA-Z0-9_] [a-zA-Z0-9_] [^a-zA-Z0-9_] [0-9] [^0-9] [\f\n\r\t\v\u0020\u00a0] [^\f\n\r\t\v\u0020\u00a0]
 "#;
     assert_eq!(grammar_str, expected_grammar);
     let grammar = Grammar::from_ebnf(&grammar_str, "root").unwrap();

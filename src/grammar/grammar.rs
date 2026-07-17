@@ -99,6 +99,7 @@ impl Grammar {
     ///   whitespace characters to at most `max_whitespace_cnt`. It should be a positive integer.
     /// - `print_converted_ebnf`: If true, the converted EBNF string will be printed.
     ///   For debugging purposes.
+    /// - `any_order`: Whether object properties may appear in any order.
     ///
     /// # Returns
     ///
@@ -108,34 +109,6 @@ impl Grammar {
     ///
     /// When converting the JSON schema fails, with details about the parsing error.
     pub fn from_json_schema(
-        schema: &str,
-        any_whitespace: bool,
-        indent: Option<i32>,
-        separators: Option<(impl AsRef<str>, impl AsRef<str>)>,
-        strict_mode: bool,
-        max_whitespace_cnt: Option<i32>,
-        print_converted_ebnf: bool,
-    ) -> Result<Self, String> {
-        Self::from_json_schema_impl(
-            schema,
-            any_whitespace,
-            indent,
-            separators,
-            strict_mode,
-            max_whitespace_cnt,
-            print_converted_ebnf,
-            false,
-        )
-    }
-
-    /// Construct a grammar from JSON schema, optionally allowing object properties in any order.
-    ///
-    /// When `any_order` is true, an object may contain its declared properties in any order.
-    /// Required-property tracking is relaxed: duplicate properties are allowed and a different
-    /// required property may be absent as long as the object has enough entries.
-    ///
-    /// The remaining parameters have the same meaning as in [`Self::from_json_schema`].
-    pub fn from_json_schema_with_any_order(
         schema: &str,
         any_whitespace: bool,
         indent: Option<i32>,

@@ -55,6 +55,8 @@ fn check_schema_with_grammar(
         separators,
         strict_mode,
         None,
+        "json",
+        false,
     );
     if let Some(inlined) = expected_grammar_ebnf
         .strip_prefix(BASIC_JSON_RULES_EBNF)
@@ -90,6 +92,7 @@ fn check_schema_with_instance(
         strict_mode,
         None,
         false,
+        false,
     )
     .unwrap();
     assert_eq!(
@@ -120,11 +123,12 @@ fn test_any_order_json_schema_api() {
         true,
         None,
         false,
+        false,
     )
     .unwrap();
     assert!(!is_grammar_accept_string(&ordered, reversed_properties));
 
-    let any_order = Grammar::from_json_schema_with_any_order(
+    let any_order = Grammar::from_json_schema(
         schema,
         true,
         None,
@@ -149,7 +153,7 @@ fn test_any_order_json_schema_api() {
     let mut compiler =
         xgrammar::GrammarCompiler::new(&tokenizer_info, 1, false, -1).unwrap();
     let compiled = compiler
-        .compile_json_schema_with_any_order(
+        .compile_json_schema(
             schema,
             true,
             None,
@@ -175,6 +179,7 @@ fn test_basic() {
         true,
         None,
         false,
+        false,
     )
     .unwrap();
 
@@ -197,6 +202,7 @@ fn test_indent() {
         None::<(&str, &str)>,
         true,
         None,
+        false,
         false,
     )
     .unwrap();
@@ -226,6 +232,7 @@ fn test_non_strict() {
         true,
         None,
         false,
+        false,
     )
     .unwrap();
     assert!(is_grammar_accept_string(&grammar_strict, r#"{"name": "Alice"}"#));
@@ -241,6 +248,7 @@ fn test_non_strict() {
         None::<(&str, &str)>,
         false,
         None,
+        false,
         false,
     )
     .unwrap();
@@ -267,6 +275,7 @@ fn test_enum_const() {
         true,
         None,
         false,
+        false,
     )
     .unwrap();
 
@@ -283,6 +292,7 @@ fn test_enum_const() {
         None::<(&str, &str)>,
         true,
         None,
+        false,
         false,
     )
     .unwrap();
@@ -312,6 +322,7 @@ fn test_optional() {
         true,
         None,
         false,
+        false,
     )
     .unwrap();
 
@@ -339,6 +350,7 @@ fn test_empty() {
         true,
         None,
         false,
+        false,
     )
     .unwrap();
 
@@ -351,6 +363,7 @@ fn test_empty() {
         None::<(&str, &str)>,
         false,
         None,
+        false,
         false,
     )
     .unwrap();
@@ -372,6 +385,7 @@ fn test_union() {
         None::<(&str, &str)>,
         true,
         None,
+        false,
         false,
     )
     .unwrap();
@@ -396,6 +410,7 @@ fn test_any_whitespace() {
         true,
         None,
         false,
+        false,
     )
     .unwrap();
     assert!(is_grammar_accept_string(&grammar_any, r#"{"key":"value"}"#));
@@ -412,6 +427,7 @@ fn test_any_whitespace() {
         None::<(&str, &str)>,
         true,
         None,
+        false,
         false,
     )
     .unwrap();
@@ -479,6 +495,7 @@ fn test_array_schema_error_cases() {
             true,
             None,
             false,
+            false,
         );
         match result {
             Ok(_) => panic!("expected error for schema"),
@@ -505,6 +522,7 @@ fn test_array_schema() {
         true,
         None,
         false,
+        false,
     )
     .unwrap();
 
@@ -526,6 +544,7 @@ fn test_array_schema_min_max() {
         None::<(&str, &str)>,
         true,
         None,
+        false,
         false,
     )
     .unwrap();
@@ -552,6 +571,7 @@ fn test_limited_whitespace_cnt() {
         true,                 // strict_mode
         Some(2),              // max_whitespace_cnt=2
         false,                // print_converted_ebnf
+        false,
     )
     .unwrap();
 
@@ -590,6 +610,7 @@ fn test_limited_whitespace_compile() {
             None::<(&str, &str)>, // separators
             true,                 // strict_mode
             Some(2),              // max_whitespace_cnt=2
+            false,
         )
         .unwrap();
 
@@ -627,6 +648,7 @@ fn test_utf8_in_enum() {
         true,
         None,
         false,
+        false,
     )
     .unwrap();
 
@@ -649,6 +671,7 @@ fn test_utf8_string_in_const() {
         None::<(&str, &str)>,
         true,
         None,
+        false,
         false,
     )
     .unwrap();
@@ -679,6 +702,7 @@ fn test_all_optional() {
         None::<(&str, &str)>,
         true,
         None,
+        false,
         false,
     )
     .unwrap();
@@ -726,6 +750,7 @@ fn test_reference_schema() {
         true,
         None,
         false,
+        false,
     )
     .unwrap();
 
@@ -759,6 +784,7 @@ fn test_anyof_oneof() {
         true,
         None,
         false,
+        false,
     )
     .unwrap();
 
@@ -785,6 +811,7 @@ fn test_restricted_string() {
         None::<(&str, &str)>,
         true,
         None,
+        false,
         false,
     )
     .unwrap();
@@ -815,6 +842,7 @@ fn test_complex_restrictions() {
         true,
         None,
         false,
+        false,
     )
     .unwrap();
 
@@ -839,6 +867,7 @@ fn test_array_with_only_items_keyword() {
         None::<(&str, &str)>,
         true,
         None,
+        false,
         false,
     )
     .unwrap();
@@ -869,6 +898,7 @@ fn test_object_with_only_properties_keyword() {
         true,
         None,
         false,
+        false,
     )
     .unwrap();
 
@@ -896,6 +926,7 @@ fn test_all_optional_non_strict() {
         None::<(&str, &str)>,
         false,
         None,
+        false,
         false,
     )
     .unwrap();
@@ -943,6 +974,7 @@ fn test_reference() {
         true,
         None,
         false,
+        false,
     )
     .unwrap();
 
@@ -965,6 +997,7 @@ fn test_alias() {
         true,
         None,
         false,
+        false,
     )
     .unwrap();
 
@@ -983,6 +1016,7 @@ fn test_dynamic_model() {
         None::<(&str, &str)>,
         true,
         None,
+        false,
         false,
     )
     .unwrap();
@@ -1012,6 +1046,7 @@ fn test_object_with_pattern_properties_and_property_names() {
         None::<(&str, &str)>,
         true,
         None,
+        false,
         false,
     )
     .unwrap();
@@ -1044,6 +1079,7 @@ fn test_object_with_pattern_properties_and_property_names() {
         None::<(&str, &str)>,
         false,
         None,
+        false,
         false,
     )
     .unwrap();
@@ -1084,6 +1120,7 @@ fn test_object_with_property_numbers() {
         true,
         None,
         false,
+        false,
     )
     .unwrap();
 
@@ -1108,6 +1145,7 @@ fn test_object_error_handle() {
             None::<(&str, &str)>,
             true,
             None,
+            false,
             false,
         )
         .map(|_| ())
@@ -1242,6 +1280,7 @@ fn test_min_max_length() {
         true,
         None,
         false,
+        false,
     )
     .unwrap();
 
@@ -1266,6 +1305,7 @@ fn test_type_array() {
         true,
         None,
         false,
+        false,
     )
     .unwrap();
 
@@ -1289,6 +1329,7 @@ fn test_type_array_empty() {
         true,
         None,
         false,
+        false,
     )
     .unwrap();
 
@@ -1310,6 +1351,7 @@ fn test_empty_array() {
         true,
         None,
         false,
+        false,
     )
     .unwrap();
 
@@ -1329,6 +1371,7 @@ fn test_empty_object() {
         None::<(&str, &str)>,
         true,
         None,
+        false,
         false,
     )
     .unwrap();
@@ -1350,6 +1393,7 @@ fn test_primitive_type_string() {
         true,
         None,
         false,
+        false,
     )
     .unwrap();
 
@@ -1369,6 +1413,7 @@ fn test_primitive_type_object() {
         None::<(&str, &str)>,
         false,
         None,
+        false,
         false,
     )
     .unwrap();
@@ -1455,6 +1500,7 @@ fn test_utf8_object_array_in_enum() {
         true,
         None,
         false,
+        false,
     )
     .unwrap();
 
@@ -1482,6 +1528,7 @@ fn test_utf8_object_const() {
         true,
         None,
         false,
+        false,
     )
     .unwrap();
 
@@ -1503,6 +1550,7 @@ fn test_utf8_array_const() {
         None::<(&str, &str)>,
         true,
         None,
+        false,
         false,
     )
     .unwrap();
@@ -1529,6 +1577,7 @@ fn test_email_format() {
         None::<(&str, &str)>,
         true,
         None,
+        false,
         false,
     )
     .unwrap();
@@ -1567,6 +1616,7 @@ fn test_date_format() {
         true,
         None,
         false,
+        false,
     )
     .unwrap();
 
@@ -1592,6 +1642,7 @@ fn test_time_format() {
         None::<(&str, &str)>,
         true,
         None,
+        false,
         false,
     )
     .unwrap();
@@ -1699,6 +1750,7 @@ fn test_ipv4_format() {
         true,
         None,
         false,
+        false,
     )
     .unwrap();
 
@@ -1723,6 +1775,7 @@ fn test_hostname_format() {
         None::<(&str, &str)>,
         true,
         None,
+        false,
         false,
     )
     .unwrap();
@@ -1751,6 +1804,7 @@ fn test_uuid_format() {
         None::<(&str, &str)>,
         true,
         None,
+        false,
         false,
     )
     .unwrap();
@@ -1792,6 +1846,7 @@ fn test_duration_format() {
         true,
         None,
         false,
+        false,
     )
     .unwrap();
 
@@ -1823,6 +1878,7 @@ fn test_uri_format() {
         None::<(&str, &str)>,
         true,
         None,
+        false,
         false,
     )
     .unwrap();

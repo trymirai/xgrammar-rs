@@ -99,6 +99,7 @@ impl Grammar {
     ///   whitespace characters to at most `max_whitespace_cnt`. It should be a positive integer.
     /// - `print_converted_ebnf`: If true, the converted EBNF string will be printed.
     ///   For debugging purposes.
+    /// - `any_order`: Whether object properties may appear in any order.
     ///
     /// # Returns
     ///
@@ -115,6 +116,30 @@ impl Grammar {
         strict_mode: bool,
         max_whitespace_cnt: Option<i32>,
         print_converted_ebnf: bool,
+        any_order: bool,
+    ) -> Result<Self, String> {
+        Self::from_json_schema_impl(
+            schema,
+            any_whitespace,
+            indent,
+            separators,
+            strict_mode,
+            max_whitespace_cnt,
+            print_converted_ebnf,
+            any_order,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn from_json_schema_impl(
+        schema: &str,
+        any_whitespace: bool,
+        indent: Option<i32>,
+        separators: Option<(impl AsRef<str>, impl AsRef<str>)>,
+        strict_mode: bool,
+        max_whitespace_cnt: Option<i32>,
+        print_converted_ebnf: bool,
+        any_order: bool,
     ) -> Result<Self, String> {
         cxx::let_cxx_string!(schema_cxx = schema);
         let has_indent = indent.is_some();
@@ -150,6 +175,7 @@ impl Grammar {
                 has_max_whitespace_cnt,
                 max_whitespace_cnt_i32,
                 print_converted_ebnf,
+                any_order,
                 error_out_cxx.as_mut().get_unchecked_mut(),
             )
         };

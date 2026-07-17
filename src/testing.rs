@@ -38,6 +38,9 @@ pub fn ebnf_to_grammar_no_normalization(
 ///   `(", ", ": ")`.
 /// - `strict_mode`: Whether to use strict mode.
 /// - `max_whitespace_cnt`: The maximum number of whitespace characters. If `None`, unlimited.
+/// - `json_format`: The output format for the root object. One of `"json"`, `"qwen_xml"`,
+///   `"minimax_xml"`, `"deepseek_xml"`, or `"glm_xml"`.
+/// - `any_order`: Whether object properties may appear in any order.
 ///
 /// # Returns
 ///
@@ -49,6 +52,8 @@ pub fn json_schema_to_ebnf(
     separators: Option<(impl AsRef<str>, impl AsRef<str>)>,
     strict_mode: bool,
     max_whitespace_cnt: Option<i32>,
+    json_format: &str,
+    any_order: bool,
 ) -> String {
     cxx::let_cxx_string!(schema_cxx = schema);
     let has_indent = indent.is_some();
@@ -64,6 +69,7 @@ pub fn json_schema_to_ebnf(
     let has_max_whitespace_cnt = max_whitespace_cnt.is_some();
     let max_whitespace_cnt_i32 = max_whitespace_cnt.unwrap_or(0);
 
+    cxx::let_cxx_string!(json_format_cxx = json_format);
     ffi::json_schema_to_ebnf(
         &schema_cxx,
         any_whitespace,
@@ -75,22 +81,10 @@ pub fn json_schema_to_ebnf(
         strict_mode,
         has_max_whitespace_cnt,
         max_whitespace_cnt_i32,
+        &json_format_cxx,
+        any_order,
     )
     .to_string()
-}
-
-/// Convert a function call schema to EBNF grammar in Qwen XML style.
-///
-/// # Parameters
-///
-/// - `schema_json`: The function call schema as a JSON string.
-///
-/// # Returns
-///
-/// The EBNF grammar string.
-pub fn qwen_xml_tool_calling_to_ebnf(schema_json: &str) -> String {
-    cxx::let_cxx_string!(schema_cxx = schema_json);
-    ffi::qwen_xml_tool_calling_to_ebnf(&schema_cxx).to_string()
 }
 
 /// Get the ids of the rejected tokens from the bitmask. Mainly for debug purposes.

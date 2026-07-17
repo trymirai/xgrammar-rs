@@ -54,7 +54,7 @@ fn test_serialize_grammar_roundtrip() {
 #[test]
 #[serial]
 fn test_get_serialization_version() {
-    assert_eq!(xgrammar::get_serialization_version(), "v13");
+    assert_eq!(xgrammar::get_serialization_version(), "v14");
 }
 
 #[test]
@@ -253,6 +253,7 @@ fn test_serialize_compiled_grammar_with_hf_tokenizer() {
             None::<(&str, &str)>,
             true,
             None,
+            false,
         )
         .unwrap();
 
@@ -309,6 +310,7 @@ fn test_serialize_grammar_utf8() {
         None::<(&str, &str)>,
         true,
         None,
+        false,
         false,
     )
     .unwrap();

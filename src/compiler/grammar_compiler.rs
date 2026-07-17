@@ -73,6 +73,7 @@ impl GrammarCompiler {
     ///   elements, such like keys, values, separators and so on. If `None`, there is no limit
     ///   on the number of whitespace characters. If specified, it will limit the number of
     ///   whitespace characters to at most `max_whitespace_cnt`. It should be a positive integer.
+    /// - `any_order`: Whether object properties may appear in any order.
     ///
     /// # Returns
     ///
@@ -89,6 +90,29 @@ impl GrammarCompiler {
         separators: Option<(impl AsRef<str>, impl AsRef<str>)>,
         strict_mode: bool,
         max_whitespace_cnt: Option<i32>,
+        any_order: bool,
+    ) -> Result<CompiledGrammar, String> {
+        self.compile_json_schema_impl(
+            schema,
+            any_whitespace,
+            indent,
+            separators,
+            strict_mode,
+            max_whitespace_cnt,
+            any_order,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn compile_json_schema_impl(
+        &mut self,
+        schema: &str,
+        any_whitespace: bool,
+        indent: Option<i32>,
+        separators: Option<(impl AsRef<str>, impl AsRef<str>)>,
+        strict_mode: bool,
+        max_whitespace_cnt: Option<i32>,
+        any_order: bool,
     ) -> Result<CompiledGrammar, String> {
         cxx::let_cxx_string!(schema_cxx = schema);
         let has_indent = indent.is_some();
@@ -116,6 +140,7 @@ impl GrammarCompiler {
                 strict_mode,
                 max_whitespace_cnt.is_some(),
                 max_whitespace_cnt.unwrap_or(0),
+                any_order,
                 error_out_cxx.as_mut().get_unchecked_mut(),
             )
         };

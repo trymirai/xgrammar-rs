@@ -17,6 +17,7 @@ fn test_from_json_schema_returns_err_instead_of_aborting() {
         true,
         None,
         false,
+        false,
     )
     .err()
     .expect("expected from_json_schema to return Err for an invalid schema");

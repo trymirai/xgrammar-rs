@@ -55,6 +55,8 @@ fn check_schema_with_grammar(
         separators,
         strict_mode,
         None,
+        "json",
+        false,
     );
     if let Some(inlined) = expected_grammar_ebnf
         .strip_prefix(BASIC_JSON_RULES_EBNF)
@@ -90,12 +92,78 @@ fn check_schema_with_instance(
         strict_mode,
         None,
         false,
+        false,
     )
     .unwrap();
     assert_eq!(
         is_grammar_accept_string(&json_schema_grammar, instance),
         is_accepted
     );
+}
+
+#[test]
+#[serial]
+fn test_any_order_json_schema_api() {
+    let schema = r#"{
+        "type": "object",
+        "properties": {
+            "first": {"type": "string"},
+            "second": {"type": "integer"}
+        },
+        "required": ["first", "second"],
+        "additionalProperties": false
+    }"#;
+    let reversed_properties = r#"{"second": 2, "first": "one"}"#;
+
+    let ordered = Grammar::from_json_schema(
+        schema,
+        true,
+        None,
+        None::<(&str, &str)>,
+        true,
+        None,
+        false,
+        false,
+    )
+    .unwrap();
+    assert!(!is_grammar_accept_string(&ordered, reversed_properties));
+
+    let any_order = Grammar::from_json_schema(
+        schema,
+        true,
+        None,
+        None::<(&str, &str)>,
+        true,
+        None,
+        false,
+        true,
+    )
+    .unwrap();
+    assert!(is_grammar_accept_string(&any_order, reversed_properties));
+
+    let empty_vocab: Vec<&str> = vec![];
+    let stop_ids: Option<Box<[i32]>> = None;
+    let tokenizer_info = xgrammar::TokenizerInfo::new(
+        &empty_vocab,
+        xgrammar::VocabType::RAW,
+        &stop_ids,
+        false,
+    )
+    .unwrap();
+    let mut compiler =
+        xgrammar::GrammarCompiler::new(&tokenizer_info, 1, false, -1).unwrap();
+    let compiled = compiler
+        .compile_json_schema(
+            schema,
+            true,
+            None,
+            None::<(&str, &str)>,
+            true,
+            None,
+            true,
+        )
+        .unwrap();
+    assert!(is_grammar_accept_string(&compiled.grammar(), reversed_properties));
 }
 
 /// Test basic JSON schema with various field types
@@ -110,6 +178,7 @@ fn test_basic() {
         None::<(&str, &str)>,
         true,
         None,
+        false,
         false,
     )
     .unwrap();
@@ -133,6 +202,7 @@ fn test_indent() {
         None::<(&str, &str)>,
         true,
         None,
+        false,
         false,
     )
     .unwrap();
@@ -162,6 +232,7 @@ fn test_non_strict() {
         true,
         None,
         false,
+        false,
     )
     .unwrap();
     assert!(is_grammar_accept_string(&grammar_strict, r#"{"name": "Alice"}"#));
@@ -177,6 +248,7 @@ fn test_non_strict() {
         None::<(&str, &str)>,
         false,
         None,
+        false,
         false,
     )
     .unwrap();
@@ -203,6 +275,7 @@ fn test_enum_const() {
         true,
         None,
         false,
+        false,
     )
     .unwrap();
 
@@ -219,6 +292,7 @@ fn test_enum_const() {
         None::<(&str, &str)>,
         true,
         None,
+        false,
         false,
     )
     .unwrap();
@@ -248,6 +322,7 @@ fn test_optional() {
         true,
         None,
         false,
+        false,
     )
     .unwrap();
 
@@ -275,6 +350,7 @@ fn test_empty() {
         true,
         None,
         false,
+        false,
     )
     .unwrap();
 
@@ -287,6 +363,7 @@ fn test_empty() {
         None::<(&str, &str)>,
         false,
         None,
+        false,
         false,
     )
     .unwrap();
@@ -308,6 +385,7 @@ fn test_union() {
         None::<(&str, &str)>,
         true,
         None,
+        false,
         false,
     )
     .unwrap();
@@ -332,6 +410,7 @@ fn test_any_whitespace() {
         true,
         None,
         false,
+        false,
     )
     .unwrap();
     assert!(is_grammar_accept_string(&grammar_any, r#"{"key":"value"}"#));
@@ -348,6 +427,7 @@ fn test_any_whitespace() {
         None::<(&str, &str)>,
         true,
         None,
+        false,
         false,
     )
     .unwrap();
@@ -415,6 +495,7 @@ fn test_array_schema_error_cases() {
             true,
             None,
             false,
+            false,
         );
         match result {
             Ok(_) => panic!("expected error for schema"),
@@ -441,6 +522,7 @@ fn test_array_schema() {
         true,
         None,
         false,
+        false,
     )
     .unwrap();
 
@@ -462,6 +544,7 @@ fn test_array_schema_min_max() {
         None::<(&str, &str)>,
         true,
         None,
+        false,
         false,
     )
     .unwrap();
@@ -488,6 +571,7 @@ fn test_limited_whitespace_cnt() {
         true,                 // strict_mode
         Some(2),              // max_whitespace_cnt=2
         false,                // print_converted_ebnf
+        false,
     )
     .unwrap();
 
@@ -526,6 +610,7 @@ fn test_limited_whitespace_compile() {
             None::<(&str, &str)>, // separators
             true,                 // strict_mode
             Some(2),              // max_whitespace_cnt=2
+            false,
         )
         .unwrap();
 
@@ -563,6 +648,7 @@ fn test_utf8_in_enum() {
         true,
         None,
         false,
+        false,
     )
     .unwrap();
 
@@ -585,6 +671,7 @@ fn test_utf8_string_in_const() {
         None::<(&str, &str)>,
         true,
         None,
+        false,
         false,
     )
     .unwrap();
@@ -615,6 +702,7 @@ fn test_all_optional() {
         None::<(&str, &str)>,
         true,
         None,
+        false,
         false,
     )
     .unwrap();
@@ -662,6 +750,7 @@ fn test_reference_schema() {
         true,
         None,
         false,
+        false,
     )
     .unwrap();
 
@@ -695,6 +784,7 @@ fn test_anyof_oneof() {
         true,
         None,
         false,
+        false,
     )
     .unwrap();
 
@@ -721,6 +811,7 @@ fn test_restricted_string() {
         None::<(&str, &str)>,
         true,
         None,
+        false,
         false,
     )
     .unwrap();
@@ -751,6 +842,7 @@ fn test_complex_restrictions() {
         true,
         None,
         false,
+        false,
     )
     .unwrap();
 
@@ -775,6 +867,7 @@ fn test_array_with_only_items_keyword() {
         None::<(&str, &str)>,
         true,
         None,
+        false,
         false,
     )
     .unwrap();
@@ -805,6 +898,7 @@ fn test_object_with_only_properties_keyword() {
         true,
         None,
         false,
+        false,
     )
     .unwrap();
 
@@ -832,6 +926,7 @@ fn test_all_optional_non_strict() {
         None::<(&str, &str)>,
         false,
         None,
+        false,
         false,
     )
     .unwrap();
@@ -879,6 +974,7 @@ fn test_reference() {
         true,
         None,
         false,
+        false,
     )
     .unwrap();
 
@@ -901,6 +997,7 @@ fn test_alias() {
         true,
         None,
         false,
+        false,
     )
     .unwrap();
 
@@ -919,6 +1016,7 @@ fn test_dynamic_model() {
         None::<(&str, &str)>,
         true,
         None,
+        false,
         false,
     )
     .unwrap();
@@ -948,6 +1046,7 @@ fn test_object_with_pattern_properties_and_property_names() {
         None::<(&str, &str)>,
         true,
         None,
+        false,
         false,
     )
     .unwrap();
@@ -980,6 +1079,7 @@ fn test_object_with_pattern_properties_and_property_names() {
         None::<(&str, &str)>,
         false,
         None,
+        false,
         false,
     )
     .unwrap();
@@ -1020,6 +1120,7 @@ fn test_object_with_property_numbers() {
         true,
         None,
         false,
+        false,
     )
     .unwrap();
 
@@ -1044,6 +1145,7 @@ fn test_object_error_handle() {
             None::<(&str, &str)>,
             true,
             None,
+            false,
             false,
         )
         .map(|_| ())
@@ -1139,7 +1241,7 @@ fn test_generate_range_regex() {
     );
     assert_eq!(
         generate_range_regex(Some(2134), Some(3459)).unwrap(),
-        r"^((2[2-9]\d{2}|2[2-9]\d{2}|21[4-9]\d{1}|213[5-9]|2134|3[0-3]\d{2}|3[0-3]\d{2}|34[0-4]\d{1}|345[0-8]|3459))$"
+        r"^((213[4-9]|21[4-8]\d|219\d|2[2-8]\d{2}|29\d{2}|30\d{2}|3[1-3]\d{2}|34[0-5]\d))$"
     );
 
     // Negative to positive range
@@ -1157,11 +1259,11 @@ fn test_generate_range_regex() {
     // Large ranges
     assert_eq!(
         generate_range_regex(Some(-1999), Some(-100)).unwrap(),
-        r"^(-([1-9]\d{2}|1[0-8]\d{2}|19[0-8]\d{1}|199[0-8]|1999))$"
+        r"^(-([1-9]\d{2}|1\d{3}))$"
     );
     assert_eq!(
         generate_range_regex(Some(1), Some(9999)).unwrap(),
-        r"^(([1-9]|[1-9]\d{1}|[1-9]\d{2}|[1-9]\d{3}))$"
+        r"^(([1-9]|[1-9]\d|[1-9]\d{2}|[1-9]\d{3}))$"
     );
 }
 
@@ -1177,6 +1279,7 @@ fn test_min_max_length() {
         None::<(&str, &str)>,
         true,
         None,
+        false,
         false,
     )
     .unwrap();
@@ -1202,6 +1305,7 @@ fn test_type_array() {
         true,
         None,
         false,
+        false,
     )
     .unwrap();
 
@@ -1225,6 +1329,7 @@ fn test_type_array_empty() {
         true,
         None,
         false,
+        false,
     )
     .unwrap();
 
@@ -1246,6 +1351,7 @@ fn test_empty_array() {
         true,
         None,
         false,
+        false,
     )
     .unwrap();
 
@@ -1265,6 +1371,7 @@ fn test_empty_object() {
         None::<(&str, &str)>,
         true,
         None,
+        false,
         false,
     )
     .unwrap();
@@ -1286,6 +1393,7 @@ fn test_primitive_type_string() {
         true,
         None,
         false,
+        false,
     )
     .unwrap();
 
@@ -1306,6 +1414,7 @@ fn test_primitive_type_object() {
         false,
         None,
         false,
+        false,
     )
     .unwrap();
 
@@ -1319,27 +1428,27 @@ fn test_primitive_type_object() {
 fn test_generate_float_regex() {
     assert_eq!(
         generate_float_range_regex(Some(1.0), Some(5.0)).unwrap(),
-        r"^(1|5|(([2-4]))(\.\d{1,6})?|1\.\d{1,6}|5\.\d{1,6})$"
+        r"^(1\.[1-9]\d{0,5}|1\.0[1-9]\d{0,4}|1\.00[1-9]\d{0,3}|1\.000[1-9]\d{0,2}|1\.0000[1-9]\d{0,1}|1\.00000[1-9]|1\.0{1,6}|1|(([2-4]))(\.\d{1,6})?|5\.0{1,6}|5)$"
     );
 
     assert_eq!(
         generate_float_range_regex(Some(1.5), Some(5.75)).unwrap(),
-        r"^(1\.5|5\.75|(([2-4]))(\.\d{1,6})?|1\.6\d{0,5}|1\.7\d{0,5}|1\.8\d{0,5}|1\.9\d{0,5}|5\.0\d{0,5}|5\.1\d{0,5}|5\.2\d{0,5}|5\.3\d{0,5}|5\.4\d{0,5}|5\.5\d{0,5}|5\.6\d{0,5}|5\.70\d{0,4}|5\.71\d{0,4}|5\.72\d{0,4}|5\.73\d{0,4}|5\.74\d{0,4})$"
+        r"^(1\.[6-9]\d{0,5}|1\.5[1-9]\d{0,4}|1\.50[1-9]\d{0,3}|1\.500[1-9]\d{0,2}|1\.5000[1-9]\d{0,1}|1\.50000[1-9]|1\.50{0,5}|(([2-4]))(\.\d{1,6})?|5\.[0-6]\d{0,5}|5\.7[0-4]\d{0,4}|5\.0{1,6}|5\.70{0,5}|5\.750{0,4}|5)$"
     );
 
     assert_eq!(
         generate_float_range_regex(Some(-3.14), Some(2.71828)).unwrap(),
-        r"^(-3\.14|2\.71828|(-([1-3])|0|(1))(\.\d{1,6})?|-3\.0\d{0,5}|-3\.10\d{0,4}|-3\.11\d{0,4}|-3\.12\d{0,4}|-3\.13\d{0,4}|2\.0\d{0,5}|2\.1\d{0,5}|2\.2\d{0,5}|2\.3\d{0,5}|2\.4\d{0,5}|2\.5\d{0,5}|2\.6\d{0,5}|2\.70\d{0,4}|2\.710\d{0,3}|2\.711\d{0,3}|2\.712\d{0,3}|2\.713\d{0,3}|2\.714\d{0,3}|2\.715\d{0,3}|2\.716\d{0,3}|2\.717\d{0,3}|2\.7180\d{0,2}|2\.7181\d{0,2}|2\.71820\d{0,1}|2\.71821\d{0,1}|2\.71822\d{0,1}|2\.71823\d{0,1}|2\.71824\d{0,1}|2\.71825\d{0,1}|2\.71826\d{0,1}|2\.71827\d{0,1})$"
+        r"^(-0\.[1-9]\d{0,5}|-0\.0[1-9]\d{0,4}|-0\.00[1-9]\d{0,3}|-0\.000[1-9]\d{0,2}|-0\.0000[1-9]\d{0,1}|-0\.00000[1-9]|-(([1-2]))(\.\d{1,6})?|-3\.0\d{0,5}|-3\.1[0-3]\d{0,4}|-3\.0{1,6}|-3\.10{0,5}|-3\.140{0,4}|-3|0(\.0{1,6})?|-0(\.0{1,6})|0\.[1-9]\d{0,5}|0\.0[1-9]\d{0,4}|0\.00[1-9]\d{0,3}|0\.000[1-9]\d{0,2}|0\.0000[1-9]\d{0,1}|0\.00000[1-9]|((1))(\.\d{1,6})?|2\.[0-6]\d{0,5}|2\.70\d{0,4}|2\.71[0-7]\d{0,3}|2\.718[0-1]\d{0,2}|2\.7182[0-7]\d{0,1}|2\.0{1,6}|2\.70{0,5}|2\.710{0,4}|2\.7180{0,3}|2\.71820{0,2}|2\.718280{0,1}|2)$"
     );
 
     assert_eq!(
         generate_float_range_regex(Some(0.5), None).unwrap(),
-        r"^(0\.5|0\.6\d{0,5}|0\.7\d{0,5}|0\.8\d{0,5}|0\.9\d{0,5}|([1-9]|[1-9]\d*)(\.\d{1,6})?)$"
+        r"^(0\.[6-9]\d{0,5}|0\.5[1-9]\d{0,4}|0\.50[1-9]\d{0,3}|0\.500[1-9]\d{0,2}|0\.5000[1-9]\d{0,1}|0\.50000[1-9]|0\.50{0,5}|([1-9]|[1-9]\d{1,})(\.\d{1,6})?)$"
     );
 
     assert_eq!(
         generate_float_range_regex(None, Some(-1.5)).unwrap(),
-        r"^(-1\.5|-1\.6\d{0,5}|-1\.7\d{0,5}|-1\.8\d{0,5}|-1\.9\d{0,5}|(-[3-9]|-[1-9]\d*)(\.\d{1,6})?)$"
+        r"^(-1\.[6-9]\d{0,5}|-1\.5[1-9]\d{0,4}|-1\.50[1-9]\d{0,3}|-1\.500[1-9]\d{0,2}|-1\.5000[1-9]\d{0,1}|-1\.50000[1-9]|-1\.50{0,5}|-([2-9]|[1-9]\d{1,})(\.\d{1,6})?)$"
     );
 
     assert_eq!(
@@ -1349,7 +1458,7 @@ fn test_generate_float_regex() {
 
     assert_eq!(
         generate_float_range_regex(Some(3.14159), Some(3.14159)).unwrap(),
-        r"^(3\.14159)$"
+        r"^(3\.141590{0,1})$"
     );
 
     assert_eq!(
@@ -1364,7 +1473,7 @@ fn test_generate_float_regex() {
 
     assert_eq!(
         generate_float_range_regex(Some(-0.000001), Some(0.000001)).unwrap(),
-        r"^(-0\.000001|0\.000001|-0\.000000\d{0,0}|0\.000000\d{0,0})$"
+        r"^(-0\.000001|0(\.0{1,6})?|-0(\.0{1,6})|0\.000001)$"
     );
 }
 
@@ -1390,6 +1499,7 @@ fn test_utf8_object_array_in_enum() {
         None::<(&str, &str)>,
         true,
         None,
+        false,
         false,
     )
     .unwrap();
@@ -1418,6 +1528,7 @@ fn test_utf8_object_const() {
         true,
         None,
         false,
+        false,
     )
     .unwrap();
 
@@ -1439,6 +1550,7 @@ fn test_utf8_array_const() {
         None::<(&str, &str)>,
         true,
         None,
+        false,
         false,
     )
     .unwrap();
@@ -1465,6 +1577,7 @@ fn test_email_format() {
         None::<(&str, &str)>,
         true,
         None,
+        false,
         false,
     )
     .unwrap();
@@ -1503,6 +1616,7 @@ fn test_date_format() {
         true,
         None,
         false,
+        false,
     )
     .unwrap();
 
@@ -1528,6 +1642,7 @@ fn test_time_format() {
         None::<(&str, &str)>,
         true,
         None,
+        false,
         false,
     )
     .unwrap();
@@ -1635,6 +1750,7 @@ fn test_ipv4_format() {
         true,
         None,
         false,
+        false,
     )
     .unwrap();
 
@@ -1659,6 +1775,7 @@ fn test_hostname_format() {
         None::<(&str, &str)>,
         true,
         None,
+        false,
         false,
     )
     .unwrap();
@@ -1687,6 +1804,7 @@ fn test_uuid_format() {
         None::<(&str, &str)>,
         true,
         None,
+        false,
         false,
     )
     .unwrap();
@@ -1728,6 +1846,7 @@ fn test_duration_format() {
         true,
         None,
         false,
+        false,
     )
     .unwrap();
 
@@ -1759,6 +1878,7 @@ fn test_uri_format() {
         None::<(&str, &str)>,
         true,
         None,
+        false,
         false,
     )
     .unwrap();

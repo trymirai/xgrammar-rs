@@ -58,6 +58,7 @@ inline std::unique_ptr<xgrammar::CompiledGrammar> compiler_compile_json_schema(
     bool strict_mode,
     bool has_max_whitespace_cnt,
     int32_t max_whitespace_cnt,
+    bool any_order,
     std::string* error_out
 ) {
   try {
@@ -80,7 +81,8 @@ inline std::unique_ptr<xgrammar::CompiledGrammar> compiler_compile_json_schema(
         indent_opt,
         sep_opt,
         strict_mode,
-        max_whitespace_cnt_opt
+        max_whitespace_cnt_opt,
+        any_order
     );
     return make_unique(std::move(result));
   } catch (const std::exception& e) {

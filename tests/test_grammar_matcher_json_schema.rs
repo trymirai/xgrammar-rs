@@ -111,6 +111,7 @@ fn test_json_schema_debug_accept_string() {
         true,
         None,
         false,
+        false,
     )
     .unwrap();
 
@@ -143,6 +144,7 @@ fn test_json_schema_find_jump_forward_string() {
         None::<(&str, &str)>,
         true,
         None,
+        false,
         false,
     )
     .unwrap();
@@ -192,6 +194,7 @@ fn test_fill_next_token_bitmask() {
                 None::<(&str, &str)>,
                 true,
                 None,
+                false,
             )
             .unwrap();
         let mut matcher =
@@ -447,6 +450,7 @@ fn test_fill_next_token_bitmask_intfloat_range() {
                     None::<(&str, &str)>,
                     true,
                     None,
+                    false,
                 )
                 .unwrap();
             let mut matcher =
@@ -535,6 +539,7 @@ fn test_64bit_limit_validation() {
                 None::<(&str, &str)>,
                 true,
                 None,
+                false,
             );
             match result {
                 Ok(_) => panic!("expected schema error"),
@@ -587,6 +592,7 @@ fn test_signed_64bit_boundary_values_work() {
                     None::<(&str, &str)>,
                     true,
                     None,
+                    false,
                 )
                 .unwrap();
             let mut matcher =
@@ -663,6 +669,7 @@ fn test_mixed_type_range_schema() {
                     None::<(&str, &str)>,
                     true,
                     None,
+                    false,
                 )
                 .unwrap();
             let mut matcher =
@@ -744,6 +751,7 @@ fn test_multiple_boundaries_schema() {
                     None::<(&str, &str)>,
                     true,
                     None,
+                    false,
                 )
                 .unwrap();
             let mut matcher =
@@ -831,6 +839,7 @@ fn test_mask_generation_format() {
                 None::<(&str, &str)>,
                 true,
                 None,
+                false,
             )
             .unwrap();
         let mut matcher =
@@ -897,6 +906,7 @@ fn test_implicit_left_recursion_schema() {
         false,
         None,
         false,
+        false,
     )
     .unwrap();
 
@@ -949,6 +959,7 @@ fn test_regression_accept_invalid_token() {
             None::<(&str, &str)>,
             true,
             None,
+            false,
         )
         .unwrap();
     let mut matcher = GrammarMatcher::new(&compiled, None, true, 200).unwrap();
@@ -1031,6 +1042,7 @@ fn test_regression_accept_kimi_tokenizer_token() {
             None::<(&str, &str)>,
             true,
             None,
+            false,
         )
         .unwrap();
     let mut matcher = GrammarMatcher::new(&compiled, None, true, 200).unwrap();
@@ -1063,6 +1075,7 @@ fn test_regression_empty_property_key_regex() {
         true,
         None,
         false,
+        false,
     )
     .unwrap();
     let _ = grammar;
@@ -1079,6 +1092,7 @@ fn test_json_schema_number_without_constraint() {
         None::<(&str, &str)>,
         true,
         None,
+        false,
         false,
     )
     .unwrap();

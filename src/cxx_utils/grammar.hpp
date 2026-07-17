@@ -28,6 +28,7 @@ inline std::unique_ptr<xgrammar::Grammar> grammar_from_json_schema(
     bool has_max_whitespace_cnt,
     int32_t max_whitespace_cnt,
     bool print_converted_ebnf,
+    bool any_order,
     std::string* error_out
 ) {
   try {
@@ -58,7 +59,8 @@ inline std::unique_ptr<xgrammar::Grammar> grammar_from_json_schema(
         separators_opt,
         strict_mode,
         max_whitespace_cnt_opt,
-        print_converted_ebnf
+        print_converted_ebnf,
+        any_order
     );
     if (g.IsNull()) {
       if (error_out) {

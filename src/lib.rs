@@ -229,6 +229,7 @@ mod ffi {
             has_max_whitespace_cnt: bool,
             max_whitespace_cnt: i32,
             print_converted_ebnf: bool,
+            any_order: bool,
             error_out: *mut CxxString,
         ) -> UniquePtr<Grammar>;
 
@@ -339,6 +340,7 @@ mod ffi {
             strict_mode: bool,
             has_max_whitespace_cnt: bool,
             max_whitespace_cnt: i32,
+            any_order: bool,
             error_out: *mut CxxString,
         ) -> UniquePtr<CompiledGrammar>;
 
@@ -494,18 +496,16 @@ mod ffi {
             separator_comma: &CxxString,
             separator_colon: &CxxString,
             strict_mode: bool,
-            has_max_whitepsace_cnt: bool,
+            has_max_whitespace_cnt: bool,
             max_whitespace_cnt: i32,
+            json_format: &CxxString,
+            any_order: bool,
         ) -> UniquePtr<CxxString>;
 
         pub fn ebnf_to_grammar_no_normalization(
             ebnf_string: &CxxString,
             root_rule_name: &CxxString,
         ) -> UniquePtr<Grammar>;
-
-        pub fn qwen_xml_tool_calling_to_ebnf(
-            schema: &CxxString
-        ) -> UniquePtr<CxxString>;
 
         pub unsafe fn get_masked_tokens_from_bitmask(
             bitmask_r: *const DLTensor,

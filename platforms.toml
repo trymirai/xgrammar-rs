@@ -7,7 +7,7 @@ swift = { provider = "cargo", version = "0.11.0" }
 zigbuild = { provider = "cargo", version = "0.22.3" }
 xwin = { provider = "cargo", version = "0.22.0" }
 ziglang = { provider = "uv", version = "0.16.0" }
-maturin = { provider = "uv", version = "1.7" }
+maturin = { provider = "uv", version = "1.13.1" }
 
 [targets."aarch64-apple-darwin"]
 aliases = ["apple", "macos"]
@@ -40,8 +40,31 @@ aliases = ["windows"]
 [targets."wasm32-unknown-unknown"]
 aliases = ["wasm"]
 
+[languages.rust]
+targets = [
+    "aarch64-apple-darwin",
+    "x86_64-apple-darwin",
+    "aarch64-apple-ios",
+    "aarch64-apple-ios-sim",
+    "aarch64-unknown-linux-gnu",
+    "x86_64-unknown-linux-gnu",
+    "aarch64-pc-windows-msvc",
+    "x86_64-pc-windows-msvc",
+    "wasm32-unknown-unknown",
+]
+tools = []
+bindings = []
+examples_path = "crates/xgrammar/examples"
+
 [languages.python]
-targets = ["aarch64-apple-darwin", "x86_64-apple-darwin", "aarch64-unknown-linux-gnu", "x86_64-unknown-linux-gnu"]
+targets = [
+    "aarch64-apple-darwin",
+    "x86_64-apple-darwin",
+    "aarch64-unknown-linux-gnu",
+    "x86_64-unknown-linux-gnu",
+    "aarch64-pc-windows-msvc",
+    "x86_64-pc-windows-msvc",
+]
 tools = ["maturin"]
 bindings = ["pyo3"]
 examples_path = "bindings/python/examples"
@@ -53,7 +76,17 @@ bindings = ["uniffi"]
 examples_path = "bindings/swift/Sources/Examples"
 
 [languages.typescript]
-targets = ["aarch64-apple-darwin", "x86_64-apple-darwin", "aarch64-unknown-linux-gnu", "x86_64-unknown-linux-gnu"]
+targets = [
+    "aarch64-apple-darwin",
+    "x86_64-apple-darwin",
+    "aarch64-unknown-linux-gnu",
+    "x86_64-unknown-linux-gnu",
+    "aarch64-pc-windows-msvc",
+    "x86_64-pc-windows-msvc",
+]
 tools = ["zigbuild", "xwin"]
 bindings = ["napi"]
 examples_path = "bindings/typescript/examples"
+
+[examples]
+json-grammar = { title = "JSON Grammar", description = "Compile the built-in JSON grammar and accept a sample JSON string" }

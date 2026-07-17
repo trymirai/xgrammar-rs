@@ -5,6 +5,7 @@ members = [
     "crates/bindings",
     "crates/bindings-types",
     "crates/xgrammar-py",
+    "crates/cli-tools",
 ]
 # `crates/legacy` is the retired cxx-backed crate, kept for differential testing
 # and reference; it is built on demand, not as part of the workspace.
@@ -19,10 +20,21 @@ license = "Apache-2.0"
 repository = "https://github.com/trymirai/xgrammar-rs"
 homepage = "https://github.com/trymirai/xgrammar-rs"
 authors = ["Eugene Bokhan <eugenebokhan@gmail.com>"]
+description = "Efficient, Flexible and Portable Structured Generation — pure-Rust XGrammar."
+readme = "README.md"
+keywords = ["llm", "grammar", "structured-generation", "json-schema", "parser"]
 
 [workspace.dependencies]
+clap = { version = "4.6", features = ["derive"] }
+anyhow = "1.0"
+toml = "1.1"
+toml_edit = "0.25"
+indexmap = { version = "2.13", features = ["serde"] }
+colored = "3.1"
+minijinja = { version = "2.17", features = ["json", "preserve_order"] }
+regex = "1"
 getrandom = { version = "0.3", features = ["wasm_js"] }
-xgrammar = { path = "crates/xgrammar", version = "0.3.0" }
+xgrammar = { package = "xgrammar-rs", path = "crates/xgrammar", version = "0.3.0" }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 thiserror = "2"
@@ -42,13 +54,12 @@ syn = { version = "2.0", features = ["full", "fold"] }
 # Backend deps (activated only by the matching `bindings-*` feature).
 pyo3 = { version = "0.28.3", features = [
     "extension-module",
-    "abi3-py312",
+    "abi3-py38",
     "experimental-async",
     "multiple-pymethods",
 ] }
 pyo3-build-config = "0.28.3"
 pyo3-async-runtimes = { version = "0.28.0", features = ["tokio-runtime"] }
-pyo3-stub-gen = "0.22.1"
 inventory = "0.3.24"
 uniffi = { version = "0.31.1", features = ["tokio"] }
 napi = { version = "3.8.3", features = ["napi10", "object_indexmap", "tokio_rt"] }
@@ -74,4 +85,3 @@ strip = true
 # Optimize dependencies even in dev builds — the parsing/automata tests are heavy.
 [profile.dev.package."*"]
 opt-level = 3
-

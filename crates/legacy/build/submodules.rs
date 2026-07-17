@@ -19,15 +19,18 @@ pub fn ensure_xgrammar_source_tree(manifest_dir: &Path) -> PathBuf {
         }
         p
     } else {
-        let source_dir = manifest_dir.join("xgrammar");
-        if !looks_like_xgrammar_repo_root(&source_dir) {
-            panic!(
-                "XGrammar submodule is not initialized at {}. \
-                 Run `git submodule update --init --recursive` or set \
-                 XGRAMMAR_SRC_DIR to a checked-out XGrammar repo root.",
-                source_dir.display()
-            );
-        }
+        // Prefer gitignored `external/xgrammar` at the workspace root.
+        let source_dir = manifest_dir
+            .ancestors()
+            .map(|dir| dir.join("external").join("xgrammar"))
+            .find(|candidate| looks_like_xgrammar_repo_root(candidate))
+            .unwrap_or_else(|| {
+                panic!(
+                    "XGrammar reference checkout not found under external/xgrammar. \
+                     Clone or symlink mlc-ai/xgrammar there (see README / xgrammar.rev), \
+                     or set XGRAMMAR_SRC_DIR to a checked-out XGrammar repo root."
+                )
+            });
         source_dir
     };
 
@@ -36,7 +39,7 @@ pub fn ensure_xgrammar_source_tree(manifest_dir: &Path) -> PathBuf {
     if !dlpack_header.exists() {
         panic!(
             "Required git submodule `3rdparty/dlpack` is missing (expected {}). \
-            Run `git submodule update --init --recursive` or set \
+            Initialize submodules in the external/xgrammar checkout or set \
             XGRAMMAR_SRC_DIR to an XGrammar repo root with submodules initialized.",
             dlpack_header.display()
         );

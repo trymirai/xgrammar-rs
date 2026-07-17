@@ -1,12 +1,10 @@
-//! Port of `xgrammar/tests/cpp/test_fsm.cc`.
+//! Port of `external/xgrammar/tests/cpp/test_fsm.cc`.
 //!
 //! Ported from `build` → `accept_string` acceptance through the full automata pipeline
 //! (DFA conversion, minimization, epsilon simplification, state merging, intersection,
 //! complement, and the compact representation).
 
-use xgrammar::fsm::{
-    CompactFsm, CompactFsmWithStartEnd, Fsm, FsmWithStartEnd, build_regex_fsm,
-};
+use xgrammar::fsm::{CompactFsm, CompactFsmWithStartEnd, Fsm, FsmWithStartEnd, build_regex_fsm};
 
 /// Whether some character-range edge out of state 0 covers `c` — mirrors the in-test lambda
 /// the C++ uses to probe a single character class's first state.
@@ -14,11 +12,7 @@ fn state0_accepts_char(
     fsm_wse: &xgrammar::fsm::FsmWithStartEnd,
     c: u8,
 ) -> bool {
-    fsm_wse
-        .fsm()
-        .state_edges(0)
-        .iter()
-        .any(|e| e.min <= i32::from(c) && e.max >= i32::from(c))
+    fsm_wse.fsm().state_edges(0).iter().any(|e| e.min <= i32::from(c) && e.max >= i32::from(c))
 }
 
 #[test]
@@ -128,9 +122,7 @@ fn test_email() {
     ] {
         assert!(fsm_wse.accept_string(email), "should accept {email:?}");
     }
-    for email in
-        ["@google.test", "hello@", "hello@.test", "+++asd@b.test", "hello"]
-    {
+    for email in ["@google.test", "hello@", "hello@.test", "+++asd@b.test", "hello"] {
         assert!(!fsm_wse.accept_string(email), "should reject {email:?}");
     }
 }
@@ -141,17 +133,7 @@ fn test_time() {
     for time in ["1:34", "23:59", "00:00", "01:02:03", "23:59:59"] {
         assert!(fsm_wse.accept_string(time), "should accept {time:?}");
     }
-    for time in [
-        "19",
-        "12:6",
-        "12:34:",
-        "12:34:5",
-        "12:34:567",
-        "12:123",
-        "12:",
-        ":34:23",
-        "::",
-    ] {
+    for time in ["19", "12:6", "12:34:", "12:34:5", "12:34:567", "12:123", "12:", ":34:23", "::"] {
         assert!(!fsm_wse.accept_string(time), "should reject {time:?}");
     }
 }
@@ -162,19 +144,9 @@ fn function_test() {
     let fsm_wse = build_regex_fsm("[\\d\\d\\d]+123").unwrap();
     assert!(fsm_wse.accept_string("123456123"));
     let compact = CompactFsm::from_fsm(fsm_wse.fsm());
-    let compact_wse = CompactFsmWithStartEnd::new(
-        compact.clone(),
-        fsm_wse.start(),
-        fsm_wse.ends().to_vec(),
-        false,
-    );
+    let compact_wse = CompactFsmWithStartEnd::new(compact.clone(), fsm_wse.start(), fsm_wse.ends().to_vec(), false);
     assert!(compact_wse.accept_string("123456123"));
-    let roundtrip = FsmWithStartEnd::new(
-        compact.to_fsm(),
-        fsm_wse.start(),
-        fsm_wse.ends().to_vec(),
-        false,
-    );
+    let roundtrip = FsmWithStartEnd::new(compact.to_fsm(), fsm_wse.start(), fsm_wse.ends().to_vec(), false);
     assert!(roundtrip.accept_string("123456123"));
 
     // Test 2: DFA conversion removes epsilons and de-duplicates transitions.
@@ -182,9 +154,7 @@ fn function_test() {
     assert!(fsm_wse.accept_string("abc3"));
     let dfa = fsm_wse.to_dfa().unwrap();
     assert!(dfa.accept_string("abc3"));
-    assert!(
-        dfa.fsm().edges().iter().all(|es| es.iter().all(|e| !e.is_epsilon()))
-    );
+    assert!(dfa.fsm().edges().iter().all(|es| es.iter().all(|e| !e.is_epsilon())));
     for edges in dfa.fsm().edges() {
         let mut rules = std::collections::HashSet::new();
         let mut chars = std::collections::HashSet::new();
@@ -264,12 +234,7 @@ fn function_test() {
 
 /// Builds a 10-state FSM by hand for the merge/epsilon string oracles.
 fn manual_fsm(num_states: i32) -> FsmWithStartEnd {
-    FsmWithStartEnd::new(
-        Fsm::new(num_states as usize),
-        0,
-        vec![false; num_states as usize],
-        false,
-    )
+    FsmWithStartEnd::new(Fsm::new(num_states as usize), 0, vec![false; num_states as usize], false)
 }
 
 #[test]

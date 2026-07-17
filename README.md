@@ -14,9 +14,9 @@ This repository ports the XGrammar C++ core to safe Rust. The main crate has no 
 build dependency. Grammar parsing, JSON Schema and regex conversion, compilation, matching,
 token masks, serialization, and tokenizer metadata all run in Rust.
 
-The upstream [`mlc-ai/xgrammar`](https://github.com/mlc-ai/xgrammar) checkout is pinned as the
-`xgrammar/` submodule. Its original Python tests are kept unchanged and run against this Rust
-extension in CI.
+The upstream [`mlc-ai/xgrammar`](https://github.com/mlc-ai/xgrammar) tree is a local reference
+checkout at gitignored `external/xgrammar` (pin in [`xgrammar.rev`](xgrammar.rev)). Its original
+Python tests are kept unchanged and run against this Rust extension in CI.
 
 ## Packages
 
@@ -81,6 +81,15 @@ Then use `TokenizerInfo::from_huggingface(&tokenizer, vocab_size, stop_token_ids
 
 ## Development
 
+Fetch the upstream reference (C++ sources + Python tests) into gitignored `external/`:
+
+```bash
+mkdir -p external
+git clone https://github.com/mlc-ai/xgrammar.git external/xgrammar
+git -C external/xgrammar checkout "$(grep -v '^#' xgrammar.rev | head -n1)"
+# or: ln -s /path/to/mlc-ai/xgrammar external/xgrammar
+```
+
 Initial setup (installs rustup / uv / pnpm when missing):
 
 ```bash
@@ -100,18 +109,19 @@ cargo tools test python
 cargo tools test swift
 ```
 
-Run the Rust suites directly:
+Run the Rust suites directly (C++ gtest port + rust_api):
 
 ```bash
 cargo test -p xgrammar-rs
 cargo test -p xgrammar-rs --features tokenizers
 ```
 
-Build the Python package and run the untouched upstream suite with `uv`:
+Python tests are the untouched upstream suite under `external/xgrammar/tests/python/`
+(run via bindings, not a Rust re-port):
 
 ```bash
 uv sync --project bindings/python --extra test
-uv run --project bindings/python python -m pytest xgrammar/tests/python -m "not hf_token_required"
+uv run --project bindings/python python -m pytest external/xgrammar/tests/python -m "not hf_token_required"
 ```
 
 Check each generated binding backend independently:

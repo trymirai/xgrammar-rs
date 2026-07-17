@@ -1,0 +1,4 @@
+# Pinned mlc-ai/xgrammar commit used as the C++/Python reference checkout.
+# Local: clone or symlink into external/xgrammar (see README).
+# CI: workflows clone this rev into external/xgrammar.
+257f870d1b905060a5d3168f6f997bb3481f90c1

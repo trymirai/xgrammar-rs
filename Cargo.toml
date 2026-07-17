@@ -9,8 +9,8 @@ members = [
 ]
 # `crates/legacy` is the retired cxx-backed crate, kept for differential testing
 # and reference; it is built on demand, not as part of the workspace.
-# `xgrammar/` is the upstream C++ submodule (used only by the legacy crate).
-exclude = ["crates/legacy", "xgrammar", "external"]
+# Upstream C++/Python reference lives in gitignored `external/xgrammar` (see xgrammar.rev).
+exclude = ["crates/legacy", "external"]
 
 [workspace.package]
 version = "0.3.0"

@@ -13,8 +13,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
+      - name: Checkout upstream XGrammar reference
+        run: |
+          set -euo pipefail
+          REV="$(grep -v '^#' xgrammar.rev | head -n1 | tr -d '[:space:]')"
+          mkdir -p external
+          git clone https://github.com/mlc-ai/xgrammar.git external/xgrammar
+          git -C external/xgrammar checkout "$REV"
       - uses: dtolnay/rust-toolchain@1.85.0
       - uses: Swatinem/rust-cache@v2
       - run: cargo test -p xgrammar-rs --locked
@@ -30,7 +35,7 @@ jobs:
         env:
           HF_HUB_DOWNLOAD_TIMEOUT: 60
         run: >-
-          uv run --project bindings/python python -m pytest xgrammar/tests/python
+          uv run --project bindings/python python -m pytest external/xgrammar/tests/python
           -m "not hf_token_required"
       - name: Upstream Python suite (HF-gated, if token present)
         env:
@@ -42,7 +47,7 @@ jobs:
             echo "HF_TOKEN unset; skipping HF-gated suite"
             exit 0
           fi
-          uv run --project bindings/python python -m pytest xgrammar/tests/python \
+          uv run --project bindings/python python -m pytest external/xgrammar/tests/python \
             -m hf_token_required --tb=line
 
   publish-rust:

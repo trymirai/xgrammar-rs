@@ -13,13 +13,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@nightly
         with:
           components: rustfmt, clippy
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
       - uses: Swatinem/rust-cache@v2
-      - run: cargo fmt --all -- --check
+      - run: cargo +nightly fmt --all -- --check
       - run: cargo clippy -p xgrammar-rs --all-targets --features tokenizers -- -D warnings
       - run: cargo doc -p xgrammar-rs --no-deps --features tokenizers
 
@@ -37,8 +38,6 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo test -p xgrammar-rs --locked
@@ -101,8 +100,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
+      - name: Checkout upstream XGrammar reference
+        run: |
+          set -euo pipefail
+          REV="$(grep -v '^#' xgrammar.rev | head -n1 | tr -d '[:space:]')"
+          mkdir -p external
+          git clone https://github.com/mlc-ai/xgrammar.git external/xgrammar
+          git -C external/xgrammar checkout "$REV"
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - uses: astral-sh/setup-uv@v4
@@ -115,7 +119,7 @@ jobs:
         env:
           HF_HUB_DOWNLOAD_TIMEOUT: 60
         run: >-
-          uv run --project bindings/python python -m pytest xgrammar/tests/python
+          uv run --project bindings/python python -m pytest external/xgrammar/tests/python
           -m "not hf_token_required"
 
   upstream-python-hf:
@@ -124,8 +128,13 @@ jobs:
     # Requires repo secret HF_TOKEN; skips cleanly when unset (forks/PRs).
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
+      - name: Checkout upstream XGrammar reference
+        run: |
+          set -euo pipefail
+          REV="$(grep -v '^#' xgrammar.rev | head -n1 | tr -d '[:space:]')"
+          mkdir -p external
+          git clone https://github.com/mlc-ai/xgrammar.git external/xgrammar
+          git -C external/xgrammar checkout "$REV"
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - uses: astral-sh/setup-uv@v4
@@ -144,5 +153,5 @@ jobs:
             echo "HF_TOKEN secret unset; skipping HF-gated suite"
             exit 0
           fi
-          uv run --project bindings/python python -m pytest xgrammar/tests/python \
+          uv run --project bindings/python python -m pytest external/xgrammar/tests/python \
             -m hf_token_required -v --tb=line

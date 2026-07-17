@@ -11,8 +11,9 @@ description = "Efficient, Flexible and Portable Structured Generation for Rust â
 keywords = ["llm", "grammar", "structured-generation", "json-schema", "parser"]
 categories = ["parsing", "text-processing"]
 readme = "../../README.md"
-# Integration tests mirror the upstream layout (tests/{cpp,python}/) and are aggregated
-# per-directory via main.rs, so disable auto-discovery and declare them explicitly.
+# Integration tests are aggregated per-suite via main.rs (cpp gtest port), so disable
+# auto-discovery and declare them explicitly. Upstream Python tests run via pytest
+# against bindings/python (see README / CI), not as a Rust re-port.
 autotests = false
 
 [lib]
@@ -41,14 +42,10 @@ serde_json = { version = "1", features = ["preserve_order"] }
 [lints]
 workspace = true
 
-# Ported upstream suites, mirroring xgrammar/tests/{cpp,python}/ file-for-file.
+# Ported upstream C++ gtest suite (external/xgrammar/tests/cpp/), file-for-file.
 [[test]]
 name = "cpp"
 path = "tests/cpp/main.rs"
-
-[[test]]
-name = "python"
-path = "tests/python/main.rs"
 
 [[test]]
 name = "rust_api"

@@ -1,6 +1,6 @@
 # Python examples
 
-Upstream examples (same source as `xgrammar/examples/`):
+Upstream examples (same source as `external/xgrammar/examples/`):
 
 ```bash
 # Hugging Face Transformers + LogitsProcessor

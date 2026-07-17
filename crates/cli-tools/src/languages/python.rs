@@ -14,7 +14,9 @@ pub struct PythonLanguageBackend {
 
 impl PythonLanguageBackend {
     pub fn new(config: PlatformsConfig) -> Self {
-        Self { config }
+        Self {
+            config,
+        }
     }
 }
 
@@ -34,20 +36,13 @@ impl LanguageBackend for PythonLanguageBackend {
     ) -> Result<()> {
         let paths = Paths::new()?;
         let bindings_path = paths.bindings_for_language_path(self.language());
-        let zig_path = Command::which("python-zig".to_string())
-            .output()
-            .map(|(path, _)| path)
-            .unwrap_or_default();
+        let zig_path = Command::which("python-zig".to_string()).output().map(|(path, _)| path).unwrap_or_default();
 
         let host_target = self.config.host_target()?;
         for target in targets {
-            let mut command = Command::maturin_build(
-                target.name.clone(),
-                target.features.clone(),
-                configuration,
-            )
-            .with_current_path(&bindings_path)
-            .with_envs(self.config.required_envs_for_target(target.name.clone())?);
+            let mut command = Command::maturin_build(target.name.clone(), target.features.clone(), configuration)
+                .with_current_path(&bindings_path)
+                .with_envs(self.config.required_envs_for_target(target.name.clone())?);
             if !zig_path.is_empty() {
                 command = command.with_env("CARGO_ZIGBUILD_ZIG_PATH", &zig_path);
             }
@@ -55,10 +50,7 @@ impl LanguageBackend for PythonLanguageBackend {
             let wheel_path = parse_wheel_path(&stderr)?;
             if target.name == host_target {
                 let envs = self.config.required_envs_for_target(target.name.clone())?;
-                Command::uv_sync_extra("test")
-                    .with_current_path(&bindings_path)
-                    .with_envs(envs.clone())
-                    .run()?;
+                Command::uv_sync_extra("test").with_current_path(&bindings_path).with_envs(envs.clone()).run()?;
                 Command::uv_pip_install_wheel(wheel_path.clone())
                     .with_current_path(&bindings_path)
                     .with_envs(envs)
@@ -75,10 +67,8 @@ impl LanguageBackend for PythonLanguageBackend {
     ) -> Result<()> {
         let paths = Paths::new()?;
         let bindings_path = paths.bindings_for_language_path(self.language());
-        let suite = paths.root_path.join("xgrammar").join("tests").join("python");
-        Command::uv_pytest_path(suite)
-            .with_current_path(&bindings_path)
-            .run()
+        let suite = paths.root_path.join("external").join("xgrammar").join("tests").join("python");
+        Command::uv_pytest_path(suite).with_current_path(&bindings_path).run()
     }
 
     fn example_target(
@@ -92,9 +82,7 @@ impl LanguageBackend for PythonLanguageBackend {
         let examples_path = self.config.examples_path_for_language(self.language())?;
         let name = self.language().convert_file_name(name);
         let file_path = examples_path.join(format!("{name}.py"));
-        Command::uv_python_file(file_path)
-            .with_current_path(&bindings_path)
-            .run()
+        Command::uv_python_file(file_path).with_current_path(&bindings_path).run()
     }
 
     fn release(
@@ -107,11 +95,7 @@ impl LanguageBackend for PythonLanguageBackend {
             fs::remove_dir_all(&wheels_root)?;
         }
 
-        self.build(
-            Configuration::Release,
-            vec![ALL_TARGET.to_string()],
-            Vec::<Capability>::new(),
-        )?;
+        self.build(Configuration::Release, vec![ALL_TARGET.to_string()], Vec::<Capability>::new())?;
 
         let destination = paths.release_python_pypi_path();
         if destination.exists() {
@@ -140,12 +124,8 @@ impl LanguageBackend for PythonLanguageBackend {
 }
 
 fn parse_wheel_path(stdout: &str) -> Result<PathBuf> {
-    let line = stdout
-        .lines()
-        .find(|line| line.contains("Built wheel"))
-        .context("maturin did not report a built wheel")?;
-    let (_, path) = line
-        .rsplit_once(" to ")
-        .context("Could not parse wheel path from maturin output")?;
+    let line =
+        stdout.lines().find(|line| line.contains("Built wheel")).context("maturin did not report a built wheel")?;
+    let (_, path) = line.rsplit_once(" to ").context("Could not parse wheel path from maturin output")?;
     Ok(PathBuf::from(path.trim()))
 }

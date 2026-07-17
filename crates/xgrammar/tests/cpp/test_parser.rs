@@ -1,4 +1,4 @@
-//! Port of `xgrammar/tests/cpp/test_parser.cc` (the `XGrammarLexerTest` suite).
+//! Port of `external/xgrammar/tests/cpp/test_parser.cc` (the `XGrammarLexerTest` suite).
 //!
 //! The two "invalid UTF-8 byte sequence" sub-cases of `lexer_error_cases` are omitted: the
 //! safe `tokenize(&str)` API cannot carry non-UTF-8 input, so that error path is
@@ -89,8 +89,7 @@ fn basic_tokenization() {
 
 #[test]
 fn comments_and_whitespace() {
-    let input =
-        "rule1 ::= expr1 # This is a comment\n  | expr2 # Another comment";
+    let input = "rule1 ::= expr1 # This is a comment\n  | expr2 # Another comment";
     let tokens = lex(input);
 
     assert_eq!(tokens.len(), 6); // 5 tokens + EOF
@@ -114,10 +113,7 @@ fn string_literals() {
     assert_eq!(tokens[2].value, TokenValue::Str("normal string".to_owned()));
 
     assert_eq!(tokens[4].ty, TokenType::StringLiteral);
-    assert_eq!(
-        tokens[4].value,
-        TokenValue::Str("escaped \"quotes\"".to_owned())
-    );
+    assert_eq!(tokens[4].value, TokenValue::Str("escaped \"quotes\"".to_owned()));
 
     assert_eq!(tokens[6].ty, TokenType::StringLiteral);
     assert_eq!(tokens[6].value, TokenValue::Str("\n\r\t\\".to_owned()));
@@ -300,9 +296,7 @@ fn edge_cases() {
 
     // Various newline formats
     {
-        let tokens = lex(
-            "rule1 ::= expr1\nrule2 ::= expr2\r\nrule3 ::= expr3\rrule4 ::= expr4",
-        );
+        let tokens = lex("rule1 ::= expr1\nrule2 ::= expr2\r\nrule3 ::= expr3\rrule4 ::= expr4");
         assert_eq!(tokens.len(), 13); // 12 tokens + EOF
     }
 
@@ -327,8 +321,7 @@ fn edge_cases() {
 
 #[test]
 fn quantifier_tokens() {
-    let input =
-        "rule ::= expr? | expr* | expr+ | expr{1} | expr{1,} | expr{1,5}";
+    let input = "rule ::= expr? | expr* | expr+ | expr{1} | expr{1,} | expr{1,5}";
     let tokens = lex(input);
 
     assert_eq!(tokens[3].ty, TokenType::Question);
@@ -348,8 +341,7 @@ fn utf8_handling() {
     // Build the input without literal `\u`/`\U` escapes in the source, which the harness
     // would otherwise decode; the backslash is injected at runtime.
     let bs = char::from_u32(0x5C).unwrap();
-    let input =
-        format!("rule ::= \"UTF-8: {bs}u00A9 {bs}u2603 {bs}U0001F600\"");
+    let input = format!("rule ::= \"UTF-8: {bs}u00A9 {bs}u2603 {bs}U0001F600\"");
     let tokens = lex(&input);
 
     assert_eq!(tokens.len(), 4); // 3 tokens + EOF
@@ -360,37 +352,25 @@ fn utf8_handling() {
 #[test]
 fn lexer_error_cases() {
     // Unterminated string
-    assert!(
-        lex_err("rule ::= \"unterminated string")
-            .contains("Expect \" in string literal")
-    );
+    assert!(lex_err("rule ::= \"unterminated string").contains("Expect \" in string literal"));
 
     // Unterminated character class
     assert!(lex_err("rule ::= [a-z").contains("Unterminated character class"));
 
     // Unterminated character class with escaped bracket
-    assert!(
-        lex_err("rule ::= [a-z\\-\\\\\\]")
-            .contains("Unterminated character class")
-    );
+    assert!(lex_err("rule ::= [a-z\\-\\\\\\]").contains("Unterminated character class"));
 
     // Invalid escape sequence in string
     assert!(lex_err("rule ::= \"\\z\"").contains("Invalid escape sequence"));
 
     // Newline in character class
-    assert!(
-        lex_err("rule ::= [a-z\n]")
-            .contains("Character class should not contain newline")
-    );
+    assert!(lex_err("rule ::= [a-z\n]").contains("Character class should not contain newline"));
 
     // Invalid escape sequence in character class
     assert!(lex_err("rule ::= [\\z]").contains("Invalid escape sequence"));
 
     // Integer too large (> 1e15)
-    assert!(
-        lex_err("rule ::= expr{1000000000000000000}")
-            .contains("Integer is too large")
-    );
+    assert!(lex_err("rule ::= expr{1000000000000000000}").contains("Integer is too large"));
 
     // Unexpected character
     assert!(lex_err("rule ::= @").contains("Unexpected character"));
@@ -399,19 +379,11 @@ fn lexer_error_cases() {
     assert!(lex_err("rule : expr").contains("Unexpected character: ':'"));
 
     // Assign preceded by a non-identifier
-    assert!(
-        lex_err("\"string\" ::= expr")
-            .contains("Assign should be preceded by an identifier")
-    );
+    assert!(lex_err("\"string\" ::= expr").contains("Assign should be preceded by an identifier"));
 
     // Assign as the first token
-    assert!(
-        lex_err("::= expr").contains("Assign should not be the first token")
-    );
+    assert!(lex_err("::= expr").contains("Assign should not be the first token"));
 
     // Rule name not at the beginning of the line
-    assert!(
-        lex_err("token token ::= expr")
-            .contains("The rule name should be at the beginning of the line")
-    );
+    assert!(lex_err("token token ::= expr").contains("The rule name should be at the beginning of the line"));
 }

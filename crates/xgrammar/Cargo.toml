@@ -1,5 +1,5 @@
 [package]
-name = "xgrammar"
+name = "xgrammar-rs"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -14,6 +14,9 @@ readme = "../../README.md"
 # Integration tests mirror the upstream layout (tests/{cpp,python}/) and are aggregated
 # per-directory via main.rs, so disable auto-discovery and declare them explicitly.
 autotests = false
+
+[lib]
+name = "xgrammar"
 
 [features]
 default = []
@@ -46,3 +49,7 @@ path = "tests/cpp/main.rs"
 [[test]]
 name = "python"
 path = "tests/python/main.rs"
+
+[[test]]
+name = "rust_api"
+path = "tests/rust_api.rs"

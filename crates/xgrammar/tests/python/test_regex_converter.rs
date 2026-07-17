@@ -54,7 +54,7 @@ fn test_escaped_char_class() {
     assert_eq!(
         re("\\w\\w\\W\\d\\D\\s\\S"),
         "root ::= [a-zA-Z0-9_] [a-zA-Z0-9_] [^a-zA-Z0-9_] [0-9] [^0-9] \
-         [\\f\\n\\r\\t\\v\\u0020\\u00a0] [^[\\f\\n\\r\\t\\v\\u0020\\u00a0]\n"
+         [\\f\\n\\r\\t\\v\\u0020\\u00a0] [^\\f\\n\\r\\t\\v\\u0020\\u00a0]\n"
     );
 }
 
@@ -163,6 +163,10 @@ fn test_empty_parentheses() {
 fn test_empty_alternative() {
     assert_eq!(re("(a|)"), "root ::= ( \"a\" | \"\" )\n");
     assert_eq!(re("ab(c|)"), "root ::= \"a\" \"b\" ( \"c\" | \"\" )\n");
+    assert_eq!(re("^$|^abc"), "root ::= \"\" | \"a\" \"b\" \"c\"\n");
+    assert_eq!(re("a||b"), "root ::= \"a\" | \"\" | \"b\"\n");
+    assert_eq!(re("abc|"), "root ::= \"a\" \"b\" \"c\" | \"\"\n");
+    assert_eq!(re("(a|$)"), "root ::= ( \"a\" | \"\" )\n");
 }
 
 #[test]

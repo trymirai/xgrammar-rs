@@ -99,17 +99,42 @@ impl GrammarCompiler {
         strict_mode: bool,
         max_whitespace_cnt: Option<i32>,
     ) -> CompiledGrammar {
+        self.compile_json_schema_with_any_order(
+            schema,
+            any_whitespace,
+            indent,
+            separators,
+            strict_mode,
+            max_whitespace_cnt,
+            false,
+        )
+    }
+
+    /// Compiles JSON Schema with optional property-order independence.
+    #[must_use]
+    #[allow(clippy::too_many_arguments)]
+    pub fn compile_json_schema_with_any_order(
+        &self,
+        schema: &str,
+        any_whitespace: bool,
+        indent: Option<i32>,
+        separators: Option<(&str, &str)>,
+        strict_mode: bool,
+        max_whitespace_cnt: Option<i32>,
+        any_order: bool,
+    ) -> CompiledGrammar {
         let key = format!(
-            "schema:{any_whitespace}:{indent:?}:{separators:?}:{strict_mode}:{max_whitespace_cnt:?}:{schema}"
+            "schema:{any_whitespace}:{indent:?}:{separators:?}:{strict_mode}:{max_whitespace_cnt:?}:{any_order}:{schema}"
         );
         self.cached(key, || {
-            let grammar = Grammar::from_json_schema(
+            let grammar = Grammar::from_json_schema_with_any_order(
                 schema,
                 any_whitespace,
                 indent,
                 separators,
                 strict_mode,
                 max_whitespace_cnt,
+                any_order,
             )
             .expect("valid JSON schema");
             self.optimize(&grammar)
@@ -139,14 +164,15 @@ impl GrammarCompiler {
         &self,
         structural_tag_json: &str,
     ) -> Result<CompiledGrammar, StructuralTagError> {
-        if self.cache_enabled
-            && let Some(hit) = self
+        if self.cache_enabled {
+            if let Some(hit) = self
                 .cache
                 .lock()
                 .expect("cache mutex")
                 .get(&format!("stag:{structural_tag_json}"))
-        {
-            return Ok(hit.clone());
+            {
+                return Ok(hit.clone());
+            }
         }
         let grammar = Grammar::from_structural_tag_with_tokenizer(
             structural_tag_json,
@@ -203,10 +229,11 @@ impl GrammarCompiler {
         key: String,
         compute: impl FnOnce() -> CompiledGrammar,
     ) -> CompiledGrammar {
-        if self.cache_enabled
-            && let Some(hit) = self.cache.lock().expect("cache mutex").get(&key)
-        {
-            return hit.clone();
+        if self.cache_enabled {
+            if let Some(hit) = self.cache.lock().expect("cache mutex").get(&key)
+            {
+                return hit.clone();
+            }
         }
         let compiled = compute();
         if self.cache_enabled {

@@ -1,6 +1,6 @@
 //! Port of `xgrammar/tests/python/test_serialization.py`.
 //!
-//! Grammar JSON serialization (`"v11"` format), roundtrip, functional equivalence, and the
+//! Grammar JSON serialization (`"v14"` format), roundtrip, functional equivalence, and the
 //! version/format/JSON error family. TokenizerInfo and CompiledGrammar serialization land
 //! with those types' serializers.
 
@@ -45,7 +45,7 @@ fn json_accepts(
 
 #[test]
 fn test_get_serialization_version() {
-    assert_eq!(get_serialization_version(), "v11");
+    assert_eq!(get_serialization_version(), "v14");
 }
 
 #[test]
@@ -65,7 +65,7 @@ fn test_serialize_grammar() {
         "per_rule_fsms": [],
         "allow_empty_rule_ids": [],
         "optimized": false,
-        "__VERSION__": "v11",
+        "__VERSION__": "v14",
     });
     assert_eq!(actual, expected);
 }
@@ -75,7 +75,7 @@ fn test_serialize_grammar_exception() {
     let valid = construct_grammar().serialize_json();
 
     // Wrong version → version error.
-    let bad_version = valid.replace("\"v11\"", "\"v1\"");
+    let bad_version = valid.replace("\"v14\"", "\"v1\"");
     assert!(matches!(
         Grammar::deserialize_json(&bad_version),
         Err(DeserializeError::Version { .. })
@@ -129,7 +129,7 @@ fn test_serialize_tokenizer_info() {
             [6, "-"], [3, "A"], [2, "a"], [7, "aBc"], [8, "abc"], [4, "b"], [5, han],
         ],
         "trie_subtree_nodes_range": [1, 2, 5, 4, 5, 6, 7],
-        "__VERSION__": "v11",
+        "__VERSION__": "v14",
     });
     assert_eq!(actual, expected);
 }

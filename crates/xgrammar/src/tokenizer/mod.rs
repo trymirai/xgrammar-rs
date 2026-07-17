@@ -9,6 +9,6 @@ mod tokenizer_info;
 mod vocab_type;
 
 pub use hf_metadata::{HfMetadata, detect_metadata_from_hf, metadata_to_json};
-pub use token_decoder::decode_token;
+pub use token_decoder::{decode_token, decode_token_bytes};
 pub use tokenizer_info::TokenizerInfo;
 pub use vocab_type::{UnknownVocabType, VocabType};

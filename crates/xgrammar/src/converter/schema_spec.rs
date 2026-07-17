@@ -16,6 +16,30 @@ pub(crate) struct IntegerSpec {
     pub maximum: Option<i64>,
     pub exclusive_minimum: Option<i64>,
     pub exclusive_maximum: Option<i64>,
+    pub multiple_of: Option<i64>,
+}
+
+impl IntegerSpec {
+    /// Returns the effective inclusive range after combining inclusive and exclusive bounds.
+    pub(crate) fn effective_range(&self) -> (Option<i64>, Option<i64>) {
+        let mut start = self.minimum;
+        if let Some(exclusive) = self.exclusive_minimum {
+            let exclusive_start = exclusive + 1;
+            start =
+                Some(start.map_or(exclusive_start, |value| {
+                    value.max(exclusive_start)
+                }));
+        }
+
+        let mut end = self.maximum;
+        if let Some(exclusive) = self.exclusive_maximum {
+            let exclusive_end = exclusive - 1;
+            end = Some(
+                end.map_or(exclusive_end, |value| value.min(exclusive_end)),
+            );
+        }
+        (start, end)
+    }
 }
 
 /// `number` type constraints.

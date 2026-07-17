@@ -1,7 +1,7 @@
 //! JSON serialization for [`Grammar`] — a port of the grammar (de)serialization in
 //! `cpp/support/json_serializer.h` + `grammar.cc`.
 //!
-//! The on-disk format matches the C++ `"v11"` layout: rules as
+//! The on-disk format matches the C++ `"v14"` layout: rules as
 //! `[name, body_expr_id, lookahead_assertion_id, is_exact_lookahead]`, and the expression
 //! store as a flat `grammar_expr_indptr` array of `[type, data_len, data...]` rows indexed by
 //! `grammar_expr_data` offsets (the two key names are swapped relative to their contents, a
@@ -35,7 +35,7 @@ pub enum DeserializeError {
 }
 
 impl Grammar {
-    /// Serializes the grammar to its `"v11"` JSON form (the C++ format — FSMs are always
+    /// Serializes the grammar to its `"v14"` JSON form (the C++ format — FSMs are always
     /// `null`/`[]` in the grammar JSON; the compiler serializes them separately).
     #[must_use]
     pub fn serialize_json(&self) -> String {
@@ -72,7 +72,7 @@ impl Grammar {
             })
             .collect();
 
-        // v11 format: FSMs are always null/empty in grammar JSON (rebuilt on load).
+        // FSMs are always null/empty in standalone grammar JSON (rebuilt on load).
         let complete_fsm = Value::Null;
         let per_rule_fsms: Vec<Value> = Vec::new();
 
@@ -144,7 +144,7 @@ impl Grammar {
         })
     }
 
-    /// Deserializes a grammar from its `"v11"` JSON form.
+    /// Deserializes a grammar from its `"v14"` JSON form.
     ///
     /// # Errors
     /// Returns [`DeserializeError`] for invalid JSON, a version mismatch, or a malformed body.

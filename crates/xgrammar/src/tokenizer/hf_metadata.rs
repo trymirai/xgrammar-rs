@@ -15,7 +15,6 @@ pub struct HfMetadata {
 }
 
 /// Detects vocabulary type and prefix-space behavior from a HF backend JSON string.
-#[must_use]
 pub fn detect_metadata_from_hf(
     backend_str: &str
 ) -> Result<HfMetadata, String> {

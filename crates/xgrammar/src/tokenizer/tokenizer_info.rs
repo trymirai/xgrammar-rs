@@ -7,7 +7,7 @@
 
 use serde_json::{Value, json};
 
-use super::{token_decoder::decode_token, vocab_type::VocabType};
+use super::{token_decoder::decode_token_bytes, vocab_type::VocabType};
 use crate::{config::SERIALIZATION_VERSION, grammar::DeserializeError};
 
 /// Tokens whose presence marks a stop token when explicit ids are not supplied.
@@ -49,6 +49,28 @@ impl TokenizerInfo {
         stop_token_ids: Option<Vec<i32>>,
         add_prefix_space: bool,
     ) -> Self {
+        let encoded_vocab = encoded_vocab
+            .iter()
+            .map(|token| token.as_bytes().to_vec())
+            .collect::<Vec<_>>();
+        Self::new_from_bytes(
+            &encoded_vocab,
+            vocab_type,
+            vocab_size,
+            stop_token_ids,
+            add_prefix_space,
+        )
+    }
+
+    /// Builds tokenizer info from an encoded vocabulary containing arbitrary bytes.
+    #[must_use]
+    pub fn new_from_bytes(
+        encoded_vocab: &[Vec<u8>],
+        vocab_type: VocabType,
+        vocab_size: Option<i32>,
+        stop_token_ids: Option<Vec<i32>>,
+        add_prefix_space: bool,
+    ) -> Self {
         let vocab_size = vocab_size.unwrap_or(encoded_vocab.len() as i32);
         let mut decoded_vocab: Vec<Vec<u8>> =
             Vec::with_capacity(encoded_vocab.len());
@@ -58,7 +80,7 @@ impl TokenizerInfo {
 
         for (i, encoded) in encoded_vocab.iter().enumerate() {
             let id = i as i32;
-            let token = decode_token(encoded, vocab_type);
+            let token = decode_token_bytes(encoded, vocab_type);
             let is_stop = match &stop_token_ids {
                 None => DETECTION_STOP_TOKENS
                     .iter()
@@ -111,6 +133,18 @@ impl TokenizerInfo {
         encoded_vocab: &[String],
         metadata: &str,
     ) -> Result<Self, String> {
+        let encoded_vocab = encoded_vocab
+            .iter()
+            .map(|token| token.as_bytes().to_vec())
+            .collect::<Vec<_>>();
+        Self::from_vocab_and_metadata_bytes(&encoded_vocab, metadata)
+    }
+
+    /// Builds tokenizer info from an arbitrary-byte vocabulary and JSON metadata.
+    pub fn from_vocab_and_metadata_bytes(
+        encoded_vocab: &[Vec<u8>],
+        metadata: &str,
+    ) -> Result<Self, String> {
         let meta: serde_json::Value = serde_json::from_str(metadata)
             .map_err(|e| format!("invalid metadata json: {e}"))?;
         let vocab_type = VocabType::try_from(
@@ -126,7 +160,7 @@ impl TokenizerInfo {
                     .filter_map(|v| v.as_i64().map(|n| n as i32))
                     .collect::<Vec<i32>>()
             });
-        Ok(Self::new(
+        Ok(Self::new_from_bytes(
             encoded_vocab,
             vocab_type,
             vocab_size,
@@ -241,6 +275,75 @@ impl TokenizerInfo {
     }
 }
 
+#[cfg(feature = "tokenizers")]
+impl TokenizerInfo {
+    fn extract_ordered_vocab(
+        tokenizer: &tokenizers::Tokenizer,
+        vocab_size: Option<usize>,
+    ) -> Vec<String> {
+        let vocab = tokenizer.get_vocab(true);
+        let tokenizer_vocab_size = vocab
+            .values()
+            .copied()
+            .max()
+            .map_or(0, |max_id| max_id as usize + 1)
+            .max(vocab.len());
+        let size = vocab_size.unwrap_or(tokenizer_vocab_size);
+        let mut ordered = vec![String::new(); size];
+        for (token, id) in vocab {
+            if let Some(slot) = ordered.get_mut(id as usize) {
+                *slot = token;
+            }
+        }
+        ordered
+    }
+
+    /// Builds tokenizer info from a `tokenizers::Tokenizer` with explicit metadata.
+    ///
+    /// The vocabulary is reordered by token id, including any empty slots and optional model
+    /// padding, so its indices exactly match the model's output dimension.
+    #[must_use]
+    pub fn from_tokenizers_with_options(
+        tokenizer: &tokenizers::Tokenizer,
+        vocab_type: VocabType,
+        vocab_size: Option<usize>,
+        stop_token_ids: Option<&[i32]>,
+        add_prefix_space: bool,
+    ) -> Self {
+        let ordered = Self::extract_ordered_vocab(tokenizer, vocab_size);
+        Self::new(
+            &ordered,
+            vocab_type,
+            Some(ordered.len() as i32),
+            stop_token_ids.map(<[i32]>::to_vec),
+            add_prefix_space,
+        )
+    }
+
+    /// Builds tokenizer info from a Hugging Face tokenizer, automatically detecting its byte
+    /// decoding and prefix-space behavior.
+    ///
+    /// # Errors
+    /// Returns an error if the tokenizer backend cannot be serialized or analyzed.
+    pub fn from_huggingface(
+        tokenizer: &tokenizers::Tokenizer,
+        vocab_size: Option<usize>,
+        stop_token_ids: Option<&[i32]>,
+    ) -> Result<Self, String> {
+        let backend = tokenizer.to_string(false).map_err(|error| {
+            format!("failed to serialize tokenizer backend: {error}")
+        })?;
+        let metadata = super::detect_metadata_from_hf(&backend)?;
+        Ok(Self::from_tokenizers_with_options(
+            tokenizer,
+            metadata.vocab_type,
+            vocab_size,
+            stop_token_ids,
+            metadata.add_prefix_space,
+        ))
+    }
+}
+
 impl TokenizerInfo {
     /// Rebuilds tokenizer info from already-decoded parts (used by deserialization),
     /// recomputing the sorted vocabulary, trie ranges, and reverse index.
@@ -281,7 +384,7 @@ impl TokenizerInfo {
         }
     }
 
-    /// Serializes the tokenizer info to its `"v11"` JSON form (byte strings are encoded as
+    /// Serializes the tokenizer info to its `"v14"` JSON form (byte strings are encoded as
     /// Latin-1, matching the C++).
     #[must_use]
     pub fn serialize_json(&self) -> String {
@@ -307,7 +410,7 @@ impl TokenizerInfo {
             .expect("tokenizer info JSON serialization never fails")
     }
 
-    /// Deserializes tokenizer info from its `"v11"` JSON form.
+    /// Deserializes tokenizer info from its `"v14"` JSON form.
     ///
     /// # Errors
     /// Returns [`DeserializeError`] for invalid JSON, a version mismatch, or a malformed body.

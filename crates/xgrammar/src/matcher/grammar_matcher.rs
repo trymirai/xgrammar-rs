@@ -5,7 +5,7 @@
 //! from-scratch variant (checking each candidate token against the parser); the precomputed
 //! adaptive-mask cache is a performance optimization deferred to a later milestone.
 
-use std::sync::Arc;
+use std::{sync::Arc, time::Instant};
 
 use super::{
     matcher_error::MatcherTerminatedError, token_bitmask::get_bitmask_size,
@@ -350,6 +350,168 @@ impl GrammarMatcher {
     #[must_use]
     pub fn stop_token_ids(&self) -> &[i32] {
         self.tokenizer_info.stop_token_ids()
+    }
+
+    /// Traverses a speculative-decoding draft tree and fills one token-mask row per node.
+    ///
+    /// The three tree arrays use node indices or `-1` for no edge. The root is node zero and
+    /// may not have a sibling. Returns `false` only when `time_threshold` is positive and the
+    /// traversal exceeds it.
+    ///
+    /// # Errors
+    /// Returns a message when array lengths, indices, or the bitmask shape are invalid.
+    pub fn traverse_draft_tree(
+        &mut self,
+        retrieve_next_token: &[i64],
+        retrieve_next_sibling: &[i64],
+        draft_tokens: &[i64],
+        token_bitmask: &mut [i32],
+        time_threshold: f64,
+    ) -> Result<bool, String> {
+        let node_count = retrieve_next_token.len();
+        if node_count == 0 {
+            return Err("the draft tree must not be empty".to_owned());
+        }
+        if retrieve_next_sibling.len() != node_count
+            || draft_tokens.len() != node_count
+        {
+            return Err(
+                "retrieve_next_token, retrieve_next_sibling, and draft_tokens must have the same length"
+                    .to_owned(),
+            );
+        }
+        if retrieve_next_sibling[0] != -1 {
+            return Err("the root node must not have siblings".to_owned());
+        }
+        let bitmask_words =
+            get_bitmask_size(self.tokenizer_info.vocab_size()) as usize;
+        let expected_len = node_count
+            .checked_mul(bitmask_words)
+            .ok_or_else(|| "token bitmask shape overflow".to_owned())?;
+        if token_bitmask.len() != expected_len {
+            return Err(
+                "the token_bitmask batch size and width must match the draft tree and vocabulary"
+                    .to_owned(),
+            );
+        }
+        for &index in
+            retrieve_next_token.iter().chain(retrieve_next_sibling.iter())
+        {
+            if index < -1 || index >= node_count as i64 {
+                return Err("draft tree node index is out of range".to_owned());
+            }
+        }
+
+        self.traverse_draft_tree_recursive(
+            0,
+            None,
+            retrieve_next_token,
+            retrieve_next_sibling,
+            draft_tokens,
+            token_bitmask,
+            bitmask_words,
+            time_threshold,
+            Instant::now(),
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn traverse_draft_tree_recursive(
+        &mut self,
+        current: usize,
+        parent: Option<usize>,
+        retrieve_next_token: &[i64],
+        retrieve_next_sibling: &[i64],
+        draft_tokens: &[i64],
+        token_bitmask: &mut [i32],
+        bitmask_words: usize,
+        time_threshold: f64,
+        start_time: Instant,
+    ) -> Result<bool, String> {
+        let accepted = if current == 0 {
+            true
+        } else {
+            let parent = parent.ok_or_else(|| {
+                "non-root draft tree nodes must have a parent".to_owned()
+            })?;
+            let token = draft_tokens[current];
+            if token < 0 || token >= (bitmask_words * 32) as i64 {
+                false
+            } else {
+                let token = token as usize;
+                let parent_row = &token_bitmask
+                    [parent * bitmask_words..(parent + 1) * bitmask_words];
+                (parent_row[token / 32] as u32 & (1_u32 << (token % 32))) != 0
+            }
+        };
+
+        if accepted
+            && current != 0
+            && time_threshold > 0.0
+            && start_time.elapsed().as_secs_f64() > time_threshold
+        {
+            return Ok(false);
+        }
+
+        let row_start = current * bitmask_words;
+        let row_end = row_start + bitmask_words;
+        if accepted {
+            let token_accepted = current == 0
+                || i32::try_from(draft_tokens[current])
+                    .is_ok_and(|token| self.accept_token(token));
+            if token_accepted {
+                if self.is_terminated() {
+                    token_bitmask[row_start..row_end].fill(0);
+                } else {
+                    self.fill_next_token_bitmask(token_bitmask, current as i32)
+                        .map_err(|error| error.to_string())?;
+                    let child = retrieve_next_token[current];
+                    if child != -1
+                        && !self.traverse_draft_tree_recursive(
+                            child as usize,
+                            Some(current),
+                            retrieve_next_token,
+                            retrieve_next_sibling,
+                            draft_tokens,
+                            token_bitmask,
+                            bitmask_words,
+                            time_threshold,
+                            start_time,
+                        )?
+                    {
+                        if current != 0 {
+                            self.rollback(1);
+                        }
+                        return Ok(false);
+                    }
+                }
+                if current != 0 {
+                    self.rollback(1);
+                }
+            } else {
+                token_bitmask[row_start..row_end].fill(0);
+            }
+        } else {
+            token_bitmask[row_start..row_end].fill(0);
+        }
+
+        let sibling = retrieve_next_sibling[current];
+        if sibling != -1
+            && !self.traverse_draft_tree_recursive(
+                sibling as usize,
+                parent,
+                retrieve_next_token,
+                retrieve_next_sibling,
+                draft_tokens,
+                token_bitmask,
+                bitmask_words,
+                time_threshold,
+                start_time,
+            )?
+        {
+            return Ok(false);
+        }
+        Ok(true)
     }
 
     /// Finds the longest string of forced (uniquely-determined) next characters from the

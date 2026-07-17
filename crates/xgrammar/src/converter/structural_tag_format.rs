@@ -23,6 +23,8 @@ pub(crate) struct ConstStringFormat {
 pub(crate) struct JsonSchemaFormat {
     pub json_schema: String,
     pub style: String,
+    pub any_order: bool,
+    pub max_whitespace_cnt: Option<i32>,
 }
 
 /// `{"type":"any_text","excludes":[...]}`; `detected_end_strs` is filled by the analyzer.

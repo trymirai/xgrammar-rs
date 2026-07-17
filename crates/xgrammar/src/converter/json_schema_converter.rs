@@ -11,7 +11,9 @@ use serde_json::Value;
 use super::{
     ebnf_script_creator::EbnfScriptCreator,
     indent_manager::IndentManager,
-    range_regex::{generate_float_range_regex, generate_range_regex},
+    range_regex::{
+        generate_float_range_regex_with_options, generate_range_regex,
+    },
     regex_converter::regex_to_ebnf,
     schema_error::SchemaError,
     schema_parser::SchemaParser,
@@ -37,13 +39,39 @@ impl Grammar {
         strict_mode: bool,
         max_whitespace_cnt: Option<i32>,
     ) -> Result<Grammar, SchemaError> {
-        let ebnf = json_schema_to_ebnf(
+        Self::from_json_schema_with_any_order(
             schema,
             any_whitespace,
             indent,
             separators,
             strict_mode,
             max_whitespace_cnt,
+            false,
+        )
+    }
+
+    /// Builds a grammar from JSON Schema, optionally allowing object properties in any order.
+    ///
+    /// # Errors
+    /// Returns a [`SchemaError`] if the schema is invalid or unsatisfiable.
+    #[allow(clippy::too_many_arguments)]
+    pub fn from_json_schema_with_any_order(
+        schema: &str,
+        any_whitespace: bool,
+        indent: Option<i32>,
+        separators: Option<(&str, &str)>,
+        strict_mode: bool,
+        max_whitespace_cnt: Option<i32>,
+        any_order: bool,
+    ) -> Result<Grammar, SchemaError> {
+        let ebnf = json_schema_to_ebnf_with_any_order(
+            schema,
+            any_whitespace,
+            indent,
+            separators,
+            strict_mode,
+            max_whitespace_cnt,
+            any_order,
         )?;
         Ok(Grammar::from_ebnf(&ebnf, "root")
             .expect("json schema converter produced valid EBNF"))
@@ -82,6 +110,31 @@ pub fn json_schema_to_ebnf(
     strict_mode: bool,
     max_whitespace_cnt: Option<i32>,
 ) -> Result<String, SchemaError> {
+    json_schema_to_ebnf_with_any_order(
+        schema,
+        any_whitespace,
+        indent,
+        separators,
+        strict_mode,
+        max_whitespace_cnt,
+        false,
+    )
+}
+
+/// Converts a JSON Schema string to EBNF, optionally allowing object properties in any order.
+///
+/// # Errors
+/// Returns a [`SchemaError`] if the schema is invalid or unsatisfiable.
+#[allow(clippy::too_many_arguments)]
+pub fn json_schema_to_ebnf_with_any_order(
+    schema: &str,
+    any_whitespace: bool,
+    indent: Option<i32>,
+    separators: Option<(&str, &str)>,
+    strict_mode: bool,
+    max_whitespace_cnt: Option<i32>,
+    any_order: bool,
+) -> Result<String, SchemaError> {
     let root: Value = serde_json::from_str(schema).map_err(|e| {
         SchemaError::invalid(format!("Failed to parse JSON: {e}"))
     })?;
@@ -93,6 +146,7 @@ pub fn json_schema_to_ebnf(
         any_whitespace,
         max_whitespace_cnt,
         parser,
+        any_order,
     );
     Ok(converter.convert(&spec))
 }
@@ -105,12 +159,30 @@ pub fn json_schema_to_ebnf_xml(
     schema: &str,
     format: XmlJsonFormat,
 ) -> Result<String, SchemaError> {
+    json_schema_to_ebnf_xml_with_options(schema, format, None, false)
+}
+
+/// Converts a JSON Schema to XML-style EBNF with whitespace and ordering options.
+///
+/// # Errors
+/// Returns [`SchemaError`] if the schema is invalid or unsatisfiable.
+pub fn json_schema_to_ebnf_xml_with_options(
+    schema: &str,
+    format: XmlJsonFormat,
+    max_whitespace_cnt: Option<i32>,
+    any_order: bool,
+) -> Result<String, SchemaError> {
     let root: Value = serde_json::from_str(schema).map_err(|e| {
         SchemaError::invalid(format!("Failed to parse JSON: {e}"))
     })?;
     let mut parser = SchemaParser::new(root.clone(), true);
     let spec = parser.parse(&root, None)?;
-    let mut converter = JsonSchemaConverter::new_xml(format, parser);
+    let mut converter = JsonSchemaConverter::new_xml(
+        format,
+        parser,
+        max_whitespace_cnt,
+        any_order,
+    );
     Ok(converter.convert(&spec))
 }
 
@@ -126,6 +198,7 @@ struct JsonSchemaConverter {
     xml_format: Option<XmlJsonFormat>,
     nested_object_level: u8,
     inner_rule_cache: HashMap<String, String>,
+    any_order: bool,
 }
 
 impl JsonSchemaConverter {
@@ -135,6 +208,7 @@ impl JsonSchemaConverter {
         any_whitespace: bool,
         max_whitespace_cnt: Option<i32>,
         parser: SchemaParser,
+        any_order: bool,
     ) -> Self {
         let item_sep = match separators {
             Some((s, _)) => s.to_owned(),
@@ -169,14 +243,18 @@ impl JsonSchemaConverter {
             xml_format: None,
             nested_object_level: 0,
             inner_rule_cache: HashMap::new(),
+            any_order,
         }
     }
 
     fn new_xml(
         format: XmlJsonFormat,
         parser: SchemaParser,
+        max_whitespace_cnt: Option<i32>,
+        any_order: bool,
     ) -> Self {
-        let mut converter = Self::new(None, None, true, None, parser);
+        let mut converter =
+            Self::new(None, None, true, max_whitespace_cnt, parser, any_order);
         converter.xml_format = Some(format);
         converter
     }
@@ -273,7 +351,8 @@ impl JsonSchemaConverter {
         self.ebnf.add_rule(BASIC_ANY, &any_body);
         self.add_cache("{}", BASIC_ANY);
 
-        let int_body = self.generate_integer(&IntegerSpec::default());
+        let int_body =
+            self.generate_integer(&IntegerSpec::default(), BASIC_INTEGER);
         self.ebnf.add_rule(BASIC_INTEGER, &int_body);
         self.add_cache("{\"type\":\"integer\"}", BASIC_INTEGER);
 
@@ -391,7 +470,9 @@ impl JsonSchemaConverter {
         rule_name_hint: &str,
     ) -> String {
         match &spec.spec {
-            SchemaSpecVariant::Integer(s) => self.generate_integer(s),
+            SchemaSpecVariant::Integer(s) => {
+                self.generate_integer(s, rule_name_hint)
+            },
             SchemaSpecVariant::Number(s) => self.generate_number(s),
             SchemaSpecVariant::String(s) => self.generate_string(s),
             SchemaSpecVariant::Boolean => Self::generate_boolean(),
@@ -435,16 +516,24 @@ impl JsonSchemaConverter {
     }
 
     fn generate_integer(
-        &self,
+        &mut self,
         spec: &IntegerSpec,
+        rule_name: &str,
     ) -> String {
-        let mut start = spec.minimum;
-        if let Some(e) = spec.exclusive_minimum {
-            start = Some(e + 1);
-        }
-        let mut end = spec.maximum;
-        if let Some(e) = spec.exclusive_maximum {
-            end = Some(e - 1);
+        let (start, end) = spec.effective_range();
+        if let Some(multiple_of) = spec.multiple_of {
+            if let (Some(start), Some(end)) = (start, end) {
+                let alternatives = (start..=end)
+                    .filter(|value| value % multiple_of == 0)
+                    .map(|value| value.to_string())
+                    .collect::<Vec<_>>()
+                    .join("|");
+                let regex = format!("^({alternatives})$");
+                return regex_to_ebnf(&regex, false)
+                    .expect("integer multipleOf range regex is valid");
+            }
+            return self
+                .generate_integer_multiple_of_dfa(multiple_of, rule_name);
         }
         if start.is_some() || end.is_some() {
             let regex = generate_range_regex(start, end);
@@ -453,20 +542,81 @@ impl JsonSchemaConverter {
         "(\"0\" | \"-\"? [1-9] [0-9]*)".to_owned()
     }
 
+    fn generate_integer_multiple_of_dfa(
+        &mut self,
+        multiple_of: i64,
+        rule_name: &str,
+    ) -> String {
+        let state_rule_names = (0..multiple_of)
+            .map(|state| {
+                self.ebnf.allocate_rule_name(&format!(
+                    "{rule_name}_multiple_of_{multiple_of}_mod_{state}"
+                ))
+            })
+            .collect::<Vec<_>>();
+
+        for state in 0..multiple_of {
+            let mut transitions = Vec::with_capacity(11);
+            if state == 0 {
+                transitions.push("\"\"".to_owned());
+            }
+            for digit in 0..=9 {
+                let next_state = (state * 10 + digit) % multiple_of;
+                transitions.push(EbnfScriptCreator::concat(&[
+                    EbnfScriptCreator::str_literal(&digit.to_string()),
+                    state_rule_names[next_state as usize].clone(),
+                ]));
+            }
+            self.ebnf.add_rule_with_allocated_name(
+                &state_rule_names[state as usize],
+                &EbnfScriptCreator::or(&transitions),
+            );
+        }
+
+        let non_zero_starts = (1..=9)
+            .map(|digit| {
+                EbnfScriptCreator::concat(&[
+                    EbnfScriptCreator::str_literal(&digit.to_string()),
+                    state_rule_names[(digit % multiple_of) as usize].clone(),
+                ])
+            })
+            .collect::<Vec<_>>();
+        EbnfScriptCreator::or(&[
+            EbnfScriptCreator::str_literal("0"),
+            EbnfScriptCreator::concat(&[
+                format!("{}?", EbnfScriptCreator::str_literal("-")),
+                EbnfScriptCreator::or(&non_zero_starts),
+            ]),
+        ])
+    }
+
     fn generate_number(
         &self,
         spec: &NumberSpec,
     ) -> String {
         let mut start = spec.minimum;
+        let mut exclusive_start = false;
         if let Some(e) = spec.exclusive_minimum {
-            start = Some(e);
+            if start.is_none_or(|start| e >= start) {
+                start = Some(e);
+                exclusive_start = true;
+            }
         }
         let mut end = spec.maximum;
+        let mut exclusive_end = false;
         if let Some(e) = spec.exclusive_maximum {
-            end = Some(e);
+            if end.is_none_or(|end| e <= end) {
+                end = Some(e);
+                exclusive_end = true;
+            }
         }
         if start.is_some() || end.is_some() {
-            let regex = generate_float_range_regex(start, end);
+            let regex = generate_float_range_regex_with_options(
+                start,
+                end,
+                exclusive_start,
+                exclusive_end,
+            );
             return regex_to_ebnf(&regex, false)
                 .expect("float range regex is valid");
         }
@@ -782,11 +932,6 @@ impl JsonSchemaConverter {
         if self.is_xml_outer() {
             return XML_VARIABLE_NAME.to_owned();
         }
-        // The C++ JSONSchemaConverter always uses basic_string for additional property keys
-        // (GetKeyPattern() returns kBasicString). Only the XML converter overrides this.
-        if !self.is_xml_outer() {
-            return BASIC_STRING.to_owned();
-        }
         if properties.is_empty() {
             return BASIC_STRING.to_owned();
         }
@@ -805,6 +950,57 @@ impl JsonSchemaConverter {
     }
 
     #[allow(clippy::too_many_arguments)]
+    fn get_any_order_rule_for_properties(
+        &mut self,
+        properties: &[Property],
+        required: &std::collections::HashSet<String>,
+        additional: Option<&SchemaSpecPtr>,
+        rule_name: &str,
+        additional_suffix: &str,
+        min_properties: i32,
+        max_properties: i32,
+        additional_prop_pattern_override: &str,
+    ) -> String {
+        let first_sep = self.next_separator(false);
+        let mid_sep = self.next_separator(false);
+        let last_sep = self.next_separator(true);
+
+        let mut item_patterns = Vec::with_capacity(
+            properties.len() + usize::from(additional.is_some()),
+        );
+        for (idx, prop) in properties.iter().enumerate() {
+            let value_rule = self
+                .create_rule(&prop.schema, &format!("{rule_name}_prop_{idx}"));
+            item_patterns.push(self.format_property(&prop.name, &value_rule));
+        }
+        if let Some(additional) = additional {
+            if additional_prop_pattern_override.is_empty() {
+                let value_rule = self.create_rule(
+                    additional,
+                    &format!("{rule_name}_{additional_suffix}"),
+                );
+                let key = self.get_key_pattern_excluding(properties, rule_name);
+                item_patterns
+                    .push(self.format_other_property(&key, &value_rule));
+            } else {
+                item_patterns.push(additional_prop_pattern_override.to_owned());
+            }
+        }
+
+        let item_rule = self
+            .ebnf
+            .add_rule(&format!("{rule_name}_item"), &item_patterns.join(" | "));
+        let min_count = min_properties.max(required.len() as i32);
+        let rest = Self::get_property_with_number_constraints(
+            &format!("{mid_sep} {item_rule}"),
+            min_count,
+            max_properties,
+            1,
+        );
+        format!("{first_sep} ({item_rule} {rest}) {last_sep}")
+    }
+
+    #[allow(clippy::too_many_arguments)]
     fn get_partial_rule_for_properties(
         &mut self,
         properties: &[Property],
@@ -818,6 +1014,19 @@ impl JsonSchemaConverter {
     ) -> String {
         if max_properties == 0 {
             return String::new();
+        }
+
+        if self.any_order {
+            return self.get_any_order_rule_for_properties(
+                properties,
+                required,
+                additional,
+                rule_name,
+                additional_suffix,
+                min_properties,
+                max_properties,
+                additional_prop_pattern_override,
+            );
         }
 
         let first_sep = self.next_separator(false);

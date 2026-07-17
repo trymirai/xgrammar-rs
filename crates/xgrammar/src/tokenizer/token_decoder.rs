@@ -10,26 +10,34 @@ pub fn decode_token(
     token: &str,
     vocab_type: VocabType,
 ) -> Vec<u8> {
+    decode_token_bytes(token.as_bytes(), vocab_type)
+}
+
+/// Decodes an encoded vocabulary token supplied as arbitrary bytes.
+#[must_use]
+pub fn decode_token_bytes(
+    token: &[u8],
+    vocab_type: VocabType,
+) -> Vec<u8> {
     match vocab_type {
         VocabType::ByteFallback => {
             space_replacer_decoder(&byte_fallback_decoder(token))
         },
         VocabType::ByteLevel => byte_level_decoder(token),
-        VocabType::Raw => token.as_bytes().to_vec(),
+        VocabType::Raw => token.to_vec(),
     }
 }
 
 /// Transforms `<0xNN>` byte tokens into the raw byte `NN`; other tokens pass through.
-fn byte_fallback_decoder(token: &str) -> Vec<u8> {
-    let bytes = token.as_bytes();
-    if bytes.len() == 6 && &bytes[0..3] == b"<0x" && bytes[5] == b'>' {
-        let hi = hex_val(bytes[3]);
-        let lo = hex_val(bytes[4]);
+fn byte_fallback_decoder(token: &[u8]) -> Vec<u8> {
+    if token.len() == 6 && &token[0..3] == b"<0x" && token[5] == b'>' {
+        let hi = hex_val(token[3]);
+        let lo = hex_val(token[4]);
         if let (Some(hi), Some(lo)) = (hi, lo) {
             return vec![(hi * 16 + lo) as u8];
         }
     }
-    bytes.to_vec()
+    token.to_vec()
 }
 
 /// Hex digit value, accepting `0-9` and uppercase `A-F` (matching the C++).
@@ -62,9 +70,9 @@ fn space_replacer_decoder(token: &[u8]) -> Vec<u8> {
 }
 
 /// Inverts the GPT-2 bytes-to-unicode mapping; tokens with unmapped codepoints pass through.
-fn byte_level_decoder(token: &str) -> Vec<u8> {
-    let Ok(codepoints) = parse_utf8(token.as_bytes(), false) else {
-        return token.as_bytes().to_vec();
+fn byte_level_decoder(token: &[u8]) -> Vec<u8> {
+    let Ok(codepoints) = parse_utf8(token, false) else {
+        return token.to_vec();
     };
     let mut decoded = Vec::with_capacity(codepoints.len());
     for cp in codepoints {
@@ -72,7 +80,7 @@ fn byte_level_decoder(token: &str) -> Vec<u8> {
             || cp as usize >= CHAR_TO_BYTE_MAP.len()
             || CHAR_TO_BYTE_MAP[cp as usize] == -1
         {
-            return token.as_bytes().to_vec();
+            return token.to_vec();
         }
         decoded.push(CHAR_TO_BYTE_MAP[cp as usize] as u8);
     }

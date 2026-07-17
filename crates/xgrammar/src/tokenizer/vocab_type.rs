@@ -13,6 +13,15 @@ pub enum VocabType {
     ByteLevel = 2,
 }
 
+impl VocabType {
+    /// Backwards-compatible spelling used by xgrammar-rs 0.2.
+    pub const RAW: Self = Self::Raw;
+    /// Backwards-compatible spelling used by xgrammar-rs 0.2.
+    pub const BYTE_FALLBACK: Self = Self::ByteFallback;
+    /// Backwards-compatible spelling used by xgrammar-rs 0.2.
+    pub const BYTE_LEVEL: Self = Self::ByteLevel;
+}
+
 /// Error converting an integer to a [`VocabType`].
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[error("invalid vocab type: {0}")]

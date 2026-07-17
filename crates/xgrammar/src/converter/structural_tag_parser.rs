@@ -185,9 +185,30 @@ fn parse_json_schema(
     } else {
         "json".to_owned()
     };
+    let any_order = match obj.get("any_order") {
+        Some(Value::Bool(value)) => *value,
+        Some(_) => return err("any_order must be a boolean"),
+        None => false,
+    };
+    let max_whitespace_cnt = match obj.get("max_whitespace_cnt") {
+        Some(Value::Null) | None => None,
+        Some(Value::Number(value)) => {
+            let Some(value) =
+                value.as_i64().and_then(|v| i32::try_from(v).ok())
+            else {
+                return err("max_whitespace_cnt must be an integer or null");
+            };
+            Some(value)
+        },
+        Some(_) => {
+            return err("max_whitespace_cnt must be an integer or null");
+        },
+    };
     Ok(JsonSchemaFormat {
         json_schema: js.to_string(),
         style,
+        any_order,
+        max_whitespace_cnt,
     })
 }
 

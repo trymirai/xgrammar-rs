@@ -5,7 +5,10 @@
 use std::collections::HashMap;
 
 use super::{
-    json_schema_converter::json_schema_to_ebnf,
+    json_schema_converter::{
+        json_schema_to_ebnf_with_any_order,
+        json_schema_to_ebnf_xml_with_options,
+    },
     structural_tag_error::StructuralTagError,
     structural_tag_format::{
         Format, IntOrString, TagBegin, TagEnd, TagFormat,
@@ -13,7 +16,7 @@ use super::{
         TriggeredTagsFormat,
     },
     structural_tag_parser::parse_structural_tag,
-    xml_tool_calling_converter::xml_tool_calling_to_ebnf,
+    xml_tool_calling_converter::xml_format_from_style,
 };
 use crate::{
     functor::{add_sub_grammar, grammar_normalizer},
@@ -491,18 +494,26 @@ impl StructuralTagConverter {
             },
             Format::JsonSchema(f) => {
                 let ebnf = if f.style == "json" {
-                    json_schema_to_ebnf(
+                    json_schema_to_ebnf_with_any_order(
                         &f.json_schema,
                         true,
                         None,
                         None,
                         true,
-                        None,
+                        f.max_whitespace_cnt,
+                        f.any_order,
                     )
                     .map_err(|e| Ist::InvalidJsonSchema(e.to_string()))?
                 } else {
-                    xml_tool_calling_to_ebnf(&f.json_schema, &f.style)
-                        .map_err(|e| Ist::InvalidJsonSchema(e.to_string()))?
+                    json_schema_to_ebnf_xml_with_options(
+                        &f.json_schema,
+                        xml_format_from_style(&f.style).map_err(|e| {
+                            Ist::InvalidJsonSchema(e.to_string())
+                        })?,
+                        f.max_whitespace_cnt,
+                        f.any_order,
+                    )
+                    .map_err(|e| Ist::InvalidJsonSchema(e.to_string()))?
                 };
                 let sub = Grammar::from_ebnf(&ebnf, "root")
                     .map_err(|e| Ist::InvalidJsonSchema(e.to_string()))?;

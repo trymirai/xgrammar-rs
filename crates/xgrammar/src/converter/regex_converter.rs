@@ -312,7 +312,7 @@ impl RegexConverter {
             },
             'S' => {
                 self.cur += 2;
-                Ok("[^[\\f\\n\\r\\t\\v\\u0020\\u00a0]".to_owned())
+                Ok("[^\\f\\n\\r\\t\\v\\u0020\\u00a0]".to_owned())
             },
             c if ('1'..='9').contains(&c) || c == 'k' => {
                 Err(self.error("Backreference is not supported yet."))
@@ -394,8 +394,9 @@ impl RegexConverter {
                     if self.parenthesis_level == 0 {
                         return Err(self.error("Unmatched ')'"));
                     }
-                    // If the previous character was '|', the alternative is empty.
-                    if self.cur != 0 && self.peek(-1) == '|' {
+                    // Emit an explicit empty string for an empty alternative, including
+                    // patterns such as `(a|$)` where `$` was ignored just before `)`.
+                    if self.result.ends_with('|') {
                         self.add_segment("\"\"");
                     }
                     self.parenthesis_level -= 1;
@@ -431,6 +432,14 @@ impl RegexConverter {
                 },
                 '|' => {
                     is_empty = false;
+                    // A leading, consecutive, or group-leading `|` has an empty left-hand
+                    // alternative. EBNF needs that alternative to be explicit.
+                    if self.result.is_empty()
+                        || self.result.ends_with('|')
+                        || self.result.ends_with('(')
+                    {
+                        self.add_segment("\"\"");
+                    }
                     self.add_segment("|");
                     self.cur += 1;
                 },
@@ -457,6 +466,9 @@ impl RegexConverter {
         }
         if self.parenthesis_level != 0 {
             return Err(self.error("The parenthesis is not closed."));
+        }
+        if self.result.ends_with('|') {
+            self.add_segment("\"\"");
         }
         if is_empty {
             self.add_segment("\"\"");

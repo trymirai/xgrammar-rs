@@ -1,7 +1,7 @@
 //! Parses a JSON Schema (a [`serde_json::Value`]) into the [`SchemaSpec`] IR — a port of
 //! `SchemaParser` in `cpp/json_schema_converter.cc`.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use serde_json::Value;
 
@@ -26,6 +26,297 @@ const SKIPPED_CACHE_KEYS: &[&str] = &[
     "$comment",
     "$schema",
 ];
+
+const UNSUPPORTED_ONE_OF_MESSAGE: &str = "oneOf with overlapping or non-provably-disjoint branches cannot be represented exactly; falling back to anyOf semantics";
+
+fn has_only_schema_keys(
+    schema: &serde_json::Map<String, Value>,
+    allowed: &[&str],
+) -> bool {
+    schema.keys().all(|key| {
+        allowed.contains(&key.as_str())
+            || SKIPPED_CACHE_KEYS.contains(&key.as_str())
+    })
+}
+
+fn normalize_type_set(value: &Value) -> Option<HashSet<String>> {
+    const SUPPORTED_TYPES: &[&str] =
+        &["null", "boolean", "object", "array", "number", "string", "integer"];
+    let mut result = HashSet::new();
+    match value {
+        Value::String(ty) if SUPPORTED_TYPES.contains(&ty.as_str()) => {
+            result.insert(ty.clone());
+        },
+        Value::Array(types) if !types.is_empty() => {
+            for value in types {
+                let ty = value.as_str()?;
+                if !SUPPORTED_TYPES.contains(&ty) {
+                    return None;
+                }
+                result.insert(ty.to_owned());
+            }
+        },
+        _ => return None,
+    }
+    Some(result)
+}
+
+fn is_numeric_value(value: &Value) -> bool {
+    value.is_number()
+}
+
+fn is_integer_value(value: &Value) -> bool {
+    let Some(number) = value.as_number() else {
+        return false;
+    };
+    if !number.is_f64() {
+        return true;
+    }
+    number
+        .as_f64()
+        .is_some_and(|value| value.is_finite() && value.floor() == value)
+}
+
+/// JSON-number comparisons are deliberately conservative when either side was parsed as a
+/// floating-point value. This matches upstream and avoids claiming `oneOf` disjointness after a
+/// potentially lossy conversion.
+fn json_values_may_overlap(
+    lhs: &Value,
+    rhs: &Value,
+) -> bool {
+    if is_numeric_value(lhs) || is_numeric_value(rhs) {
+        if !is_numeric_value(lhs) || !is_numeric_value(rhs) {
+            return false;
+        }
+        let lhs_number = lhs.as_number().expect("checked numeric");
+        let rhs_number = rhs.as_number().expect("checked numeric");
+        return if !lhs_number.is_f64() && !rhs_number.is_f64() {
+            lhs_number.to_string() == rhs_number.to_string()
+        } else {
+            true
+        };
+    }
+    match (lhs, rhs) {
+        (Value::Null, Value::Null) => true,
+        (Value::Bool(lhs), Value::Bool(rhs)) => lhs == rhs,
+        (Value::String(lhs), Value::String(rhs)) => lhs == rhs,
+        (Value::Array(lhs), Value::Array(rhs)) => {
+            lhs.len() == rhs.len()
+                && lhs
+                    .iter()
+                    .zip(rhs)
+                    .all(|(lhs, rhs)| json_values_may_overlap(lhs, rhs))
+        },
+        (Value::Object(lhs), Value::Object(rhs)) => {
+            lhs.len() == rhs.len()
+                && lhs.iter().all(|(key, lhs_value)| {
+                    rhs.get(key).is_some_and(|rhs_value| {
+                        json_values_may_overlap(lhs_value, rhs_value)
+                    })
+                })
+        },
+        _ => false,
+    }
+}
+
+fn value_matches_type(
+    value: &Value,
+    ty: &str,
+) -> bool {
+    match ty {
+        "null" => value.is_null(),
+        "boolean" => value.is_boolean(),
+        "string" => value.is_string(),
+        "integer" => is_integer_value(value),
+        "number" => is_numeric_value(value),
+        "array" => value.is_array(),
+        "object" => value.is_object(),
+        _ => false,
+    }
+}
+
+fn finite_values(
+    schema: &serde_json::Map<String, Value>
+) -> Option<Vec<Value>> {
+    if let Some(value) = schema.get("const") {
+        return Some(vec![value.clone()]);
+    }
+    let values = schema.get("enum")?.as_array()?;
+    (!values.is_empty()).then(|| values.clone())
+}
+
+enum OneOfArmProof {
+    TypeSet(HashSet<String>),
+    FiniteValues(Vec<Value>),
+}
+
+fn classify_one_of_arm(option: &Value) -> Option<OneOfArmProof> {
+    let schema = option.as_object()?;
+    if ["$ref", "anyOf", "allOf", "oneOf"]
+        .iter()
+        .any(|key| schema.contains_key(*key))
+    {
+        return None;
+    }
+    if let Some(values) = finite_values(schema) {
+        return Some(OneOfArmProof::FiniteValues(values));
+    }
+    if !has_only_schema_keys(schema, &["type"]) {
+        return None;
+    }
+    let type_set = normalize_type_set(schema.get("type")?)?;
+    if type_set.contains("object") {
+        return None;
+    }
+    Some(OneOfArmProof::TypeSet(type_set))
+}
+
+fn type_sets_overlap(
+    lhs: &HashSet<String>,
+    rhs: &HashSet<String>,
+) -> bool {
+    lhs.iter().any(|lhs_type| {
+        rhs.iter().any(|rhs_type| {
+            lhs_type == rhs_type
+                || (["integer", "number"].contains(&lhs_type.as_str())
+                    && ["integer", "number"].contains(&rhs_type.as_str()))
+        })
+    })
+}
+
+fn finite_values_overlap(
+    lhs: &[Value],
+    rhs: &[Value],
+) -> bool {
+    lhs.iter().any(|lhs_value| {
+        rhs.iter()
+            .any(|rhs_value| json_values_may_overlap(lhs_value, rhs_value))
+    })
+}
+
+fn finite_values_overlap_type_set(
+    values: &[Value],
+    type_set: &HashSet<String>,
+) -> bool {
+    values.iter().any(|value| {
+        (is_numeric_value(value)
+            && (type_set.contains("integer") || type_set.contains("number")))
+            || type_set.iter().any(|ty| value_matches_type(value, ty))
+    })
+}
+
+fn one_of_arm_proofs_are_disjoint(
+    lhs: &OneOfArmProof,
+    rhs: &OneOfArmProof,
+) -> bool {
+    match (lhs, rhs) {
+        (OneOfArmProof::TypeSet(lhs), OneOfArmProof::TypeSet(rhs)) => {
+            !type_sets_overlap(lhs, rhs)
+        },
+        (
+            OneOfArmProof::FiniteValues(lhs),
+            OneOfArmProof::FiniteValues(rhs),
+        ) => !finite_values_overlap(lhs, rhs),
+        (
+            OneOfArmProof::FiniteValues(values),
+            OneOfArmProof::TypeSet(types),
+        )
+        | (
+            OneOfArmProof::TypeSet(types),
+            OneOfArmProof::FiniteValues(values),
+        ) => !finite_values_overlap_type_set(values, types),
+    }
+}
+
+fn discriminator_values(
+    option: &Value,
+    discriminator_key: &str,
+) -> Option<Vec<Value>> {
+    let schema = option.as_object()?;
+    if ["$ref", "anyOf", "allOf", "oneOf"]
+        .iter()
+        .any(|key| schema.contains_key(*key))
+        || schema.get("type")?.as_str()? != "object"
+    {
+        return None;
+    }
+    let requires_key = schema
+        .get("required")?
+        .as_array()?
+        .iter()
+        .any(|value| value.as_str() == Some(discriminator_key));
+    if !requires_key {
+        return None;
+    }
+    let property_schema = schema
+        .get("properties")?
+        .as_object()?
+        .get(discriminator_key)?
+        .as_object()?;
+    finite_values(property_schema)
+}
+
+fn discriminator_candidates(option: &Value) -> Vec<String> {
+    let Some(schema) = option.as_object() else {
+        return Vec::new();
+    };
+    let (Some(required), Some(properties)) = (
+        schema.get("required").and_then(Value::as_array),
+        schema.get("properties").and_then(Value::as_object),
+    ) else {
+        return Vec::new();
+    };
+    required
+        .iter()
+        .filter_map(Value::as_str)
+        .filter(|key| {
+            properties
+                .get(*key)
+                .and_then(Value::as_object)
+                .and_then(finite_values)
+                .is_some()
+        })
+        .map(str::to_owned)
+        .collect()
+}
+
+fn try_prove_discriminator_one_of(options: &[Value]) -> bool {
+    let Some(first) = options.first() else {
+        return false;
+    };
+    discriminator_candidates(first).into_iter().any(|key| {
+        let branch_values = options
+            .iter()
+            .map(|option| discriminator_values(option, &key))
+            .collect::<Option<Vec<_>>>();
+        branch_values.is_some_and(|values| {
+            (0..values.len()).all(|lhs| {
+                (lhs + 1..values.len()).all(|rhs| {
+                    !finite_values_overlap(&values[lhs], &values[rhs])
+                })
+            })
+        })
+    })
+}
+
+fn try_prove_type_or_finite_one_of(options: &[Value]) -> bool {
+    let Some(proofs) =
+        options.iter().map(classify_one_of_arm).collect::<Option<Vec<_>>>()
+    else {
+        return false;
+    };
+    (0..proofs.len()).all(|lhs| {
+        (lhs + 1..proofs.len()).all(|rhs| {
+            one_of_arm_proofs_are_disjoint(&proofs[lhs], &proofs[rhs])
+        })
+    })
+}
+
+fn try_prove_pairwise_disjoint_one_of(options: &[Value]) -> bool {
+    !options.is_empty()
+        && (try_prove_discriminator_one_of(options)
+            || try_prove_type_or_finite_one_of(options))
+}
 
 /// Parses JSON schemas into [`SchemaSpec`] trees, resolving `$ref`s against the root.
 pub(crate) struct SchemaParser {
@@ -123,7 +414,15 @@ impl SchemaParser {
             make(SchemaSpecVariant::Const(Self::parse_const(obj)))
         } else if obj.contains_key("enum") {
             make(SchemaSpecVariant::Enum(Self::parse_enum(obj)?))
-        } else if obj.contains_key("anyOf") || obj.contains_key("oneOf") {
+        } else if obj.contains_key("anyOf") {
+            make(SchemaSpecVariant::AnyOf(self.parse_any_of(obj)?))
+        } else if obj.contains_key("oneOf") {
+            let options = obj["oneOf"].as_array().ok_or_else(|| {
+                SchemaError::invalid("oneOf must be an array")
+            })?;
+            if !try_prove_pairwise_disjoint_one_of(options) {
+                eprintln!("{UNSUPPORTED_ONE_OF_MESSAGE}");
+            }
             make(SchemaSpecVariant::AnyOf(self.parse_any_of(obj)?))
         } else if obj.contains_key("allOf") {
             make(SchemaSpecVariant::AllOf(self.parse_all_of(obj)?))
@@ -208,7 +507,31 @@ impl SchemaParser {
     fn parse_integer(
         schema: &serde_json::Map<String, Value>
     ) -> Result<IntegerSpec, SchemaError> {
+        const INTEGER_MULTIPLE_OF_MAX: f64 = 1024.0;
+        const INTEGER_MULTIPLE_OF_RANGE_WIDTH_MAX: i128 = 10_000;
+
         let mut spec = IntegerSpec::default();
+        if let Some(value) = schema.get("multipleOf") {
+            let Some(multiple_of) = value.as_f64() else {
+                return Err(SchemaError::invalid("Value must be a number"));
+            };
+            if multiple_of <= 0.0 {
+                return Err(SchemaError::invalid(
+                    "multipleOf must be greater than 0",
+                ));
+            }
+            if multiple_of != multiple_of.floor() {
+                eprintln!(
+                    "multipleOf for type:integer must be an integer; ignoring multipleOf"
+                );
+            } else if multiple_of > INTEGER_MULTIPLE_OF_MAX {
+                eprintln!(
+                    "multipleOf for type:integer must be > 0 and <= 1024; ignoring multipleOf"
+                );
+            } else {
+                spec.multiple_of = Some(multiple_of as i64);
+            }
+        }
         if let Some(v) = schema.get("minimum") {
             spec.minimum = Some(Self::check_integer_bound(v)?);
         }
@@ -234,18 +557,36 @@ impl SchemaParser {
             spec.exclusive_maximum = Some(val);
         }
 
-        let mut effective_min = spec.minimum.unwrap_or(i64::MIN);
-        let mut effective_max = spec.maximum.unwrap_or(i64::MAX);
-        if let Some(e) = spec.exclusive_minimum {
-            effective_min = effective_min.max(e + 1);
-        }
-        if let Some(e) = spec.exclusive_maximum {
-            effective_max = effective_max.min(e - 1);
-        }
+        let (start, end) = spec.effective_range();
+        let effective_min = start.unwrap_or(i64::MIN);
+        let effective_max = end.unwrap_or(i64::MAX);
         if effective_min > effective_max {
             return Err(SchemaError::unsatisfiable(
                 "Invalid range: minimum greater than maximum",
             ));
+        }
+        if let Some(multiple_of) = spec.multiple_of {
+            let has_lower_bound = start.is_some();
+            let has_upper_bound = end.is_some();
+            if has_lower_bound || has_upper_bound {
+                let range_width =
+                    i128::from(effective_max) - i128::from(effective_min) + 1;
+                if !has_lower_bound
+                    || !has_upper_bound
+                    || range_width > INTEGER_MULTIPLE_OF_RANGE_WIDTH_MAX
+                {
+                    eprintln!(
+                        "range + multipleOf combination not yet supported; ignoring multipleOf"
+                    );
+                    spec.multiple_of = None;
+                } else if !(effective_min..=effective_max)
+                    .any(|value| value % multiple_of == 0)
+                {
+                    return Err(SchemaError::unsatisfiable(
+                        "range contains no multipleOf value",
+                    ));
+                }
+            }
         }
         Ok(spec)
     }
@@ -257,6 +598,20 @@ impl SchemaParser {
             v.as_f64()
                 .ok_or_else(|| SchemaError::invalid("Value must be a number"))
         };
+        if let Some(value) = schema.get("multipleOf") {
+            let Some(multiple_of) = value.as_f64() else {
+                return Err(SchemaError::invalid("Value must be a number"));
+            };
+            if multiple_of <= 0.0 {
+                return Err(SchemaError::invalid(
+                    "multipleOf must be greater than 0",
+                ));
+            }
+            eprintln!(
+                "multipleOf is not supported for type:number; ignoring multipleOf"
+            );
+        }
+
         let mut spec = NumberSpec::default();
         if let Some(v) = schema.get("minimum") {
             spec.minimum = Some(get_double(v)?);
@@ -271,17 +626,25 @@ impl SchemaParser {
             spec.exclusive_maximum = Some(get_double(v)?);
         }
 
-        let mut effective_min = spec.minimum.unwrap_or(f64::NEG_INFINITY);
-        let mut effective_max = spec.maximum.unwrap_or(f64::INFINITY);
-        if let Some(e) = spec.exclusive_minimum {
-            effective_min = effective_min.max(e);
-        }
-        if let Some(e) = spec.exclusive_maximum {
-            effective_max = effective_max.min(e);
-        }
-        if effective_min > effective_max {
+        let empty_range = spec
+            .minimum
+            .zip(spec.maximum)
+            .is_some_and(|(minimum, maximum)| minimum > maximum)
+            || spec
+                .minimum
+                .zip(spec.exclusive_maximum)
+                .is_some_and(|(minimum, maximum)| minimum >= maximum)
+            || spec
+                .exclusive_minimum
+                .zip(spec.maximum)
+                .is_some_and(|(minimum, maximum)| minimum >= maximum)
+            || spec
+                .exclusive_minimum
+                .zip(spec.exclusive_maximum)
+                .is_some_and(|(minimum, maximum)| minimum >= maximum);
+        if empty_range {
             return Err(SchemaError::unsatisfiable(
-                "Invalid range: minimum greater than maximum",
+                "Invalid range: empty range",
             ));
         }
         Ok(spec)

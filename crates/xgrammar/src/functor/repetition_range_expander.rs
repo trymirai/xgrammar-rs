@@ -4,7 +4,9 @@
 //! Small bounds are "unzipped" into repeated elements and a tail of optional rules; large
 //! bounds keep a `Repeat` node wrapped so the matcher can count efficiently. Lookups go
 //! through the builder (never the source grammar) so expanding two large repeats in one
-//! rule cannot index out of bounds.
+//! rule cannot index out of bounds. Identical repetitions share one expansion.
+
+use std::collections::HashMap;
 
 use super::mutator::{GrammarMutator, MutatorState};
 use crate::grammar::{CharacterClassElement, Grammar, GrammarExprType};
@@ -14,10 +16,13 @@ const UNZIP_THRESHOLD: i64 = 128;
 /// Expands repetition ranges (the `GrammarFunctor.repetition_range_expander` pass).
 #[must_use]
 pub fn repetition_range_expander(grammar: &Grammar) -> Grammar {
-    RepetitionRangeExpander.apply(grammar)
+    RepetitionRangeExpander::default().apply(grammar)
 }
 
-struct RepetitionRangeExpander;
+#[derive(Default)]
+struct RepetitionRangeExpander {
+    repetition_cache: HashMap<Vec<i64>, i32>,
+}
 
 impl GrammarMutator for RepetitionRangeExpander {
     fn visit_repeat(
@@ -30,7 +35,14 @@ impl GrammarMutator for RepetitionRangeExpander {
         let lower = i64::from(data[1]);
         let upper = i64::from(data[2]);
         let name = state.cur_rule_name.clone();
-        handle_repetition_range(state, &name, ref_rule_id, lower, upper)
+        handle_repetition_range(
+            state,
+            &mut self.repetition_cache,
+            &name,
+            ref_rule_id,
+            lower,
+            upper,
+        )
     }
 }
 
@@ -104,10 +116,11 @@ fn legacy_handle_repetition_range(
 /// Handles `{lower, upper}`, unzipping for small bounds and keeping a `Repeat` for large.
 fn handle_repetition_range(
     state: &mut MutatorState,
+    repetition_cache: &mut HashMap<Vec<i64>, i32>,
     cur_rule_name: &str,
     rule_id: i32,
-    mut lower: i64,
-    mut upper: i64,
+    lower: i64,
+    upper: i64,
 ) -> i32 {
     // If the referred rule is a single element, use that element directly.
     let mut grammar_expr_id = state.builder.add_rule_ref(rule_id);
@@ -134,6 +147,34 @@ fn handle_repetition_range(
         grammar_expr_id = state.builder.add_grammar_expr(ty, &data);
     }
 
+    let repeated_expr = state.builder.grammar_expr(grammar_expr_id);
+    let mut cache_key = Vec::with_capacity(repeated_expr.data.len() + 3);
+    cache_key.push(i64::from(repeated_expr.ty.as_i32()));
+    cache_key.extend(repeated_expr.data.iter().copied().map(i64::from));
+    cache_key.push(lower);
+    cache_key.push(upper);
+    if let Some(&cached) = repetition_cache.get(&cache_key) {
+        return cached;
+    }
+
+    let result = expand_repetition_range(
+        state,
+        cur_rule_name,
+        grammar_expr_id,
+        lower,
+        upper,
+    );
+    repetition_cache.insert(cache_key, result);
+    result
+}
+
+fn expand_repetition_range(
+    state: &mut MutatorState,
+    cur_rule_name: &str,
+    grammar_expr_id: i32,
+    mut lower: i64,
+    mut upper: i64,
+) -> i32 {
     // Case 1: small upper, or unbounded upper with small lower — unzip.
     if (upper != -1 && upper <= UNZIP_THRESHOLD)
         || (upper == -1 && lower <= UNZIP_THRESHOLD)

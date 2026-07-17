@@ -5,8 +5,7 @@ use syn::Ident;
 use crate::{
     backends::Backend,
     contexts::{
-        ClassContext, EnumerationContext, ErrorContext, ImplementationContext,
-        MethodMetadata, StructureContext,
+        ClassContext, EnumerationContext, ErrorContext, ImplementationContext, MethodMetadata, StructureContext,
     },
     types::MethodFlavor,
 };
@@ -49,9 +48,7 @@ impl Backend for Pyo3 {
         registration(&context.item.ident)
     }
 
-    fn implementation_companions(
-        context: &ImplementationContext
-    ) -> TokenStream {
+    fn implementation_companions(context: &ImplementationContext) -> TokenStream {
         implementation_expansion(context)
     }
 
@@ -72,15 +69,9 @@ impl Backend for Pyo3 {
         metadata: &MethodMetadata,
     ) -> TokenStream {
         match metadata.flavor {
-            MethodFlavor::Factory => {
-                factory_expansion(&context.self_type, metadata)
-            },
-            MethodFlavor::FactoryWithCallback => {
-                factory_with_callback_expansion(&context.self_type, metadata)
-            },
-            MethodFlavor::Constructor => {
-                constructor_expansion(&context.self_type, metadata)
-            },
+            MethodFlavor::Factory => factory_expansion(&context.self_type, metadata),
+            MethodFlavor::FactoryWithCallback => factory_with_callback_expansion(&context.self_type, metadata),
+            MethodFlavor::Constructor => constructor_expansion(&context.self_type, metadata),
             _ => quote! {},
         }
     }
@@ -95,17 +86,14 @@ fn implementation_expansion(context: &ImplementationContext) -> TokenStream {
     for metadata in context.all_methods() {
         if matches!(
             metadata.flavor,
-            MethodFlavor::Factory
-                | MethodFlavor::FactoryWithCallback
-                | MethodFlavor::Constructor
+            MethodFlavor::Factory | MethodFlavor::FactoryWithCallback | MethodFlavor::Constructor
         ) {
             continue;
         }
         wrappers.push(build_method_wrapper(metadata));
     }
 
-    if let Some(metadata) = context.methods_of(MethodFlavor::StreamNext).next()
-    {
+    if let Some(metadata) = context.methods_of(MethodFlavor::StreamNext).next() {
         wrappers.push(build_stream_protocol(&metadata.method));
     }
 
@@ -175,9 +163,7 @@ fn build_method_wrapper(metadata: &MethodMetadata) -> TokenStream {
             MethodFlavor::Factory => quote! { #[staticmethod] },
             MethodFlavor::Getter => quote! { #[getter] },
             MethodFlavor::Setter => quote! { #[setter] },
-            MethodFlavor::Plain
-            | MethodFlavor::FactoryWithCallback
-            | MethodFlavor::StreamNext => {
+            MethodFlavor::Plain | MethodFlavor::FactoryWithCallback | MethodFlavor::StreamNext => {
                 quote! {}
             },
         }
@@ -213,12 +199,11 @@ fn build_method_wrapper(metadata: &MethodMetadata) -> TokenStream {
         Some(_) => quote! { &self },
         None => quote! {},
     };
-    let receiver_separator =
-        if receiver.is_some() && !typed_arg_tokens.is_empty() {
-            quote! { , }
-        } else {
-            quote! {}
-        };
+    let receiver_separator = if receiver.is_some() && !typed_arg_tokens.is_empty() {
+        quote! { , }
+    } else {
+        quote! {}
+    };
 
     let pyo3_name_attribute = match flavor {
         MethodFlavor::Constructor => quote! {},
@@ -360,9 +345,7 @@ fn factory_or_constructor_expansion(
     let reborrow_shadows: Vec<TokenStream> = typed_args
         .iter()
         .zip(arg_idents.iter())
-        .filter(|(pat_type, _)| {
-            matches!(pat_type.ty.as_ref(), syn::Type::Reference(_))
-        })
+        .filter(|(pat_type, _)| matches!(pat_type.ty.as_ref(), syn::Type::Reference(_)))
         .map(|(_, ident)| quote! { let #ident = &#ident; })
         .collect();
     let inputs = quote! { #( #inputs ),* };
@@ -455,9 +438,7 @@ fn factory_with_callback_expansion(
             .to_compile_error();
         },
     };
-    let synthetic_idents: Vec<Ident> = (0..callback_inputs.len())
-        .map(|index| format_ident!("arg{index}"))
-        .collect();
+    let synthetic_idents: Vec<Ident> = (0..callback_inputs.len()).map(|index| format_ident!("arg{index}")).collect();
     let py_call_arguments = if synthetic_idents.is_empty() {
         quote! { () }
     } else {
@@ -497,10 +478,8 @@ fn struct_constructor(item_struct: &syn::ItemStruct) -> TokenStream {
         syn::Fields::Named(named) => &named.named,
         _ => return quote! {},
     };
-    let public_fields: Vec<&syn::Field> = fields
-        .iter()
-        .filter(|field| matches!(field.vis, syn::Visibility::Public(_)))
-        .collect();
+    let public_fields: Vec<&syn::Field> =
+        fields.iter().filter(|field| matches!(field.vis, syn::Visibility::Public(_))).collect();
     if public_fields.is_empty() {
         return quote! {};
     }
@@ -560,8 +539,7 @@ fn registration(type_name: &Ident) -> TokenStream {
 }
 
 fn error_implementations(type_name: &Ident) -> TokenStream {
-    let from_py_message =
-        format!("{} cannot be received from Python", type_name);
+    let from_py_message = format!("{} cannot be received from Python", type_name);
     quote! {
         #[cfg(feature = "bindings-pyo3")]
         impl From<#type_name> for ::pyo3::PyErr {

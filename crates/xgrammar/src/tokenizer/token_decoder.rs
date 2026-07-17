@@ -20,9 +20,7 @@ pub fn decode_token_bytes(
     vocab_type: VocabType,
 ) -> Vec<u8> {
     match vocab_type {
-        VocabType::ByteFallback => {
-            space_replacer_decoder(&byte_fallback_decoder(token))
-        },
+        VocabType::ByteFallback => space_replacer_decoder(&byte_fallback_decoder(token)),
         VocabType::ByteLevel => byte_level_decoder(token),
         VocabType::Raw => token.to_vec(),
     }
@@ -54,11 +52,7 @@ fn space_replacer_decoder(token: &[u8]) -> Vec<u8> {
     let mut result = Vec::with_capacity(token.len());
     let mut i = 0;
     while i < token.len() {
-        if i + 2 < token.len()
-            && token[i] == 0xE2
-            && token[i + 1] == 0x96
-            && token[i + 2] == 0x81
-        {
+        if i + 2 < token.len() && token[i] == 0xE2 && token[i + 1] == 0x96 && token[i + 2] == 0x81 {
             result.push(b' ');
             i += 3;
         } else {
@@ -76,10 +70,7 @@ fn byte_level_decoder(token: &[u8]) -> Vec<u8> {
     };
     let mut decoded = Vec::with_capacity(codepoints.len());
     for cp in codepoints {
-        if cp < 0
-            || cp as usize >= CHAR_TO_BYTE_MAP.len()
-            || CHAR_TO_BYTE_MAP[cp as usize] == -1
-        {
+        if cp < 0 || cp as usize >= CHAR_TO_BYTE_MAP.len() || CHAR_TO_BYTE_MAP[cp as usize] == -1 {
             return token.to_vec();
         }
         decoded.push(CHAR_TO_BYTE_MAP[cp as usize] as u8);

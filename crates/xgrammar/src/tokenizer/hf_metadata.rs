@@ -15,14 +15,10 @@ pub struct HfMetadata {
 }
 
 /// Detects vocabulary type and prefix-space behavior from a HF backend JSON string.
-pub fn detect_metadata_from_hf(
-    backend_str: &str
-) -> Result<HfMetadata, String> {
-    let value: Value = serde_json::from_str(backend_str)
-        .map_err(|error| format!("invalid tokenizer backend JSON: {error}"))?;
-    let object = value.as_object().ok_or_else(|| {
-        "tokenizer backend JSON root must be an object".to_owned()
-    })?;
+pub fn detect_metadata_from_hf(backend_str: &str) -> Result<HfMetadata, String> {
+    let value: Value =
+        serde_json::from_str(backend_str).map_err(|error| format!("invalid tokenizer backend JSON: {error}"))?;
+    let object = value.as_object().ok_or_else(|| "tokenizer backend JSON root must be an object".to_owned())?;
     Ok(HfMetadata {
         vocab_type: detect_vocab_type(object),
         add_prefix_space: detect_add_prefix_space(object),
@@ -47,11 +43,7 @@ fn detect_vocab_type(object: &serde_json::Map<String, Value>) -> VocabType {
         return VocabType::Raw;
     };
     let decoders: Vec<&Value> = if decoder_type == "Sequence" {
-        decoder
-            .get("decoders")
-            .and_then(Value::as_array)
-            .map(|items| items.iter().collect())
-            .unwrap_or_default()
+        decoder.get("decoders").and_then(Value::as_array).map(|items| items.iter().collect()).unwrap_or_default()
     } else {
         vec![object.get("decoder").unwrap_or(&Value::Null)]
     };
@@ -76,20 +68,14 @@ fn detect_add_prefix_space(object: &serde_json::Map<String, Value>) -> bool {
 }
 
 fn detect_prepend_normalizer(object: &serde_json::Map<String, Value>) -> bool {
-    let Some(normalizer) = object.get("normalizer").and_then(Value::as_object)
-    else {
+    let Some(normalizer) = object.get("normalizer").and_then(Value::as_object) else {
         return false;
     };
-    let Some(normalizer_type) = normalizer.get("type").and_then(Value::as_str)
-    else {
+    let Some(normalizer_type) = normalizer.get("type").and_then(Value::as_str) else {
         return false;
     };
     let normalizers: Vec<&Value> = if normalizer_type == "Sequence" {
-        normalizer
-            .get("normalizers")
-            .and_then(Value::as_array)
-            .map(|items| items.iter().collect())
-            .unwrap_or_default()
+        normalizer.get("normalizers").and_then(Value::as_array).map(|items| items.iter().collect()).unwrap_or_default()
     } else {
         vec![object.get("normalizer").unwrap_or(&Value::Null)]
     };
@@ -98,25 +84,18 @@ fn detect_prepend_normalizer(object: &serde_json::Map<String, Value>) -> bool {
             return false;
         };
         normalizer_obj.get("type").and_then(Value::as_str) == Some("Prepend")
-            && normalizer_obj.get("prepend").and_then(Value::as_str)
-                == Some("▁")
+            && normalizer_obj.get("prepend").and_then(Value::as_str) == Some("▁")
     })
 }
 
-fn detect_metaspace_pre_tokenizer(
-    object: &serde_json::Map<String, Value>
-) -> bool {
-    let Some(pre_tokenizer) =
-        object.get("pre_tokenizer").and_then(Value::as_object)
-    else {
+fn detect_metaspace_pre_tokenizer(object: &serde_json::Map<String, Value>) -> bool {
+    let Some(pre_tokenizer) = object.get("pre_tokenizer").and_then(Value::as_object) else {
         return false;
     };
     let Some(kind) = pre_tokenizer.get("type").and_then(Value::as_str) else {
         return false;
     };
-    let Some(scheme) =
-        pre_tokenizer.get("prepend_scheme").and_then(Value::as_str)
-    else {
+    let Some(scheme) = pre_tokenizer.get("prepend_scheme").and_then(Value::as_str) else {
         return false;
     };
     kind == "Metaspace" && (scheme == "always" || scheme == "first")

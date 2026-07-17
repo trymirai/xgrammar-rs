@@ -68,16 +68,12 @@ class LogitsProcessor(transformers.LogitsProcessor):
         if len(self.matchers) == 0:
             self.batch_size = input_ids.shape[0]
             self.compiled_grammars = (
-                self.compiled_grammars
-                if len(self.compiled_grammars) > 1
-                else self.compiled_grammars * self.batch_size
+                self.compiled_grammars if len(self.compiled_grammars) > 1 else self.compiled_grammars * self.batch_size
             )
-            assert (
-                len(self.compiled_grammars) == self.batch_size
-            ), "The number of compiled grammars must be equal to the batch size."
-            self.matchers = [
-                xgr.GrammarMatcher(self.compiled_grammars[i]) for i in range(self.batch_size)
-            ]
+            assert len(self.compiled_grammars) == self.batch_size, (
+                "The number of compiled grammars must be equal to the batch size."
+            )
+            self.matchers = [xgr.GrammarMatcher(self.compiled_grammars[i]) for i in range(self.batch_size)]
             self.token_bitmask = xgr.allocate_token_bitmask(self.batch_size, self.full_vocab_size)
 
         if input_ids.shape[0] != self.batch_size:

@@ -9,10 +9,7 @@ use syn::parse_macro_input;
 
 use crate::{
     backends::Backend,
-    contexts::{
-        AliasContext, ClassContext, EnumerationContext, ErrorContext,
-        ImplementationContext, StructureContext,
-    },
+    contexts::{AliasContext, ClassContext, EnumerationContext, ErrorContext, ImplementationContext, StructureContext},
     types::{ClassFlavor, Kind, StructureFlavor},
 };
 
@@ -156,10 +153,8 @@ fn dispatch_implementation(item: TokenStream) -> TokenStream {
     let companions = all_backends!(implementation_companions, &context);
     let item_implementation = &context.item;
 
-    let method_companions: Vec<TokenStream2> = context
-        .all_methods()
-        .map(|metadata| all_backends!(method_companions, &context, metadata))
-        .collect();
+    let method_companions: Vec<TokenStream2> =
+        context.all_methods().map(|metadata| all_backends!(method_companions, &context, metadata)).collect();
 
     quote! {
         #attributes

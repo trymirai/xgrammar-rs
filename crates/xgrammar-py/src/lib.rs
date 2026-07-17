@@ -39,9 +39,7 @@ mod testing;
 /// registers itself via `inventory`; this loop adds them all to the module.
 #[cfg(feature = "bindings-pyo3")]
 #[pyo3::pymodule]
-fn xgrammar_rs(
-    m: &pyo3::Bound<'_, pyo3::types::PyModule>
-) -> pyo3::PyResult<()> {
+fn xgrammar_rs(m: &pyo3::Bound<'_, pyo3::types::PyModule>) -> pyo3::PyResult<()> {
     use pyo3::types::PyModuleMethods;
 
     for entry in ::inventory::iter::<::bindings_types::PyClassRegistration>() {
@@ -59,8 +57,7 @@ fn xgrammar_rs(
     let testing_mod = pyo3::types::PyModule::new(py, "testing")?;
     testing::register(&testing_mod)?;
 
-    let grammar_functor_mod =
-        pyo3::types::PyModule::new(py, "grammar_functor")?;
+    let grammar_functor_mod = pyo3::types::PyModule::new(py, "grammar_functor")?;
     grammar_functor::register(&grammar_functor_mod)?;
     testing_mod.add_submodule(&grammar_functor_mod)?;
 

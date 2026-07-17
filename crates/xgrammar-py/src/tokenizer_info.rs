@@ -4,9 +4,7 @@ use crate::{error::map_error, vocab_type::VocabType};
 
 const BYTE_TOKEN_PREFIX: &str = "\u{e000}xgrammar-bytes:";
 
-fn decode_vocab_transport(
-    encoded_vocab: Vec<String>
-) -> Result<Vec<Vec<u8>>, crate::error::BindingError> {
+fn decode_vocab_transport(encoded_vocab: Vec<String>) -> Result<Vec<Vec<u8>>, crate::error::BindingError> {
     encoded_vocab
         .into_iter()
         .map(|token| {
@@ -14,9 +12,7 @@ fn decode_vocab_transport(
                 return Ok(token.into_bytes());
             };
             if hex.len() % 2 != 0 {
-                return Err(map_error(
-                    "invalid encoded vocabulary byte transport",
-                ));
+                return Err(map_error("invalid encoded vocabulary byte transport"));
             }
             hex.as_bytes()
                 .chunks_exact(2)
@@ -24,11 +20,7 @@ fn decode_vocab_transport(
                     std::str::from_utf8(pair)
                         .ok()
                         .and_then(|pair| u8::from_str_radix(pair, 16).ok())
-                        .ok_or_else(|| {
-                            map_error(
-                                "invalid encoded vocabulary byte transport",
-                            )
-                        })
+                        .ok_or_else(|| map_error("invalid encoded vocabulary byte transport"))
                 })
                 .collect()
         })
@@ -52,9 +44,7 @@ impl TokenizerInfo {
 
 // Called from the `new` constructor body, which only PyO3 emits a companion for.
 #[cfg_attr(not(feature = "bindings-pyo3"), allow(dead_code))]
-fn parse_vocab_type(
-    vocab_type: i32
-) -> Result<xgrammar::tokenizer::VocabType, crate::error::BindingError> {
+fn parse_vocab_type(vocab_type: i32) -> Result<xgrammar::tokenizer::VocabType, crate::error::BindingError> {
     VocabType::try_from(vocab_type).map(VocabType::to_core).map_err(map_error)
 }
 
@@ -71,15 +61,13 @@ impl TokenizerInfo {
     ) -> Result<TokenizerInfo, crate::error::BindingError> {
         let vt = parse_vocab_type(vocab_type)?;
         let encoded_vocab = decode_vocab_transport(encoded_vocab)?;
-        Ok(TokenizerInfo::wrap(
-            xgrammar::tokenizer::TokenizerInfo::new_from_bytes(
-                &encoded_vocab,
-                vt,
-                vocab_size,
-                stop_token_ids,
-                add_prefix_space,
-            ),
-        ))
+        Ok(TokenizerInfo::wrap(xgrammar::tokenizer::TokenizerInfo::new_from_bytes(
+            &encoded_vocab,
+            vt,
+            vocab_size,
+            stop_token_ids,
+            add_prefix_space,
+        )))
     }
 
     /// Builds tokenizer info from an encoded vocabulary and a JSON metadata string.
@@ -89,12 +77,9 @@ impl TokenizerInfo {
         metadata: String,
     ) -> Result<TokenizerInfo, crate::error::BindingError> {
         let encoded_vocab = decode_vocab_transport(encoded_vocab)?;
-        xgrammar::tokenizer::TokenizerInfo::from_vocab_and_metadata_bytes(
-            &encoded_vocab,
-            &metadata,
-        )
-        .map(TokenizerInfo::wrap)
-        .map_err(map_error)
+        xgrammar::tokenizer::TokenizerInfo::from_vocab_and_metadata_bytes(&encoded_vocab, &metadata)
+            .map(TokenizerInfo::wrap)
+            .map_err(map_error)
     }
 
     /// The vocabulary type, as the integer `VocabType` value.
@@ -125,6 +110,19 @@ impl TokenizerInfo {
         self.inner.decoded_vocab().to_vec()
     }
 
+    /// Sorted `(token_id, decoded_bytes)` pairs used by the adaptive token-mask cache.
+    #[cfg(not(feature = "bindings-wasm"))]
+    #[bindings::export(Method)]
+    pub fn sorted_decoded_vocab(&self) -> Vec<(i32, Vec<u8>)> {
+        self.inner.sorted_decoded_vocab().to_vec()
+    }
+
+    /// Trie subtree end indices aligned with [`Self::sorted_decoded_vocab`].
+    #[bindings::export(Method)]
+    pub fn trie_subtree_nodes_range(&self) -> Vec<i32> {
+        self.inner.trie_subtree_nodes_range().to_vec()
+    }
+
     /// The stop token ids.
     #[bindings::export(Method)]
     pub fn stop_token_ids(&self) -> Vec<i32> {
@@ -145,12 +143,8 @@ impl TokenizerInfo {
 
     /// Deserializes tokenizer info from its `"v14"` JSON form.
     #[bindings::export(Method(Factory))]
-    pub fn deserialize_json(
-        json_string: String
-    ) -> Result<TokenizerInfo, crate::error::BindingError> {
-        xgrammar::tokenizer::TokenizerInfo::deserialize_json(&json_string)
-            .map(TokenizerInfo::wrap)
-            .map_err(map_error)
+    pub fn deserialize_json(json_string: String) -> Result<TokenizerInfo, crate::error::BindingError> {
+        xgrammar::tokenizer::TokenizerInfo::deserialize_json(&json_string).map(TokenizerInfo::wrap).map_err(map_error)
     }
 
     /// Dumps tokenizer metadata (vocab type and prefix-space flag) as JSON.
@@ -161,12 +155,7 @@ impl TokenizerInfo {
 
     /// Detects tokenizer metadata from a Hugging Face backend JSON string.
     #[bindings::export(Method(Factory))]
-    pub fn _detect_metadata_from_hf(
-        backend_str: String
-    ) -> Result<String, crate::error::BindingError> {
-        xgrammar::tokenizer::TokenizerInfo::detect_metadata_from_hf(
-            &backend_str,
-        )
-        .map_err(map_error)
+    pub fn _detect_metadata_from_hf(backend_str: String) -> Result<String, crate::error::BindingError> {
+        xgrammar::tokenizer::TokenizerInfo::detect_metadata_from_hf(&backend_str).map_err(map_error)
     }
 }

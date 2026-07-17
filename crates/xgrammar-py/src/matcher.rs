@@ -15,9 +15,7 @@ pub struct GrammarMatcher {
 }
 
 impl GrammarMatcher {
-    pub(crate) fn lock(
-        &self
-    ) -> MutexGuard<'_, xgrammar::matcher::GrammarMatcher> {
+    pub(crate) fn lock(&self) -> MutexGuard<'_, xgrammar::matcher::GrammarMatcher> {
         self.inner.lock().expect("grammar matcher mutex poisoned")
     }
 }
@@ -26,22 +24,21 @@ impl GrammarMatcher {
 impl GrammarMatcher {
     /// Creates a matcher over a compiled grammar.
     ///
-    /// `override_stop_tokens` and `max_rollback_tokens` are accepted for API parity; the
-    /// rollback history is currently unbounded.
+    /// `max_rollback_tokens` is accepted for API parity; rollback history is unbounded
+    /// (matching C++, which always reports `-1`).
     #[bindings::export(Method(Constructor))]
     pub fn new(
         compiled_grammar: &CompiledGrammar,
-        _override_stop_tokens: Option<Vec<i32>>,
+        override_stop_tokens: Option<Vec<i32>>,
         terminate_without_stop_token: bool,
         _max_rollback_tokens: i32,
     ) -> GrammarMatcher {
         GrammarMatcher {
-            inner: Arc::new(Mutex::new(
-                xgrammar::matcher::GrammarMatcher::from_compiled_grammar(
-                    &compiled_grammar.inner,
-                    terminate_without_stop_token,
-                ),
-            )),
+            inner: Arc::new(Mutex::new(xgrammar::matcher::GrammarMatcher::from_compiled_grammar_with_options(
+                &compiled_grammar.inner,
+                override_stop_tokens,
+                terminate_without_stop_token,
+            ))),
         }
     }
 
@@ -138,13 +135,9 @@ mod matcher_pyo3_ext {
             _debug_print: bool,
         ) -> PyResult<bool> {
             with_writable_i32_buffer(py, bitmask, |buf| {
-                self.lock().fill_next_token_bitmask(buf, index).map_err(
-                    |error| {
-                        pyo3::exceptions::PyRuntimeError::new_err(
-                            error.to_string(),
-                        )
-                    },
-                )
+                self.lock()
+                    .fill_next_token_bitmask(buf, index)
+                    .map_err(|error| pyo3::exceptions::PyRuntimeError::new_err(error.to_string()))
             })
         }
 
@@ -165,13 +158,11 @@ mod matcher_pyo3_ext {
 
         #[pyo3(name = "find_jump_forward_string")]
         fn find_jump_forward_string_py(&self) -> PyResult<String> {
-            let bytes =
-                self.lock().find_jump_forward_string().map_err(|error| {
-                    pyo3::exceptions::PyRuntimeError::new_err(error.to_string())
-                })?;
-            String::from_utf8(bytes).map_err(|error| {
-                pyo3::exceptions::PyRuntimeError::new_err(error.to_string())
-            })
+            let bytes = self
+                .lock()
+                .find_jump_forward_string()
+                .map_err(|error| pyo3::exceptions::PyRuntimeError::new_err(error.to_string()))?;
+            String::from_utf8(bytes).map_err(|error| pyo3::exceptions::PyRuntimeError::new_err(error.to_string()))
         }
 
         #[pyo3(name = "traverse_draft_tree")]
@@ -185,13 +176,8 @@ mod matcher_pyo3_ext {
             token_bitmask: &Bound<'_, PyAny>,
             time_threshold: f64,
         ) -> PyResult<bool> {
-            let next_token =
-                read_i64_1d(py, retrieve_next_token, "retrieve_next_token")?;
-            let next_sibling = read_i64_1d(
-                py,
-                retrieve_next_sibling,
-                "retrieve_next_sibling",
-            )?;
+            let next_token = read_i64_1d(py, retrieve_next_token, "retrieve_next_token")?;
+            let next_sibling = read_i64_1d(py, retrieve_next_sibling, "retrieve_next_sibling")?;
             let tokens = read_i64_1d(py, draft_tokens, "draft_tokens")?;
             let shape = i32_shape_2d(py, token_bitmask, "token_bitmask")?;
             if shape[0] != next_token.len() as i64 {
@@ -201,13 +187,7 @@ mod matcher_pyo3_ext {
             }
             with_writable_i32_buffer(py, token_bitmask, |bitmask| {
                 self.lock()
-                    .traverse_draft_tree(
-                        &next_token,
-                        &next_sibling,
-                        &tokens,
-                        bitmask,
-                        time_threshold,
-                    )
+                    .traverse_draft_tree(&next_token, &next_sibling, &tokens, bitmask, time_threshold)
                     .map_err(PyRuntimeError::new_err)
             })
         }

@@ -54,9 +54,7 @@ def download_gorilla_file(filename: str) -> Tuple[List, List]:
                 except json.JSONDecodeError as e:
                     print(f"Error parsing answer line in {filename}: {e}")
 
-        print(
-            f"Successfully downloaded {filename}: {len(functions_data)} functions, {len(answers_data)} answers"
-        )
+        print(f"Successfully downloaded {filename}: {len(functions_data)} functions, {len(answers_data)} answers")
         return functions_data, answers_data
     except requests.RequestException as e:
         print(f"Error downloading {filename}: {e}")
@@ -121,13 +119,9 @@ def load_gorilla_data() -> List[Dict[str, Any]]:
 
             completion = convert_ground_truth_to_completion(ground_truth)
 
-            gorilla_data.append(
-                {"schema": schema, "completion": completion, "id": item_id, "source": filename}
-            )
+            gorilla_data.append({"schema": schema, "completion": completion, "id": item_id, "source": filename})
 
-    print(
-        f"Loaded {len(gorilla_data)} examples from Gorilla BFCL dataset (filtered out {filtered_count} examples)"
-    )
+    print(f"Loaded {len(gorilla_data)} examples from Gorilla BFCL dataset (filtered out {filtered_count} examples)")
     return gorilla_data
 
 
@@ -196,9 +190,7 @@ def convert_ground_truth_to_completion(ground_truth: Dict) -> str:
     return json.dumps(completion)
 
 
-def run_benchmark(
-    dataset_name: str, dataset_data, tokenizer_info, hf_tokenizer, num_iters, num_warmup
-):
+def run_benchmark(dataset_name: str, dataset_data, tokenizer_info, hf_tokenizer, num_iters, num_warmup):
     vocab_size = len(hf_tokenizer)
 
     build_time = 0
@@ -232,15 +224,11 @@ def run_benchmark(
             if dataset_name == "gorilla-bfcl":
                 try:
                     schema_obj = json.loads(schema)
-                    completion_obj = (
-                        json.loads(completion) if isinstance(completion, str) else completion
-                    )
+                    completion_obj = json.loads(completion) if isinstance(completion, str) else completion
 
                     schema_function_name = schema_obj.get("required", [""])[0]
 
-                    completion_function_name = (
-                        list(completion_obj.keys())[0] if completion_obj else ""
-                    )
+                    completion_function_name = list(completion_obj.keys())[0] if completion_obj else ""
 
                     if (
                         schema_function_name
@@ -250,9 +238,7 @@ def run_benchmark(
                         if iter >= 0:
                             schema_mismatch_cnt += 1
                             if iter == 0:
-                                print(
-                                    f"Schema-completion function name mismatch for data point {data_point_idx}:"
-                                )
+                                print(f"Schema-completion function name mismatch for data point {data_point_idx}:")
                                 print(f"  Schema expects: {schema_function_name}")
                                 print(f"  Completion has: {completion_function_name}")
                         continue
@@ -304,9 +290,7 @@ def run_benchmark(
                 except Exception as e:
                     if iter >= 0:
                         if iter == 0:  # Only print once to avoid spam
-                            print(
-                                f"Failed to process token {idx} for data point {data_point_idx}: {e}"
-                            )
+                            print(f"Failed to process token {idx} for data point {data_point_idx}: {e}")
                     fail_flag = True
                     break
 
@@ -332,9 +316,7 @@ def run_benchmark(
         "grammar_compilation_time_ms": (
             build_time / total_data_points * 1e3 if total_data_points > 0 else float("inf")
         ),
-        "per_token_overhead_us_per_token": (
-            exec_time / total_tokens * 1e6 if total_tokens > 0 else float("inf")
-        ),
+        "per_token_overhead_us_per_token": (exec_time / total_tokens * 1e6 if total_tokens > 0 else float("inf")),
     }
 
     return results
@@ -375,8 +357,7 @@ if __name__ == "__main__":
         print("Loading json-mode-eval dataset...")
         json_mode_eval_dataset = datasets.load_dataset("NousResearch/json-mode-eval", split="train")
         json_mode_eval_data = [
-            {"schema": item["schema"], "completion": item["completion"]}
-            for item in json_mode_eval_dataset
+            {"schema": item["schema"], "completion": item["completion"]} for item in json_mode_eval_dataset
         ]
 
         print(f"Running benchmark on json-mode-eval ({len(json_mode_eval_data)} examples)...")
@@ -418,8 +399,6 @@ if __name__ == "__main__":
         print(
             f"Successful data points: {result['successful_data_points']:.0f} / {result['total_possible_data_points']}"
         )
-        print(
-            f"Failed data points: {result['failed_data_points']:.0f} / {result['total_possible_data_points']}"
-        )
+        print(f"Failed data points: {result['failed_data_points']:.0f} / {result['total_possible_data_points']}")
         print(f"Grammar compilation time (ms): {result['grammar_compilation_time_ms']:.4f}")
         print(f"Per token overhead (us/token): {result['per_token_overhead_us_per_token']:.4f}")

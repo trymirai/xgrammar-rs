@@ -120,9 +120,7 @@ def _ebnf_to_grammar_no_normalization(ebnf_string: str, root_rule_name: str = "r
     grammar : Grammar
         The unnormalized Grammar object converted from the input BNF grammar string.
     """
-    return Grammar._create_from_handle(
-        _core.testing._ebnf_to_grammar_no_normalization(ebnf_string, root_rule_name)
-    )
+    return Grammar._create_from_handle(_core.testing._ebnf_to_grammar_no_normalization(ebnf_string, root_rule_name))
 
 
 def _get_matcher_from_grammar(grammar: Union[Grammar, str], **kwargs) -> GrammarMatcher:
@@ -192,9 +190,7 @@ def _is_grammar_accept_string(
     return grammar_matcher.is_terminated()
 
 
-def _get_masked_tokens_from_bitmask(
-    bitmask: torch.Tensor, vocab_size: int, index: int = 0
-) -> List[int]:
+def _get_masked_tokens_from_bitmask(bitmask: torch.Tensor, vocab_size: int, index: int = 0) -> List[int]:
     """Get the ids of the rejected tokens from the bitmask. Mainly for debug purposes.
 
     Parameters
@@ -217,15 +213,11 @@ def _get_masked_tokens_from_bitmask(
     if bitmask.dtype != bitmask_dtype:
         raise ValueError(f"bitmask should be of type {bitmask_dtype}.")
     return list(
-        _core.testing._get_masked_tokens_from_bitmask(
-            bitmask.data_ptr(), list(bitmask.shape), vocab_size, index
-        )
+        _core.testing._get_masked_tokens_from_bitmask(bitmask.data_ptr(), list(bitmask.shape), vocab_size, index)
     )
 
 
-def _is_single_token_bitmask(
-    bitmask: torch.Tensor, vocab_size: int, index: int = 0
-) -> Tuple[bool, int]:
+def _is_single_token_bitmask(bitmask: torch.Tensor, vocab_size: int, index: int = 0) -> Tuple[bool, int]:
     """Check if the bitmask is a single token bitmask.
 
     Parameters
@@ -244,9 +236,7 @@ def _is_single_token_bitmask(
     token_id : int
         The id of the token if the bitmask is a single token bitmask, -1 otherwise.
     """
-    result = _core.testing._is_single_token_bitmask(
-        bitmask.data_ptr(), list(bitmask.shape), vocab_size, index
-    )
+    result = _core.testing._is_single_token_bitmask(bitmask.data_ptr(), list(bitmask.shape), vocab_size, index)
     return bool(result[0]), result[1]
 
 
@@ -272,9 +262,7 @@ def bool_mask_to_bitmask(bool_mask: torch.Tensor) -> torch.Tensor:
         bool_mask_int32 = torch.nn.functional.pad(bool_mask_int32, (0, pad_size), value=1)
     bool_mask_view = bool_mask_int32.view(bool_mask.shape[0], -1, 32)
     # To avoid error for overflow, we construct int64 weights and convert to int32
-    weights = torch.tensor(
-        [1 << i for i in range(32)], device=bool_mask.device, dtype=torch.int64
-    ).to(torch.int32)
+    weights = torch.tensor([1 << i for i in range(32)], device=bool_mask.device, dtype=torch.int64).to(torch.int32)
     bitmask = (bool_mask_view * weights).sum(dim=2)
     return bitmask.to(torch.int32)
 
@@ -305,9 +293,7 @@ def bitmask_to_bool_mask(bit_mask: torch.Tensor, vocab_size: Optional[int] = Non
     if vocab_size is None:
         vocab_size = bit_mask.shape[1] * 32
     if vocab_size > bit_mask.shape[1] * 32:
-        raise ValueError(
-            "vocab_size should be less than or equal to the size represented by bit_mask."
-        )
+        raise ValueError("vocab_size should be less than or equal to the size represented by bit_mask.")
 
     bool_mask = torch.zeros((bit_mask.shape[0], vocab_size), dtype=torch.bool)
     for i in range(vocab_size):
@@ -394,48 +380,34 @@ class GrammarFunctor:
     @staticmethod
     def structure_normalizer(grammar: Grammar) -> Grammar:
         """Normalize the structure of the grammar."""
-        return Grammar._create_from_handle(
-            _core.testing.grammar_functor.structure_normalizer(grammar._handle)
-        )
+        return Grammar._create_from_handle(_core.testing.grammar_functor.structure_normalizer(grammar._handle))
 
     @staticmethod
     def rule_inliner(grammar: Grammar) -> Grammar:
         """Inline some rule references in the grammar."""
-        return Grammar._create_from_handle(
-            _core.testing.grammar_functor.rule_inliner(grammar._handle)
-        )
+        return Grammar._create_from_handle(_core.testing.grammar_functor.rule_inliner(grammar._handle))
 
     @staticmethod
     def byte_string_fuser(grammar: Grammar) -> Grammar:
         """Fuse the byte string elements in the grammar."""
-        return Grammar._create_from_handle(
-            _core.testing.grammar_functor.byte_string_fuser(grammar._handle)
-        )
+        return Grammar._create_from_handle(_core.testing.grammar_functor.byte_string_fuser(grammar._handle))
 
     @staticmethod
     def dead_code_eliminator(grammar: Grammar) -> Grammar:
         """Eliminate the not referenced rules in the grammar."""
-        return Grammar._create_from_handle(
-            _core.testing.grammar_functor.dead_code_eliminator(grammar._handle)
-        )
+        return Grammar._create_from_handle(_core.testing.grammar_functor.dead_code_eliminator(grammar._handle))
 
     @staticmethod
     def lookahead_assertion_analyzer(grammar: Grammar) -> Grammar:
         """Analyze and add lookahead assertions in the grammar."""
-        return Grammar._create_from_handle(
-            _core.testing.grammar_functor.lookahead_assertion_analyzer(grammar._handle)
-        )
+        return Grammar._create_from_handle(_core.testing.grammar_functor.lookahead_assertion_analyzer(grammar._handle))
 
     @staticmethod
     def grammar_optimizer(grammar: Grammar) -> Grammar:
         """Optimize the grammar."""
-        return Grammar._create_from_handle(
-            _core.testing.grammar_functor.grammar_optimizer(grammar._handle)
-        )
+        return Grammar._create_from_handle(_core.testing.grammar_functor.grammar_optimizer(grammar._handle))
 
     @staticmethod
     def repetition_normalizer(grammar: Grammar) -> Grammar:
         """Normalize the repetition expression."""
-        return Grammar._create_from_handle(
-            _core.testing.grammar_functor.repetition_normalizer(grammar._handle)
-        )
+        return Grammar._create_from_handle(_core.testing.grammar_functor.repetition_normalizer(grammar._handle))

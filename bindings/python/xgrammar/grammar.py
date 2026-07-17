@@ -116,15 +116,13 @@ def _get_structural_tag_str_from_args(args: List[Any], kwargs: Dict[str, Any]) -
         else:
             raise TypeError("Invalid argument type for from_structural_tag")
     elif len(args) == 2 and isinstance(args[0], list) and isinstance(args[1], list):
-        return StructuralTag.from_legacy_structural_tag(args[0], args[1]).model_dump_json(
-            indent=None
-        )
+        return StructuralTag.from_legacy_structural_tag(args[0], args[1]).model_dump_json(indent=None)
     elif "structural_tag" in kwargs:
         return _convert_instance_to_str(kwargs["structural_tag"])
     elif "tags" in kwargs and "triggers" in kwargs:
-        return StructuralTag.from_legacy_structural_tag(
-            kwargs["tags"], kwargs["triggers"]
-        ).model_dump_json(indent=None)
+        return StructuralTag.from_legacy_structural_tag(kwargs["tags"], kwargs["triggers"]).model_dump_json(
+            indent=None
+        )
     else:
         raise TypeError("Invalid arguments for from_structural_tag")
 
@@ -295,15 +293,11 @@ class Grammar(XGRObject):
         RuntimeError
             When parsing the regex pattern fails, with details about the parsing error.
         """
-        return Grammar._create_from_handle(
-            _core.Grammar.from_regex(regex_string, print_converted_ebnf)
-        )
+        return Grammar._create_from_handle(_core.Grammar.from_regex(regex_string, print_converted_ebnf))
 
     @overload
     @staticmethod
-    def from_structural_tag(
-        structural_tag: Union[StructuralTag, str, Dict[str, Any]]
-    ) -> "Grammar": ...
+    def from_structural_tag(structural_tag: Union[StructuralTag, str, Dict[str, Any]]) -> "Grammar": ...
 
     @overload
     @staticmethod

@@ -21,6 +21,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(_generate_range_regex, m)?)?;
     m.add_function(wrap_pyfunction!(_generate_float_regex, m)?)?;
     m.add_function(wrap_pyfunction!(_print_grammar_fsms, m)?)?;
+    m.add_function(wrap_pyfunction!(_print_token_by_ids, m)?)?;
     m.add_function(wrap_pyfunction!(_qwen_xml_tool_calling_to_ebnf, m)?)?;
     m.add_function(wrap_pyfunction!(_minimax_xml_tool_calling_to_ebnf, m)?)?;
     m.add_function(wrap_pyfunction!(_deepseek_xml_tool_calling_to_ebnf, m)?)?;
@@ -59,17 +60,10 @@ fn _json_schema_to_ebnf(
             "deepseek_xml" => xgrammar::converter::XmlJsonFormat::DeepSeek,
             "glm_xml" => xgrammar::converter::XmlJsonFormat::Glm,
             other => {
-                return Err(pyo3::exceptions::PyValueError::new_err(format!(
-                    "unsupported json format: {other}"
-                )));
+                return Err(pyo3::exceptions::PyValueError::new_err(format!("unsupported json format: {other}")));
             },
         };
-        xgrammar::converter::json_schema_to_ebnf_xml_with_options(
-            &schema,
-            format,
-            max_whitespace_cnt,
-            any_order,
-        )
+        xgrammar::converter::json_schema_to_ebnf_xml_with_options(&schema, format, max_whitespace_cnt, any_order)
     };
     result.map_err(map_error)
 }
@@ -80,8 +74,7 @@ fn _regex_to_ebnf(
     regex: String,
     with_rule_name: bool,
 ) -> PyResult<String> {
-    xgrammar::converter::regex_to_ebnf(&regex, with_rule_name)
-        .map_err(map_error)
+    xgrammar::converter::regex_to_ebnf(&regex, with_rule_name).map_err(map_error)
 }
 
 #[pyfunction]
@@ -91,11 +84,7 @@ fn _ebnf_to_grammar_no_normalization(
     root_rule_name: &str,
 ) -> PyResult<Grammar> {
     Ok(Grammar::wrap(
-        xgrammar::parser::ebnf_to_grammar_no_normalization(
-            &ebnf_string,
-            root_rule_name,
-        )
-        .map_err(map_error)?,
+        xgrammar::parser::ebnf_to_grammar_no_normalization(&ebnf_string, root_rule_name).map_err(map_error)?,
     ))
 }
 
@@ -144,44 +133,25 @@ fn with_raw_bitmask_row<R>(
     let row_index = match shape {
         [words] if *words == row_words as i64 && index == 0 => 0,
         [_, _] if index < 0 => {
-            return Err(PyRuntimeError::new_err(
-                "The provided index is out of bounds",
-            ));
+            return Err(PyRuntimeError::new_err("The provided index is out of bounds"));
         },
-        [rows, words]
-            if *words == row_words as i64 && i64::from(index) < *rows =>
-        {
-            index as usize
-        },
+        [rows, words] if *words == row_words as i64 && i64::from(index) < *rows => index as usize,
         [_] => {
-            return Err(PyRuntimeError::new_err(
-                "The index should be 0 and shape must match for a 1D bitmask",
-            ));
+            return Err(PyRuntimeError::new_err("The index should be 0 and shape must match for a 1D bitmask"));
         },
         [_, _] => {
-            return Err(PyRuntimeError::new_err(
-                "The provided bitmask shape or index is not valid",
-            ));
+            return Err(PyRuntimeError::new_err("The provided bitmask shape or index is not valid"));
         },
         _ => {
-            return Err(PyRuntimeError::new_err(
-                "token_bitmask tensor must be 1D or 2D",
-            ));
+            return Err(PyRuntimeError::new_err("token_bitmask tensor must be 1D or 2D"));
         },
     };
-    let offset = row_index
-        .checked_mul(row_words)
-        .ok_or_else(|| PyRuntimeError::new_err("bitmask offset overflow"))?;
+    let offset = row_index.checked_mul(row_words).ok_or_else(|| PyRuntimeError::new_err("bitmask offset overflow"))?;
 
     // SAFETY: the Python facade passes `Tensor.data_ptr()` for a contiguous CPU int32 tensor.
     // The shape and row index are validated above, and the resulting slice does not outlive this
     // function call. The Python tensor remains owned by the caller for the duration of the call.
-    let row = unsafe {
-        std::slice::from_raw_parts(
-            (bitmask_ptr as *const i32).add(offset),
-            row_words,
-        )
-    };
+    let row = unsafe { std::slice::from_raw_parts((bitmask_ptr as *const i32).add(offset), row_words) };
     Ok(f(row))
 }
 
@@ -205,12 +175,7 @@ fn _generate_float_regex(
     exclusive_start: bool,
     exclusive_end: bool,
 ) -> String {
-    xgrammar::converter::generate_float_range_regex_with_options(
-        start,
-        end,
-        exclusive_start,
-        exclusive_end,
-    )
+    xgrammar::converter::generate_float_range_regex_with_options(start, end, exclusive_start, exclusive_end)
 }
 
 #[pyfunction]
@@ -219,27 +184,33 @@ fn _print_grammar_fsms(grammar: &Grammar) -> String {
 }
 
 #[pyfunction]
+#[pyo3(signature = (token_ids, tokenizer_info, max_print_num=100))]
+fn _print_token_by_ids(
+    token_ids: Vec<i32>,
+    tokenizer_info: &crate::tokenizer_info::TokenizerInfo,
+    max_print_num: i32,
+) -> String {
+    xgrammar::testing::print_token_by_ids(&token_ids, &tokenizer_info.inner, max_print_num)
+}
+
+#[pyfunction]
 fn _qwen_xml_tool_calling_to_ebnf(schema: String) -> PyResult<String> {
-    xgrammar::converter::qwen_xml_tool_calling_to_ebnf(&schema)
-        .map_err(map_schema_error)
+    xgrammar::converter::qwen_xml_tool_calling_to_ebnf(&schema).map_err(map_schema_error)
 }
 
 #[pyfunction]
 fn _minimax_xml_tool_calling_to_ebnf(schema: String) -> PyResult<String> {
-    xgrammar::converter::minimax_xml_tool_calling_to_ebnf(&schema)
-        .map_err(map_schema_error)
+    xgrammar::converter::minimax_xml_tool_calling_to_ebnf(&schema).map_err(map_schema_error)
 }
 
 #[pyfunction]
 fn _deepseek_xml_tool_calling_to_ebnf(schema: String) -> PyResult<String> {
-    xgrammar::converter::deepseek_xml_tool_calling_to_ebnf(&schema)
-        .map_err(map_schema_error)
+    xgrammar::converter::deepseek_xml_tool_calling_to_ebnf(&schema).map_err(map_schema_error)
 }
 
 #[pyfunction]
 fn _glm_xml_tool_calling_to_ebnf(schema: String) -> PyResult<String> {
-    xgrammar::converter::glm_xml_tool_calling_to_ebnf(&schema)
-        .map_err(map_schema_error)
+    xgrammar::converter::glm_xml_tool_calling_to_ebnf(&schema).map_err(map_schema_error)
 }
 
 fn map_schema_error(error: xgrammar::converter::SchemaError) -> PyErr {
@@ -265,25 +236,16 @@ fn _traverse_draft_tree(
     time_threshold: f64,
 ) -> PyResult<bool> {
     let next_tok = read_i64_1d(py, retrieve_next_token, "retrieve_next_token")?;
-    let next_sib =
-        read_i64_1d(py, retrieve_next_sibling, "retrieve_next_sibling")?;
+    let next_sib = read_i64_1d(py, retrieve_next_sibling, "retrieve_next_sibling")?;
     let tokens = read_i64_1d(py, draft_tokens, "draft_tokens")?;
     let shape = i32_shape_2d(py, bitmask, "token_bitmask")?;
     if shape[0] != next_tok.len() as i64 {
-        return Err(PyRuntimeError::new_err(
-            "the token_bitmask batch size must match the number of nodes in the tree",
-        ));
+        return Err(PyRuntimeError::new_err("the token_bitmask batch size must match the number of nodes in the tree"));
     }
     with_writable_i32_buffer(py, bitmask, |buf| {
         matcher
             .lock()
-            .traverse_draft_tree(
-                &next_tok,
-                &next_sib,
-                &tokens,
-                buf,
-                time_threshold,
-            )
+            .traverse_draft_tree(&next_tok, &next_sib, &tokens, buf, time_threshold)
             .map_err(PyRuntimeError::new_err)
     })
 }

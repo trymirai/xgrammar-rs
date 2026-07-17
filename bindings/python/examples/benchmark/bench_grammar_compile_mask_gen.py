@@ -30,9 +30,7 @@ def xgrammar_build(schema: str, grammar_compiler: xgr.GrammarCompiler):
     return matcher
 
 
-def xgrammar_exec(
-    matcher: xgr.GrammarMatcher, logits: torch.Tensor, bitmask: torch.Tensor, token_id: int
-):
+def xgrammar_exec(matcher: xgr.GrammarMatcher, logits: torch.Tensor, bitmask: torch.Tensor, token_id: int):
     # Logits processing
     matcher.fill_next_token_bitmask(bitmask)
     xgr.apply_token_bitmask_inplace(logits, bitmask)
@@ -121,18 +119,14 @@ if __name__ == "__main__":
 
         tqdm_data_point_iter = tqdm(range(len(dataset)))
         for data_point_idx in tqdm_data_point_iter:
-            tqdm_data_point_iter.set_description(
-                f"Backend: {backend}, Data Point: {data_point_idx}"
-            )
+            tqdm_data_point_iter.set_description(f"Backend: {backend}, Data Point: {data_point_idx}")
             if data_point_idx in wrong_data_indices:
                 continue
 
             schema = dataset["schema"][data_point_idx]
             completion = dataset["completion"][data_point_idx]
             token_ids = hf_tokenizer.encode(completion, add_special_tokens=False)
-            prompt = hf_tokenizer.apply_chat_template(
-                dataset["prompt"][data_point_idx], tokenize=False
-            )
+            prompt = hf_tokenizer.apply_chat_template(dataset["prompt"][data_point_idx], tokenize=False)
             prompt_token_ids = hf_tokenizer.encode(prompt)
             print(f"Prompt: {prompt}, Schema: {schema}")
 
@@ -169,9 +163,7 @@ if __name__ == "__main__":
                             state = None
                         state = outlines_exec(worker, logits[idx], token_id, state)
                     elif backend == "lmformatenforcer":
-                        lmformatenforcer_exec(
-                            worker, logits[idx], prompt_token_ids + token_ids[:idx]
-                        )
+                        lmformatenforcer_exec(worker, logits[idx], prompt_token_ids + token_ids[:idx])
                 except Exception as e:
                     if iter >= 0:
                         fail_cnt += 1

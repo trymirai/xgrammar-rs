@@ -7,10 +7,7 @@ pub enum ErrorShape {
 
 impl ErrorShape {
     pub fn from_variants(variants: &Punctuated<Variant, Token![,]>) -> Self {
-        if variants
-            .iter()
-            .all(|variant| matches!(variant.fields, syn::Fields::Unit))
-        {
+        if variants.iter().all(|variant| matches!(variant.fields, syn::Fields::Unit)) {
             ErrorShape::Unit
         } else {
             ErrorShape::Data

@@ -101,9 +101,7 @@ _is_register_fake_available = hasattr(torch, "library") and hasattr(torch.librar
 if _is_register_fake_available:
     # To support torch.compile with fullgraph=True, a fake kernel is needed.
     @torch.library.register_fake("xgrammar::apply_token_bitmask_inplace_cuda")
-    def _(
-        logits: torch.Tensor, bitmask: torch.Tensor, indices: Optional[torch.Tensor] = None
-    ) -> None:
+    def _(logits: torch.Tensor, bitmask: torch.Tensor, indices: Optional[torch.Tensor] = None) -> None:
         pass
 
 

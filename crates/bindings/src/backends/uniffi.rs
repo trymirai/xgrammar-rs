@@ -5,8 +5,7 @@ use syn::Ident;
 use crate::{
     backends::Backend,
     contexts::{
-        ClassContext, EnumerationContext, ErrorContext, ImplementationContext,
-        MethodMetadata, StructureContext,
+        ClassContext, EnumerationContext, ErrorContext, ImplementationContext, MethodMetadata, StructureContext,
     },
     types::MethodFlavor,
 };
@@ -32,9 +31,7 @@ impl Backend for Uniffi {
         }
     }
 
-    fn implementation_attributes(
-        context: &ImplementationContext
-    ) -> TokenStream {
+    fn implementation_attributes(context: &ImplementationContext) -> TokenStream {
         if context.has_async_method() {
             quote! {
                 #[cfg_attr(feature = "bindings-uniffi", uniffi::export(async_runtime = "tokio"))]
@@ -62,9 +59,7 @@ impl Backend for Uniffi {
         match metadata.flavor {
             MethodFlavor::Constructor => constructor_expansion(context, metadata),
             MethodFlavor::Factory => factory_expansion(context, metadata),
-            MethodFlavor::FactoryWithCallback => {
-                factory_with_callback_expansion(context, metadata)
-            },
+            MethodFlavor::FactoryWithCallback => factory_with_callback_expansion(context, metadata),
             _ => quote! {},
         }
     }
@@ -116,18 +111,11 @@ fn factory_expansion(
     let self_ident = match context.self_type_ident() {
         Some(ident) => ident,
         None => {
-            return syn::Error::new_spanned(
-                self_type,
-                "Bindings::export(Method(Factory)) requires a named self type",
-            )
-            .to_compile_error();
+            return syn::Error::new_spanned(self_type, "Bindings::export(Method(Factory)) requires a named self type")
+                .to_compile_error();
         },
     };
-    let fn_name = format_ident!(
-        "{}_{}",
-        heck::AsSnakeCase(self_ident.to_string()).to_string(),
-        method_ident
-    );
+    let fn_name = format_ident!("{}_{}", heck::AsSnakeCase(self_ident.to_string()).to_string(), method_ident);
     let inputs = &method.sig.inputs;
     let output = replace_self_in_return(&method.sig.output, self_type);
     let asyncness = &method.sig.asyncness;
@@ -180,9 +168,7 @@ fn factory_with_callback_expansion(
             .to_compile_error();
         },
     };
-    let arg_idents: Vec<Ident> = (0..callback_inputs.len())
-        .map(|index| format_ident!("arg{index}"))
-        .collect();
+    let arg_idents: Vec<Ident> = (0..callback_inputs.len()).map(|index| format_ident!("arg{index}")).collect();
 
     quote! {
         #[cfg(feature = "bindings-uniffi")]

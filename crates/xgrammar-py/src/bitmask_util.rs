@@ -34,9 +34,7 @@ pub fn read_i64_1d(
         let device = obj.getattr("device")?;
         let device_type = device.getattr("type")?.extract::<String>()?;
         if device_type != "cpu" {
-            return Err(PyRuntimeError::new_err(format!(
-                "{name} must be on CPU"
-            )));
+            return Err(PyRuntimeError::new_err(format!("{name} must be on CPU")));
         }
         obj.call_method0("contiguous")?.call_method0("numpy")?
     } else {
@@ -44,17 +42,13 @@ pub fn read_i64_1d(
     };
     let shape = arr.getattr("shape")?.extract::<Vec<i64>>()?;
     if shape.len() != 1 {
-        return Err(PyRuntimeError::new_err(format!(
-            "{name} must be a 1D int64 tensor"
-        )));
+        return Err(PyRuntimeError::new_err(format!("{name} must be a 1D int64 tensor")));
     }
     let dtype = arr.getattr("dtype")?;
     let kind = dtype.getattr("kind")?.extract::<String>()?;
     let itemsize = dtype.getattr("itemsize")?.extract::<i32>()?;
     if kind != "i" || itemsize != 8 {
-        return Err(PyRuntimeError::new_err(format!(
-            "{name} must be a 1D int64 tensor"
-        )));
+        return Err(PyRuntimeError::new_err(format!("{name} must be a 1D int64 tensor")));
     }
     arr.call_method0("tolist")?.extract::<Vec<i64>>()
 }
@@ -68,9 +62,7 @@ pub fn i32_shape_2d(
     let arr = resolve_i32_array(py, obj)?;
     let shape = arr.getattr("shape")?.extract::<Vec<i64>>()?;
     if shape.len() != 2 {
-        return Err(PyRuntimeError::new_err(format!(
-            "{name} must be a 2D int32 tensor"
-        )));
+        return Err(PyRuntimeError::new_err(format!("{name} must be a 2D int32 tensor")));
     }
     Ok(shape)
 }

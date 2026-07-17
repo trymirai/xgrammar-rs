@@ -130,16 +130,9 @@ class GrammarCompiler(XGRObject):
             Note that the actual memory usage may slightly exceed this value.
         """
         if not isinstance(tokenizer_info, TokenizerInfo):
-            raise ValueError(
-                "Please convert the tokenizer to TokenizerInfo before passing it "
-                "to GrammarCompiler."
-            )
+            raise ValueError("Please convert the tokenizer to TokenizerInfo before passing it to GrammarCompiler.")
 
-        self._init_handle(
-            _core.GrammarCompiler(
-                tokenizer_info._handle, max_threads, cache_enabled, cache_limit_bytes
-            )
-        )
+        self._init_handle(_core.GrammarCompiler(tokenizer_info._handle, max_threads, cache_enabled, cache_limit_bytes))
 
     def compile_json_schema(
         self,
@@ -241,18 +234,14 @@ class GrammarCompiler(XGRObject):
         return CompiledGrammar._create_from_handle(self._handle.compile_regex(regex))
 
     @overload
-    def compile_structural_tag(
-        self, structural_tag: Union[StructuralTag, str, Dict[str, Any]]
-    ) -> CompiledGrammar: ...
+    def compile_structural_tag(self, structural_tag: Union[StructuralTag, str, Dict[str, Any]]) -> CompiledGrammar: ...
 
     @overload
     @deprecated(
         "compile_structural_tag(tags, triggers) is deprecated. Compile structural tag with the "
         "StructuralTag class instead."
     )
-    def compile_structural_tag(
-        self, tags: List[StructuralTagItem], triggers: List[str]
-    ) -> CompiledGrammar: ...
+    def compile_structural_tag(self, tags: List[StructuralTagItem], triggers: List[str]) -> CompiledGrammar: ...
 
     def compile_structural_tag(self, *args, **kwargs) -> CompiledGrammar:
         """Compile a grammar from a structural tag. See the Structural Tag Usage in XGrammar
@@ -297,21 +286,15 @@ class GrammarCompiler(XGRObject):
         StructuralTag class to construct structural tags instead.
         """
         structural_tag_str = _get_structural_tag_str_from_args(args, kwargs)
-        return CompiledGrammar._create_from_handle(
-            self._handle.compile_structural_tag(structural_tag_str)
-        )
+        return CompiledGrammar._create_from_handle(self._handle.compile_structural_tag(structural_tag_str))
 
     @overload
-    def compile_grammar(
-        self, ebnf_string: str, *, root_rule_name: str = "root"
-    ) -> CompiledGrammar: ...
+    def compile_grammar(self, ebnf_string: str, *, root_rule_name: str = "root") -> CompiledGrammar: ...
 
     @overload
     def compile_grammar(self, grammar: Grammar) -> CompiledGrammar: ...
 
-    def compile_grammar(
-        self, grammar: Union[str, Grammar], *, root_rule_name: str = "root"
-    ) -> CompiledGrammar:
+    def compile_grammar(self, grammar: Union[str, Grammar], *, root_rule_name: str = "root") -> CompiledGrammar:
         """Compile a grammar object.
 
         Overloads:
@@ -342,9 +325,7 @@ class GrammarCompiler(XGRObject):
                 self._handle.compile_grammar_from_strings(grammar, root_rule_name)
             )
         elif isinstance(grammar, Grammar):
-            return CompiledGrammar._create_from_handle(
-                self._handle.compile_grammar_ebnf(grammar._handle)
-            )
+            return CompiledGrammar._create_from_handle(self._handle.compile_grammar_ebnf(grammar._handle))
         else:
             raise ValueError("Invalid grammar type. Please pass a string or a Grammar object.")
 

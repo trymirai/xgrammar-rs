@@ -40,7 +40,6 @@ impl TryFrom<i32> for VocabType {
     type Error = xgrammar::tokenizer::UnknownVocabType;
 
     fn try_from(value: i32) -> Result<Self, Self::Error> {
-        xgrammar::tokenizer::VocabType::try_from(i64::from(value))
-            .map(Self::from_core)
+        xgrammar::tokenizer::VocabType::try_from(i64::from(value)).map(Self::from_core)
     }
 }

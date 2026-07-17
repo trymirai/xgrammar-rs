@@ -55,12 +55,9 @@ impl CompiledGrammar {
         json_string: String,
         tokenizer_info: &TokenizerInfo,
     ) -> Result<CompiledGrammar, crate::error::BindingError> {
-        xgrammar::compiler::CompiledGrammar::deserialize_json(
-            &json_string,
-            &tokenizer_info.inner,
-        )
-        .map(CompiledGrammar::wrap)
-        .map_err(map_deserialize_error)
+        xgrammar::compiler::CompiledGrammar::deserialize_json(&json_string, &tokenizer_info.inner)
+            .map(CompiledGrammar::wrap)
+            .map_err(map_deserialize_error)
     }
 }
 
@@ -107,9 +104,7 @@ impl GrammarCompiler {
         ebnf_string: String,
         root_rule_name: String,
     ) -> CompiledGrammar {
-        CompiledGrammar::wrap(
-            self.inner.compile_grammar_ebnf(&ebnf_string, &root_rule_name),
-        )
+        CompiledGrammar::wrap(self.inner.compile_grammar_ebnf(&ebnf_string, &root_rule_name))
     }
 
     /// Compiles a JSON Schema string.
@@ -156,10 +151,7 @@ impl GrammarCompiler {
         &self,
         structural_tag_json: String,
     ) -> Result<CompiledGrammar, crate::error::BindingError> {
-        self.inner
-            .compile_structural_tag(&structural_tag_json)
-            .map(CompiledGrammar::wrap)
-            .map_err(map_error)
+        self.inner.compile_structural_tag(&structural_tag_json).map(CompiledGrammar::wrap).map_err(map_error)
     }
 
     /// Compiles the built-in JSON grammar.

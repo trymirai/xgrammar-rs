@@ -3,10 +3,7 @@ use syn::{
     parse::{Parse, ParseStream},
 };
 
-use crate::types::{
-    class_flavor::ClassFlavor, method_flavor::MethodFlavor,
-    structure_flavor::StructureFlavor,
-};
+use crate::types::{class_flavor::ClassFlavor, method_flavor::MethodFlavor, structure_flavor::StructureFlavor};
 
 pub enum Kind {
     Enumeration,
@@ -37,9 +34,7 @@ impl Parse for Kind {
                         other => {
                             return Err(syn::Error::new(
                                 flavor_identifier.span(),
-                                format!(
-                                    "Unknown Structure flavor: {other}, expected `Plain` or `Class`"
-                                ),
+                                format!("Unknown Structure flavor: {other}, expected `Plain` or `Class`"),
                             ));
                         },
                     }
@@ -59,9 +54,7 @@ impl Parse for Kind {
                         other => {
                             return Err(syn::Error::new(
                                 flavor_identifier.span(),
-                                format!(
-                                    "Unknown Class flavor: {other}, expected `Plain` or `Stream`"
-                                ),
+                                format!("Unknown Class flavor: {other}, expected `Plain` or `Stream`"),
                             ));
                         },
                     }
@@ -87,9 +80,7 @@ impl Parse for Kind {
                         "Plain" => MethodFlavor::Plain,
                         "Constructor" => MethodFlavor::Constructor,
                         "Factory" => MethodFlavor::Factory,
-                        "FactoryWithCallback" => {
-                            MethodFlavor::FactoryWithCallback
-                        },
+                        "FactoryWithCallback" => MethodFlavor::FactoryWithCallback,
                         "Getter" => MethodFlavor::Getter,
                         "Setter" => MethodFlavor::Setter,
                         "StreamNext" => MethodFlavor::StreamNext,
@@ -121,9 +112,7 @@ impl Parse for Kind {
             },
         };
         if input.peek(Token![,]) {
-            return Err(
-                input.error("Bindings::export accepts a single kind argument")
-            );
+            return Err(input.error("Bindings::export accepts a single kind argument"));
         }
         Ok(kind)
     }
@@ -134,8 +123,7 @@ fn ensure_no_arguments(
     kind_name: &str,
 ) -> syn::Result<()> {
     if input.peek(syn::token::Paren) {
-        return Err(input
-            .error(format!("Kind `{kind_name}` does not accept arguments")));
+        return Err(input.error(format!("Kind `{kind_name}` does not accept arguments")));
     }
     Ok(())
 }

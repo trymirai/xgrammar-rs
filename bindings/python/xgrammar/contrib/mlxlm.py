@@ -38,9 +38,7 @@ class XGrammarLogitsProcessor:
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", type=str, required=True)
-    parser.add_argument(
-        "--prompt", type=str, default="Generate a simple example JSON. No text. Only the JSON"
-    )
+    parser.add_argument("--prompt", type=str, default="Generate a simple example JSON. No text. Only the JSON")
     parser.add_argument("--seed", type=int, default=42)
     return parser.parse_args()
 
@@ -53,9 +51,7 @@ def main():
     with_logits_processor = mlx_generate(
         model=model,
         tokenizer=tokenizer,
-        prompt=tokenizer.apply_chat_template(
-            [{"role": "user", "content": args.prompt}], add_generation_prompt=True
-        ),
+        prompt=tokenizer.apply_chat_template([{"role": "user", "content": args.prompt}], add_generation_prompt=True),
         verbose=False,
         logits_processors=[
             XGrammarLogitsProcessor(
@@ -68,9 +64,7 @@ def main():
     without_logits_processor = mlx_generate(
         model=model,
         tokenizer=tokenizer,
-        prompt=tokenizer.apply_chat_template(
-            [{"role": "user", "content": args.prompt}], add_generation_prompt=True
-        ),
+        prompt=tokenizer.apply_chat_template([{"role": "user", "content": args.prompt}], add_generation_prompt=True),
         verbose=False,
     )
     assert without_logits_processor == with_logits_processor

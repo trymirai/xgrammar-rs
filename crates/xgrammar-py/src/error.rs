@@ -40,12 +40,7 @@ mod pyo3_errors {
         types::PyModuleMethods,
     };
 
-    pyo3::create_exception!(
-        xgrammar_rs,
-        InvalidJSONError,
-        PyException,
-        "Raised when the JSON is invalid."
-    );
+    pyo3::create_exception!(xgrammar_rs, InvalidJSONError, PyException, "Raised when the JSON is invalid.");
     pyo3::create_exception!(
         xgrammar_rs,
         DeserializeVersionError,
@@ -68,18 +63,9 @@ mod pyo3_errors {
     /// Registers the custom exception types on the module.
     pub fn register_exceptions(m: &Bound<'_, PyModule>) -> PyResult<()> {
         m.add("InvalidJSONError", m.py().get_type::<InvalidJSONError>())?;
-        m.add(
-            "DeserializeVersionError",
-            m.py().get_type::<DeserializeVersionError>(),
-        )?;
-        m.add(
-            "DeserializeFormatError",
-            m.py().get_type::<DeserializeFormatError>(),
-        )?;
-        m.add(
-            "InvalidStructuralTagError",
-            m.py().get_type::<InvalidStructuralTagError>(),
-        )?;
+        m.add("DeserializeVersionError", m.py().get_type::<DeserializeVersionError>())?;
+        m.add("DeserializeFormatError", m.py().get_type::<DeserializeFormatError>())?;
+        m.add("InvalidStructuralTagError", m.py().get_type::<InvalidStructuralTagError>())?;
         Ok(())
     }
 
@@ -94,9 +80,7 @@ mod pyo3_errors {
         if message.starts_with("invalid format:") {
             return DeserializeFormatError::new_err(message.to_owned());
         }
-        if message.contains("structural tag")
-            || message.contains("StructuralTag")
-        {
+        if message.contains("structural tag") || message.contains("StructuralTag") {
             return InvalidStructuralTagError::new_err(message.to_owned());
         }
         PyRuntimeError::new_err(message.to_owned())
@@ -123,12 +107,8 @@ pub fn map_error<E: std::fmt::Display>(error: E) -> BindingError {
 /// Maps [`xgrammar::grammar::DeserializeError`] to a [`BindingError`], preserving the
 /// precise exception subtype under PyO3.
 #[cfg(feature = "bindings-pyo3")]
-pub fn map_deserialize_error(
-    error: xgrammar::grammar::DeserializeError
-) -> BindingError {
-    use pyo3_errors::{
-        DeserializeFormatError, DeserializeVersionError, InvalidJSONError,
-    };
+pub fn map_deserialize_error(error: xgrammar::grammar::DeserializeError) -> BindingError {
+    use pyo3_errors::{DeserializeFormatError, DeserializeVersionError, InvalidJSONError};
     match error {
         xgrammar::grammar::DeserializeError::InvalidJson(msg) => {
             InvalidJSONError::new_err(format!("invalid JSON: {msg}"))
@@ -136,9 +116,7 @@ pub fn map_deserialize_error(
         xgrammar::grammar::DeserializeError::Version {
             expected,
             got,
-        } => DeserializeVersionError::new_err(format!(
-            "version mismatch: expected {expected}, got {got}"
-        )),
+        } => DeserializeVersionError::new_err(format!("version mismatch: expected {expected}, got {got}")),
         xgrammar::grammar::DeserializeError::Format(msg) => {
             DeserializeFormatError::new_err(format!("invalid format: {msg}"))
         },
@@ -147,9 +125,7 @@ pub fn map_deserialize_error(
 
 /// Maps [`xgrammar::grammar::DeserializeError`] to a [`BindingError`].
 #[cfg(not(feature = "bindings-pyo3"))]
-pub fn map_deserialize_error(
-    error: xgrammar::grammar::DeserializeError
-) -> BindingError {
+pub fn map_deserialize_error(error: xgrammar::grammar::DeserializeError) -> BindingError {
     XgrammarError::Invalid {
         message: error.to_string(),
     }

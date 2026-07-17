@@ -39,19 +39,11 @@ fn stage_binary(
         let capabilities = platforms.capabilities_for_target(target.clone(), Vec::new())?;
         let features = [
             backend.feature().into_iter().collect::<Vec<_>>(),
-            capabilities
-                .iter()
-                .filter_map(|capability| capability.feature())
-                .collect::<Vec<_>>(),
+            capabilities.iter().filter_map(|capability| capability.feature()).collect::<Vec<_>>(),
         ]
         .concat();
 
-        Command::cargo_build(
-            binary_config.crate_name.clone(),
-            target.clone(),
-            features,
-            Configuration::Release,
-        )
+        Command::cargo_build(binary_config.crate_name.clone(), target.clone(), features, Configuration::Release)
             .with_envs(platforms.required_envs_for_target(target.clone())?)
             .run()?;
 

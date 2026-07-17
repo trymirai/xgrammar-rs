@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import XGrammar
 
 final class XGrammarTests: XCTestCase {

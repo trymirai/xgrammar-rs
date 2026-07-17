@@ -208,9 +208,7 @@ impl Command {
         features: Vec<String>,
         configuration: Configuration,
     ) -> Self {
-        let mut command = Self::new("cargo")
-            .with_argument("test")
-            .with_arguments(vec!["--target".to_string(), target]);
+        let mut command = Self::new("cargo").with_argument("test").with_arguments(vec!["--target".to_string(), target]);
         if !features.is_empty() {
             command = command
                 .with_argument("--no-default-features")
@@ -292,9 +290,7 @@ impl Command {
     }
 
     pub fn uv_sync_extra(extra: &str) -> Self {
-        Self::new("uv")
-            .with_argument("sync")
-            .with_arguments(vec!["--extra".to_string(), extra.to_string()])
+        Self::new("uv").with_argument("sync").with_arguments(vec!["--extra".to_string(), extra.to_string()])
     }
 
     pub fn uv_venv() -> Self {

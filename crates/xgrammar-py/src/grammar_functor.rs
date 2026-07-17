@@ -38,9 +38,7 @@ fn dead_code_eliminator(grammar: &Grammar) -> Grammar {
 
 #[pyfunction]
 fn lookahead_assertion_analyzer(grammar: &Grammar) -> Grammar {
-    Grammar::wrap(xgrammar::functor::lookahead_assertion_analyzer(
-        &grammar.inner,
-    ))
+    Grammar::wrap(xgrammar::functor::lookahead_assertion_analyzer(&grammar.inner))
 }
 
 #[pyfunction]

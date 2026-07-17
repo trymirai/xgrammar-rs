@@ -25,9 +25,7 @@ impl Grammar {
         ebnf_string: String,
         root_rule_name: String,
     ) -> Result<Grammar, crate::error::BindingError> {
-        xgrammar::grammar::Grammar::from_ebnf(&ebnf_string, &root_rule_name)
-            .map(Grammar::wrap)
-            .map_err(map_error)
+        xgrammar::grammar::Grammar::from_ebnf(&ebnf_string, &root_rule_name).map(Grammar::wrap).map_err(map_error)
     }
 
     /// Builds a grammar from a JSON Schema string (the C++ `Grammar::FromJSONSchema`).
@@ -70,8 +68,7 @@ impl Grammar {
         regex_string: String,
         print_converted_ebnf: bool,
     ) -> Result<Grammar, crate::error::BindingError> {
-        let g = xgrammar::grammar::Grammar::from_regex(&regex_string)
-            .map_err(map_error)?;
+        let g = xgrammar::grammar::Grammar::from_regex(&regex_string).map_err(map_error)?;
         if print_converted_ebnf {
             println!("{g}");
         }
@@ -80,10 +77,18 @@ impl Grammar {
 
     /// Builds a grammar from a structural-tag JSON document.
     #[bindings::export(Method(Factory))]
-    pub fn from_structural_tag(
-        structural_tag_json: String
+    pub fn from_structural_tag(structural_tag_json: String) -> Result<Grammar, crate::error::BindingError> {
+        xgrammar::grammar::Grammar::from_structural_tag(&structural_tag_json).map(Grammar::wrap).map_err(map_error)
+    }
+
+    /// Builds a grammar from a structural-tag JSON document, resolving string token
+    /// references against `tokenizer_info`.
+    #[bindings::export(Method(Factory))]
+    pub fn from_structural_tag_with_tokenizer(
+        structural_tag_json: String,
+        tokenizer_info: &crate::tokenizer_info::TokenizerInfo,
     ) -> Result<Grammar, crate::error::BindingError> {
-        xgrammar::grammar::Grammar::from_structural_tag(&structural_tag_json)
+        xgrammar::grammar::Grammar::from_structural_tag_with_tokenizer(&structural_tag_json, &tokenizer_info.inner)
             .map(Grammar::wrap)
             .map_err(map_error)
     }
@@ -99,9 +104,7 @@ impl Grammar {
     /// Takes the serialized JSON form of each grammar (`Vec<String>`) rather than opaque
     /// handles: a `Vec` of handles cannot be passed uniformly across every binding backend.
     #[bindings::export(Method(Factory))]
-    pub fn union(
-        grammars: Vec<String>
-    ) -> Result<Grammar, crate::error::BindingError> {
+    pub fn union(grammars: Vec<String>) -> Result<Grammar, crate::error::BindingError> {
         let gs = grammars
             .iter()
             .map(|j| xgrammar::grammar::Grammar::deserialize_json(j))
@@ -114,9 +117,7 @@ impl Grammar {
     ///
     /// Takes the serialized JSON form of each grammar (`Vec<String>`); see [`Grammar::union`].
     #[bindings::export(Method(Factory))]
-    pub fn concat(
-        grammars: Vec<String>
-    ) -> Result<Grammar, crate::error::BindingError> {
+    pub fn concat(grammars: Vec<String>) -> Result<Grammar, crate::error::BindingError> {
         let gs = grammars
             .iter()
             .map(|j| xgrammar::grammar::Grammar::deserialize_json(j))
@@ -133,12 +134,8 @@ impl Grammar {
 
     /// Deserializes a grammar from its `"v14"` JSON form.
     #[bindings::export(Method(Factory))]
-    pub fn deserialize_json(
-        json_string: String
-    ) -> Result<Grammar, crate::error::BindingError> {
-        xgrammar::grammar::Grammar::deserialize_json(&json_string)
-            .map(Grammar::wrap)
-            .map_err(map_deserialize_error)
+    pub fn deserialize_json(json_string: String) -> Result<Grammar, crate::error::BindingError> {
+        xgrammar::grammar::Grammar::deserialize_json(&json_string).map(Grammar::wrap).map_err(map_deserialize_error)
     }
 
     /// The EBNF (GBNF) string form of the grammar.

@@ -95,20 +95,15 @@ impl Paths {
     }
 
     pub fn napi_output_path(&self) -> PathBuf {
-        self.bindings_for_language_path(Language::TypeScript)
-            .join("src")
-            .join("napi")
+        self.bindings_for_language_path(Language::TypeScript).join("src").join("napi")
     }
 
     pub fn swift_xcframework_path(&self) -> PathBuf {
-        self.bindings_for_language_path(Language::Swift)
-            .join(format!("{}.xcframework", self.bindings_lib))
+        self.bindings_for_language_path(Language::Swift).join(format!("{}.xcframework", self.bindings_lib))
     }
 
     pub fn swift_generated_sources_path(&self) -> PathBuf {
-        self.bindings_for_language_path(Language::Swift)
-            .join("Sources")
-            .join(&self.swift_module)
+        self.bindings_for_language_path(Language::Swift).join("Sources").join(&self.swift_module)
     }
 
     pub fn swift_slices_path(&self) -> PathBuf {

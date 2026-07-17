@@ -229,9 +229,7 @@ def get_model_structural_tag(
         supported = list(_structural_tag_registry.keys())
         raise ValueError(f"Unknown format type: {model}, supported types: {supported}")
 
-    function_tools, builtin_tools, simplified_tool_choice = normalize_tool_choice(
-        tools, tool_choice
-    )
+    function_tools, builtin_tools, simplified_tool_choice = normalize_tool_choice(tools, tool_choice)
 
     return func(
         function_tools,
@@ -354,11 +352,7 @@ def normalize_tool_choice(
         raise ValueError("The 'tools' argument must be a list.")
 
     normalized_tools = [
-        (
-            tool
-            if isinstance(tool, (FunctionToolParam, BuiltinToolParam))
-            else _TOOL_ADAPTER.validate_python(tool)
-        )
+        (tool if isinstance(tool, (FunctionToolParam, BuiltinToolParam)) else _TOOL_ADAPTER.validate_python(tool))
         for tool in tools
     ]
 
@@ -374,9 +368,7 @@ def normalize_tool_choice(
 
     simplified_tool_choice: SimplifiedToolChoice
     if isinstance(normalized_tool_choice, AllowedToolChoiceParam):
-        function_tools, builtin_tools = _filter_allowed_tools(
-            function_tools, builtin_tools, normalized_tool_choice
-        )
+        function_tools, builtin_tools = _filter_allowed_tools(function_tools, builtin_tools, normalized_tool_choice)
         simplified_tool_choice = normalized_tool_choice.allowed_tools.mode
     elif isinstance(normalized_tool_choice, NamedToolChoiceParam):
         tool_name = normalized_tool_choice.function.name
@@ -390,8 +382,7 @@ def normalize_tool_choice(
         builtin_tools = [tool for tool in builtin_tools if tool.type == normalized_tool_choice.type]
         if len(builtin_tools) != 1:
             raise ValueError(
-                "Builtin tool choice must match exactly one builtin tool, "
-                f"got {len(builtin_tools)} matches."
+                f"Builtin tool choice must match exactly one builtin tool, got {len(builtin_tools)} matches."
             )
         simplified_tool_choice = "forced"
     elif normalized_tool_choice == "none":
@@ -403,18 +394,14 @@ def normalize_tool_choice(
         simplified_tool_choice = normalized_tool_choice
 
     if simplified_tool_choice == "required" and not function_tools and not builtin_tools:
-        raise ValueError(
-            "The 'tools' list is empty, which is not allowed when " "'tool_choice' is 'required'."
-        )
+        raise ValueError("The 'tools' list is empty, which is not allowed when 'tool_choice' is 'required'.")
     if simplified_tool_choice == "forced" and len(function_tools) + len(builtin_tools) != 1:
         raise ValueError("Forced tool choice must resolve to exactly one tool.")
 
     return function_tools, builtin_tools, simplified_tool_choice
 
 
-def _get_function_parameters(
-    function: Union[FunctionDefinition, BuiltinToolParam]
-) -> Union[Dict[str, Any], bool]:
+def _get_function_parameters(function: Union[FunctionDefinition, BuiltinToolParam]) -> Union[Dict[str, Any], bool]:
     """Return the JSON schema used for constrained tool arguments.
 
     ``None`` parameters and non-strict function tools are intentionally mapped
@@ -469,17 +456,13 @@ def _filter_allowed_tools(
 
     missing_function_names = allowed_function_names - {tool.function.name for tool in tools}
     if missing_function_names:
-        raise ValueError(
-            f"Allowed function tools are not found in the tools list: {missing_function_names}."
-        )
+        raise ValueError(f"Allowed function tools are not found in the tools list: {missing_function_names}.")
 
     filtered_builtin_tools = [tool for tool in builtin_tools if tool.type in allowed_builtin_types]
     matched_builtin_types = {tool.type for tool in filtered_builtin_tools}
     missing_builtin_refs = allowed_builtin_types - matched_builtin_types
     if missing_builtin_refs:
-        raise ValueError(
-            f"Allowed builtin tools are not found in the tools list: {missing_builtin_refs}."
-        )
+        raise ValueError(f"Allowed builtin tools are not found in the tools list: {missing_builtin_refs}.")
 
     filtered_tools = [tool for tool in tools if tool.function.name in allowed_function_names]
     return filtered_tools, filtered_builtin_tools
@@ -589,9 +572,7 @@ def get_llama_structural_tag(
                 excludes=_text_excludes(exclude_special_tokens, THINK_EXCLUDE_TOKENS),
             )
         else:
-            suffix_tag = AnyTextFormat(
-                excludes=_text_excludes(exclude_special_tokens, THINK_EXCLUDE_TOKENS)
-            )
+            suffix_tag = AnyTextFormat(excludes=_text_excludes(exclude_special_tokens, THINK_EXCLUDE_TOKENS))
 
     elif tool_choice == "forced":
         if not tools:
@@ -715,14 +696,10 @@ def get_kimi_structural_tag(
             suffix_tag = TriggeredTagsFormat(
                 triggers=[TOOL_CALLS_SECTION_BEGIN],
                 tags=[tool_calls],
-                excludes=_text_excludes(
-                    exclude_special_tokens, [*THINK_EXCLUDE_TOKENS, TOOL_CALL_BEGIN]
-                ),
+                excludes=_text_excludes(exclude_special_tokens, [*THINK_EXCLUDE_TOKENS, TOOL_CALL_BEGIN]),
             )
         else:
-            suffix_tag = AnyTextFormat(
-                excludes=_text_excludes(exclude_special_tokens, THINK_EXCLUDE_TOKENS)
-            )
+            suffix_tag = AnyTextFormat(excludes=_text_excludes(exclude_special_tokens, THINK_EXCLUDE_TOKENS))
 
     elif tool_choice == "forced":
         if not tools:
@@ -842,18 +819,14 @@ def get_deepseek_r1_structural_tag(
 
         if len(tags) > 0:
             inner_tool_calls = TagsWithSeparatorFormat(tags=tags, separator="\n", at_least_one=True)
-            tool_calls = TagFormat(
-                begin=TOOL_CALLS_BEGIN, content=inner_tool_calls, end=TOOL_CALLS_END
-            )
+            tool_calls = TagFormat(begin=TOOL_CALLS_BEGIN, content=inner_tool_calls, end=TOOL_CALLS_END)
             suffix_tag = TriggeredTagsFormat(
                 triggers=[TOOL_CALLS_BEGIN],
                 tags=[tool_calls],
                 excludes=_text_excludes(exclude_special_tokens, THINK_EXCLUDE_TOKENS),
             )
         else:
-            suffix_tag = AnyTextFormat(
-                excludes=_text_excludes(exclude_special_tokens, THINK_EXCLUDE_TOKENS)
-            )
+            suffix_tag = AnyTextFormat(excludes=_text_excludes(exclude_special_tokens, THINK_EXCLUDE_TOKENS))
 
     elif tool_choice == "forced":
         if not tools:
@@ -950,18 +923,14 @@ def get_deepseek_v3_1_structural_tag(
 
         if len(tags) > 0:
             inner_tool_calls = TagsWithSeparatorFormat(tags=tags, separator="", at_least_one=True)
-            tool_calls = TagFormat(
-                begin=TOOL_CALLS_BEGIN, content=inner_tool_calls, end=TOOL_CALLS_END
-            )
+            tool_calls = TagFormat(begin=TOOL_CALLS_BEGIN, content=inner_tool_calls, end=TOOL_CALLS_END)
             suffix_tag = TriggeredTagsFormat(
                 triggers=[TOOL_CALLS_BEGIN],
                 tags=[tool_calls],
                 excludes=_text_excludes(exclude_special_tokens, THINK_EXCLUDE_TOKENS),
             )
         else:
-            suffix_tag = AnyTextFormat(
-                excludes=_text_excludes(exclude_special_tokens, THINK_EXCLUDE_TOKENS)
-            )
+            suffix_tag = AnyTextFormat(excludes=_text_excludes(exclude_special_tokens, THINK_EXCLUDE_TOKENS))
 
     elif tool_choice == "forced":
         if not tools:
@@ -1079,9 +1048,7 @@ def get_qwen_3_5_structural_tag(
                 excludes=_text_excludes(exclude_special_tokens, THINK_EXCLUDE_TOKENS),
             )
         else:
-            suffix_tag = AnyTextFormat(
-                excludes=_text_excludes(exclude_special_tokens, THINK_EXCLUDE_TOKENS)
-            )
+            suffix_tag = AnyTextFormat(excludes=_text_excludes(exclude_special_tokens, THINK_EXCLUDE_TOKENS))
 
     elif tool_choice == "forced":
         if not tools:
@@ -1211,9 +1178,7 @@ def get_qwen_3_structural_tag(
                 excludes=_text_excludes(exclude_special_tokens, THINK_EXCLUDE_TOKENS),
             )
         else:
-            suffix_tag = AnyTextFormat(
-                excludes=_text_excludes(exclude_special_tokens, THINK_EXCLUDE_TOKENS)
-            )
+            suffix_tag = AnyTextFormat(excludes=_text_excludes(exclude_special_tokens, THINK_EXCLUDE_TOKENS))
 
     elif tool_choice == "forced":
         if not tools:
@@ -1313,9 +1278,7 @@ def get_harmony_structural_tag(
 
     def _function_tool_tags(name, parameters):
         """Generate tags for all supported harmony function tool call formats."""
-        content = JSONSchemaFormat(
-            json_schema=parameters, any_order=any_order, max_whitespace_cnt=max_whitespace_cnt
-        )
+        content = JSONSchemaFormat(json_schema=parameters, any_order=any_order, max_whitespace_cnt=max_whitespace_cnt)
         return [
             TagFormat(
                 begin=f"<|channel|>commentary to=functions.{name}<|constrain|>json<|message|>",
@@ -1336,9 +1299,7 @@ def get_harmony_structural_tag(
 
     def _builtin_tool_tags(name, parameters):
         """Generate tags for supported harmony builtin tool call formats."""
-        content = JSONSchemaFormat(
-            json_schema=parameters, any_order=any_order, max_whitespace_cnt=max_whitespace_cnt
-        )
+        content = JSONSchemaFormat(json_schema=parameters, any_order=any_order, max_whitespace_cnt=max_whitespace_cnt)
         return [
             TagFormat(
                 begin=f"<|channel|>commentary to={name} code<|message|>",
@@ -1357,7 +1318,6 @@ def get_harmony_structural_tag(
     tags = []
 
     if tool_choice == "auto":
-
         for tool in tools:
             function = tool.function
             parameters = _get_function_parameters(function)
@@ -1463,9 +1423,7 @@ def get_deepseek_v3_2_structural_tag(
 
         # generate function calling triggered tag
         if len(tags) > 0:
-            function_calling_tags = TagsWithSeparatorFormat(
-                tags=tags, separator=INVOKE_SEPARATOR, at_least_one=True
-            )
+            function_calling_tags = TagsWithSeparatorFormat(tags=tags, separator=INVOKE_SEPARATOR, at_least_one=True)
 
             suffix_tag = TriggeredTagsFormat(
                 triggers=[FUNCTION_CALLS_TRIGGER],
@@ -1479,9 +1437,7 @@ def get_deepseek_v3_2_structural_tag(
                 excludes=_text_excludes(exclude_special_tokens, THINK_EXCLUDE_TOKENS),
             )
         else:
-            suffix_tag = AnyTextFormat(
-                excludes=_text_excludes(exclude_special_tokens, THINK_EXCLUDE_TOKENS)
-            )
+            suffix_tag = AnyTextFormat(excludes=_text_excludes(exclude_special_tokens, THINK_EXCLUDE_TOKENS))
 
     elif tool_choice == "forced":
         if not tools:
@@ -1599,23 +1555,15 @@ def get_minimax_structural_tag(
 
         # generate function calling triggered tag
         if len(tags) > 0:
-            function_calling_tags = TagsWithSeparatorFormat(
-                tags=tags, separator="", at_least_one=True
-            )
+            function_calling_tags = TagsWithSeparatorFormat(tags=tags, separator="", at_least_one=True)
 
             suffix_tag = TriggeredTagsFormat(
                 triggers=[TOOL_CALL_TRIGGER],
-                tags=[
-                    TagFormat(
-                        begin=TOOL_CALL_BEGIN, content=function_calling_tags, end=TOOL_CALL_END
-                    )
-                ],
+                tags=[TagFormat(begin=TOOL_CALL_BEGIN, content=function_calling_tags, end=TOOL_CALL_END)],
                 excludes=_text_excludes(exclude_special_tokens, THINK_EXCLUDE_TOKENS),
             )
         else:
-            suffix_tag = AnyTextFormat(
-                excludes=_text_excludes(exclude_special_tokens, THINK_EXCLUDE_TOKENS)
-            )
+            suffix_tag = AnyTextFormat(excludes=_text_excludes(exclude_special_tokens, THINK_EXCLUDE_TOKENS))
 
     elif tool_choice == "forced":
         if not tools:
@@ -1669,9 +1617,7 @@ def get_minimax_structural_tag(
     else:
         think_tag = ConstStringFormat(value=EMPTY_THINK_CONTENT)
     return StructuralTag(
-        format=SequenceFormat(
-            elements=[think_tag, ConstStringFormat(value=THINK_SUFFIX), suffix_tag]
-        )
+        format=SequenceFormat(elements=[think_tag, ConstStringFormat(value=THINK_SUFFIX), suffix_tag])
     )
 
 
@@ -1759,9 +1705,7 @@ def get_glm_4_7_structural_tag(
                 excludes=_text_excludes(exclude_special_tokens, TEXT_EXCLUDES),
             )
         else:
-            suffix_tag = AnyTextFormat(
-                excludes=_text_excludes(exclude_special_tokens, REASONING_EXCLUDES)
-            )
+            suffix_tag = AnyTextFormat(excludes=_text_excludes(exclude_special_tokens, REASONING_EXCLUDES))
 
     elif tool_choice == "forced":
         if not tools:
@@ -1898,9 +1842,7 @@ def _get_gemma_4_structural_tag(
                 excludes=_text_excludes(exclude_special_tokens, GEMMA4_EXCLUDE_TOKENS),
             )
         else:
-            suffix_tag = AnyTextFormat(
-                excludes=_text_excludes(exclude_special_tokens, GEMMA4_EXCLUDE_TOKENS)
-            )
+            suffix_tag = AnyTextFormat(excludes=_text_excludes(exclude_special_tokens, GEMMA4_EXCLUDE_TOKENS))
 
     elif tool_choice == "forced":
         if not tools:
@@ -2005,9 +1947,7 @@ def get_deepseek_v4_structural_tag(
 
         # generate function calling triggered tag
         if len(tags) > 0:
-            function_calling_tags = TagsWithSeparatorFormat(
-                tags=tags, separator=INVOKE_SEPARATOR, at_least_one=True
-            )
+            function_calling_tags = TagsWithSeparatorFormat(tags=tags, separator=INVOKE_SEPARATOR, at_least_one=True)
 
             suffix_tag = TriggeredTagsFormat(
                 triggers=[FUNCTION_CALLS_TRIGGER],
@@ -2021,9 +1961,7 @@ def get_deepseek_v4_structural_tag(
                 excludes=_text_excludes(exclude_special_tokens, THINK_EXCLUDE_TOKENS),
             )
         else:
-            suffix_tag = AnyTextFormat(
-                excludes=_text_excludes(exclude_special_tokens, THINK_EXCLUDE_TOKENS)
-            )
+            suffix_tag = AnyTextFormat(excludes=_text_excludes(exclude_special_tokens, THINK_EXCLUDE_TOKENS))
 
     elif tool_choice == "forced":
         if not tools:

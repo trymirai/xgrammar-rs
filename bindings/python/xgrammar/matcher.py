@@ -254,8 +254,7 @@ class GrammarMatcher(XGRObject):
 
         if not max_rollback_tokens == -1:
             warnings.warn(
-                "max_rollback_tokens is deprecated. You don't need to set it and it's always "
-                "unlimited (-1).",
+                "max_rollback_tokens is deprecated. You don't need to set it and it's always unlimited (-1).",
                 DeprecationWarning,
             )
 
@@ -324,9 +323,7 @@ class GrammarMatcher(XGRObject):
             return self._handle.accept_bytes(bytes(input_str), debug_print)
         return self._handle.accept_string(input_str, debug_print)
 
-    def fill_next_token_bitmask(
-        self, bitmask: ArrayLike, index: int = 0, *, debug_print: bool = False
-    ) -> bool:
+    def fill_next_token_bitmask(self, bitmask: ArrayLike, index: int = 0, *, debug_print: bool = False) -> bool:
         """Fill the bitmask for the next token prediction. The input bitmask can be generated
         by allocate_token_bitmask, and must be on CPU. bitmask[index] will be filled with the
         next token bitmask.
@@ -610,15 +607,11 @@ class BatchGrammarMatcher(XGRObject):
             If the sizes of matchers and strings do not match.
         """
         matcher_handles = [matcher._handle for matcher in matchers]
-        result = _core.BatchGrammarMatcher.batch_accept_string(
-            matcher_handles, strings, debug_print
-        )
+        result = _core.BatchGrammarMatcher.batch_accept_string(matcher_handles, strings, debug_print)
         return [bool(result[i]) for i in range(len(result))]
 
     @staticmethod
-    def batch_rollback(
-        matchers: List["GrammarMatcher"], num_tokens: Union[List[int], int] = 1
-    ) -> None:
+    def batch_rollback(matchers: List["GrammarMatcher"], num_tokens: Union[List[int], int] = 1) -> None:
         """Rollback a batch of matchers by the given number of tokens.
 
         Parameters

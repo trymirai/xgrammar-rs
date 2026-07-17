@@ -35,7 +35,7 @@ fn apply_token_bitmask_inplace_cpu(
     logits_stride: (usize, usize),
     bitmask_ptr: usize,
     bitmask_shape: (usize, usize),
-    _bitmask_stride: (usize, usize),
+    bitmask_stride: (usize, usize),
     vocab_size: usize,
     indices: Option<Vec<usize>>,
     dtype: &str,
@@ -43,78 +43,44 @@ fn apply_token_bitmask_inplace_cpu(
     let (batch, _vocab) = logits_shape;
     let (log_stride_batch, log_stride_elem) = logits_stride;
     let (_bm_batch, bm_words) = bitmask_shape;
+    let (bm_stride_batch, _) = bitmask_stride;
 
-    let rows: Box<dyn Iterator<Item = usize>> = if let Some(idx) = indices {
-        Box::new(idx.into_iter())
-    } else {
-        Box::new(0..batch)
-    };
+    let rows: Vec<usize> = indices.unwrap_or_else(|| (0..batch).collect());
 
     match dtype {
         "float32" => {
             for row in rows {
-                // SAFETY: caller guarantees ptr/shape/stride describe a live CPU f32 tensor.
-                let logit_ptr = unsafe {
-                    (logits_ptr as *mut f32).add(row * log_stride_batch)
-                };
+                // SAFETY: caller guarantees ptr/shape/stride describe live CPU tensors.
+                let logit_ptr = unsafe { (logits_ptr as *mut f32).add(row * log_stride_batch) };
                 let bitmask_row = unsafe {
-                    let bm_row = row.min(bm_words.saturating_sub(1));
-                    let base =
-                        (bitmask_ptr as *const i32).add(bm_row * bm_words);
+                    let base = (bitmask_ptr as *const i32).add(row * bm_stride_batch);
                     std::slice::from_raw_parts(base, bm_words)
                 };
-                apply_row_f32(
-                    logit_ptr,
-                    bitmask_row,
-                    vocab_size,
-                    log_stride_elem,
-                );
+                apply_row_f32(logit_ptr, bitmask_row, vocab_size, log_stride_elem);
             }
         },
         "bfloat16" => {
             for row in rows {
-                // SAFETY: caller guarantees ptr/shape/stride describe a live CPU bf16 tensor.
-                let logit_ptr = unsafe {
-                    (logits_ptr as *mut u16).add(row * log_stride_batch)
-                };
+                let logit_ptr = unsafe { (logits_ptr as *mut u16).add(row * log_stride_batch) };
                 let bitmask_row = unsafe {
-                    let bm_row = row.min(bm_words.saturating_sub(1));
-                    let base =
-                        (bitmask_ptr as *const i32).add(bm_row * bm_words);
+                    let base = (bitmask_ptr as *const i32).add(row * bm_stride_batch);
                     std::slice::from_raw_parts(base, bm_words)
                 };
-                apply_row_bf16(
-                    logit_ptr,
-                    bitmask_row,
-                    vocab_size,
-                    log_stride_elem,
-                );
+                apply_row_bf16(logit_ptr, bitmask_row, vocab_size, log_stride_elem);
             }
         },
         "float16" => {
             for row in rows {
-                // SAFETY: caller guarantees ptr/shape/stride describe a live CPU f16 tensor.
-                let logit_ptr = unsafe {
-                    (logits_ptr as *mut u16).add(row * log_stride_batch)
-                };
+                let logit_ptr = unsafe { (logits_ptr as *mut u16).add(row * log_stride_batch) };
                 let bitmask_row = unsafe {
-                    let bm_row = row.min(bm_words.saturating_sub(1));
-                    let base =
-                        (bitmask_ptr as *const i32).add(bm_row * bm_words);
+                    let base = (bitmask_ptr as *const i32).add(row * bm_stride_batch);
                     std::slice::from_raw_parts(base, bm_words)
                 };
-                apply_row_f16(
-                    logit_ptr,
-                    bitmask_row,
-                    vocab_size,
-                    log_stride_elem,
-                );
+                apply_row_f16(logit_ptr, bitmask_row, vocab_size, log_stride_elem);
             }
         },
         other => {
-            return Err(PyValueError::new_err(format!(
-                "unsupported dtype: {other}"
-            )));
+            return Err(PyValueError::new_err(format!("unsupported dtype: {other}")));
         },
     }
     Ok(())

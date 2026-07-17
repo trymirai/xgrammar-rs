@@ -521,9 +521,7 @@ class StructuralTag(BaseModel):
     """The format of the structural tag. Could be any of the structural tag formats."""
 
     @staticmethod
-    def from_legacy_structural_tag(
-        tags: List[StructuralTagItem], triggers: List[str]
-    ) -> "StructuralTag":
+    def from_legacy_structural_tag(tags: List[StructuralTagItem], triggers: List[str]) -> "StructuralTag":
         """Convert a legacy structural tag item to a structural tag."""
         return StructuralTag(
             type="structural_tag",
@@ -539,8 +537,7 @@ class StructuralTag(BaseModel):
                                 if isinstance(tag.schema_, str)
                                 else (
                                     tag.schema_.model_json_schema()
-                                    if isinstance(tag.schema_, type)
-                                    and issubclass(tag.schema_, BaseModel)
+                                    if isinstance(tag.schema_, type) and issubclass(tag.schema_, BaseModel)
                                     else tag.schema_
                                 )
                             )

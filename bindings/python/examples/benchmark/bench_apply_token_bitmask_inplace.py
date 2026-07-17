@@ -78,9 +78,7 @@ def bench_single_setup(batch_size: int, masked_cnt: int, args: argparse.Namespac
     kwargs = {} if stride == 1 else {"indices": masked_batch_ids}
 
     logits_copies = [logits.clone() for _ in range(len(args.impl))]
-    logits[masked_batch_ids] = torch.masked_fill(
-        logits[masked_batch_ids], ~bool_mask[masked_batch_ids], float("-inf")
-    )
+    logits[masked_batch_ids] = torch.masked_fill(logits[masked_batch_ids], ~bool_mask[masked_batch_ids], float("-inf"))
     return [
         bench_single_impl(impl, logits_copy, bitmask, logits, kwargs, args)
         for impl, logits_copy in zip(args.impl, logits_copies)
@@ -100,9 +98,7 @@ if __name__ == "__main__":
     parser.add_argument("--vocab-size", type=int, default=128000)
     parser.add_argument("--masked-cnt", type=int, nargs="*", default=[1, 64000, 127000])
     parser.add_argument("--stride", type=int, default=1)
-    parser.add_argument(
-        "--logits_dtype", type=str, choices=["float32", "float16", "bfloat16"], default="float32"
-    )
+    parser.add_argument("--logits_dtype", type=str, choices=["float32", "float16", "bfloat16"], default="float32")
     parser.add_argument("--warmup", type=int, default=500)
     parser.add_argument("--rep", type=int, default=2000)
     args = parser.parse_args()
@@ -116,7 +112,7 @@ if __name__ == "__main__":
                 args.vocab_size,
                 masked_cnt,
                 f"{all_us[0]:.2f}",
-                *[f"{us:.2f} ({all_us[0]/us:>4.2f}x)" for us in all_us[1:]],
+                *[f"{us:.2f} ({all_us[0] / us:>4.2f}x)" for us in all_us[1:]],
             ]
         )
 

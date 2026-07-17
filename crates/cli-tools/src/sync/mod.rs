@@ -59,68 +59,27 @@ pub fn run_sync(check: bool) -> Result<()> {
     let workspace = WorkspaceManifest::load()?;
     let root_path = &paths.root_path;
 
-    ToolchainsSyncTask.run(
-        &platforms,
-        &workspace,
-        &root_path.join("rust-toolchain.toml"),
-        check,
-    )?;
+    ToolchainsSyncTask.run(&platforms, &workspace, &root_path.join("rust-toolchain.toml"), check)?;
 
     // Optional README / binding metadata sync — skipped when templates or files are absent.
     if paths.readme_template_path().exists() {
-        ReadmeSyncTask::new(vec![
-            Language::Rust,
-            Language::Python,
-            Language::Swift,
-            Language::TypeScript,
-        ])
-        .run(&platforms, &workspace, &root_path.join("README.md"), check)?;
+        ReadmeSyncTask::new(vec![Language::Rust, Language::Python, Language::Swift, Language::TypeScript]).run(
+            &platforms,
+            &workspace,
+            &root_path.join("README.md"),
+            check,
+        )?;
     }
 
-    PyprojectSyncTask.run(
-        &platforms,
-        &workspace,
-        &root_path.join("bindings/python/pyproject.toml"),
-        check,
-    )?;
-    LicenseSyncTask.run(
-        &platforms,
-        &workspace,
-        &root_path.join("bindings/python/LICENSE"),
-        check,
-    )?;
+    PyprojectSyncTask.run(&platforms, &workspace, &root_path.join("bindings/python/pyproject.toml"), check)?;
+    LicenseSyncTask.run(&platforms, &workspace, &root_path.join("bindings/python/LICENSE"), check)?;
 
-    SwiftPackageSyncTask.run(
-        &platforms,
-        &workspace,
-        &paths.root_package_swift_path(),
-        check,
-    )?;
-    LicenseSyncTask.run(
-        &platforms,
-        &workspace,
-        &root_path.join("bindings/swift/LICENSE"),
-        check,
-    )?;
+    SwiftPackageSyncTask.run(&platforms, &workspace, &paths.root_package_swift_path(), check)?;
+    LicenseSyncTask.run(&platforms, &workspace, &root_path.join("bindings/swift/LICENSE"), check)?;
 
-    PackageJsonSyncTask.run(
-        &platforms,
-        &workspace,
-        &root_path.join("bindings/typescript/package.json"),
-        check,
-    )?;
-    JsrSyncTask.run(
-        &platforms,
-        &workspace,
-        &root_path.join("bindings/typescript/jsr.json"),
-        check,
-    )?;
-    LicenseSyncTask.run(
-        &platforms,
-        &workspace,
-        &root_path.join("bindings/typescript/LICENSE"),
-        check,
-    )?;
+    PackageJsonSyncTask.run(&platforms, &workspace, &root_path.join("bindings/typescript/package.json"), check)?;
+    JsrSyncTask.run(&platforms, &workspace, &root_path.join("bindings/typescript/jsr.json"), check)?;
+    LicenseSyncTask.run(&platforms, &workspace, &root_path.join("bindings/typescript/LICENSE"), check)?;
 
     Ok(())
 }

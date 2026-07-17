@@ -18,8 +18,6 @@ def apply_token_bitmask_mlx(bitmask: mx.array, logits: mx.array, vocab_size: int
     Returns:
         The logits with -inf for tokens that are not allowed.
     """
-    bitmap = mx.array(
-        [l[::-1] for l in itertools.product(*[[float("-inf"), 0]] * 8)], dtype=logits.dtype
-    )
+    bitmap = mx.array([l[::-1] for l in itertools.product(*[[float("-inf"), 0]] * 8)], dtype=logits.dtype)
     bitmask = bitmask.view(mx.uint8)
     return logits[..., :vocab_size] + bitmap[bitmask].flatten(-2)[..., :vocab_size]

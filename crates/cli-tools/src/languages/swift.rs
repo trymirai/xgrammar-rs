@@ -18,7 +18,9 @@ pub struct SwiftLanguageBackend {
 
 impl SwiftLanguageBackend {
     pub fn new(config: PlatformsConfig) -> Self {
-        Self { config }
+        Self {
+            config,
+        }
     }
 }
 
@@ -65,8 +67,7 @@ impl LanguageBackend for SwiftLanguageBackend {
             .run()?;
 
             let slice_dir = slices_path.join(&target.name);
-            fs::rename(&output_path, &slice_dir)
-                .context("Moving cargo-swift output to slice dir")?;
+            fs::rename(&output_path, &slice_dir).context("Moving cargo-swift output to slice dir")?;
         }
 
         if xcframework_path.exists() {
@@ -77,22 +78,15 @@ impl LanguageBackend for SwiftLanguageBackend {
         // single cargo-swift FFI xcframework (typical for a host-only build).
         match collect_slice_libs_with_headers(&slices_path) {
             Result::Ok(slice_libs_with_headers) if slice_libs_with_headers.len() > 1 => {
-                Command::xcodebuild_create_xcframework(
-                    slice_libs_with_headers,
-                    xcframework_path.clone(),
-                )
-                .run()?;
+                Command::xcodebuild_create_xcframework(slice_libs_with_headers, xcframework_path.clone()).run()?;
                 Command::codesign_adhoc(xcframework_path.clone()).run()?;
-            }
+            },
             Result::Ok(_) | Err(_) => {
-                let any_slice = fs::read_dir(&slices_path)?
-                    .next()
-                    .context("No slices produced")??
-                    .path();
+                let any_slice = fs::read_dir(&slices_path)?.next().context("No slices produced")??.path();
                 let ffi = find_ffi_xcframework(&any_slice)?;
                 copy_directory(&ffi, &xcframework_path)?;
                 let _ = Command::codesign_adhoc(xcframework_path.clone()).run();
-            }
+            },
         }
 
         let any_slice_path = fs::read_dir(&slices_path)?.next().context("No slices produced")??;
@@ -129,9 +123,7 @@ impl LanguageBackend for SwiftLanguageBackend {
         _target: LanguageBackendTarget,
     ) -> Result<()> {
         let paths = Paths::new()?;
-        Command::swift_test()
-            .with_current_path(&paths.root_path)
-            .run()
+        Command::swift_test().with_current_path(&paths.root_path).run()
     }
 
     fn example_target(
@@ -142,20 +134,14 @@ impl LanguageBackend for SwiftLanguageBackend {
     ) -> Result<()> {
         let paths = Paths::new()?;
         let name = self.language().convert_command_name(name);
-        Command::swift_run_example(name)
-            .with_current_path(&paths.root_path)
-            .run()
+        Command::swift_run_example(name).with_current_path(&paths.root_path).run()
     }
 
     fn release(
         &self,
         _version: &str,
     ) -> Result<()> {
-        self.build(
-            Configuration::Release,
-            vec![ALL_TARGET.to_string()],
-            Vec::<Capability>::new(),
-        )?;
+        self.build(Configuration::Release, vec![ALL_TARGET.to_string()], Vec::<Capability>::new())?;
         let paths = Paths::new()?;
         let xcframework_path = paths.swift_xcframework_path();
         if !xcframework_path.exists() {
@@ -171,23 +157,14 @@ fn find_ffi_xcframework(slice_path: &Path) -> Result<PathBuf> {
     for entry in fs::read_dir(slice_path)? {
         let entry = entry?;
         let path = entry.path();
-        if path
-            .extension()
-            .and_then(|e| e.to_str())
-            == Some("xcframework")
-        {
+        if path.extension().and_then(|e| e.to_str()) == Some("xcframework") {
             return Ok(path);
         }
     }
-    Err(anyhow!(
-        "No .xcframework found in {}",
-        slice_path.display()
-    ))
+    Err(anyhow!("No .xcframework found in {}", slice_path.display()))
 }
 
-fn collect_slice_libs_with_headers(
-    slices_path: &Path,
-) -> Result<Vec<(PathBuf, PathBuf)>> {
+fn collect_slice_libs_with_headers(slices_path: &Path) -> Result<Vec<(PathBuf, PathBuf)>> {
     let mut results = Vec::new();
     for entry in fs::read_dir(slices_path)? {
         let entry = entry?;
@@ -223,10 +200,7 @@ fn find_modulemap_directory(headers_path: &Path) -> Result<PathBuf> {
             return Ok(path);
         }
     }
-    Err(anyhow!(
-        "module.modulemap not found in {}",
-        headers_path.display()
-    ))
+    Err(anyhow!("module.modulemap not found in {}", headers_path.display()))
 }
 
 fn find_static_lib(slice_path: &Path) -> Result<PathBuf> {
@@ -234,9 +208,7 @@ fn find_static_lib(slice_path: &Path) -> Result<PathBuf> {
         let entries = fs::read_dir(path).ok()?;
         for entry in entries.flatten() {
             let path = entry.path();
-            if path.is_file()
-                && path.extension().and_then(|extension| extension.to_str()) == Some("a")
-            {
+            if path.is_file() && path.extension().and_then(|extension| extension.to_str()) == Some("a") {
                 return Some(path);
             }
             if path.is_dir() {

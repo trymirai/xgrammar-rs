@@ -66,15 +66,11 @@ def apply_token_bitmask_inplace_kernel(
         bitmask_offsets = block_offset // 32 + tl.arange(0, BLOCK_SIZE // 32)
         vocab_mask = offsets < vocab_size
         packed_bitmask_mask = bitmask_offsets < bitmask_strides
-        packed_bitmask = tl.load(
-            bitmask_ptr + batch_id * bitmask_strides + bitmask_offsets, packed_bitmask_mask
-        )
+        packed_bitmask = tl.load(bitmask_ptr + batch_id * bitmask_strides + bitmask_offsets, packed_bitmask_mask)
         bitmask = ((packed_bitmask[:, None] >> (tl.arange(0, 32)[None, :])) & 1) == 0
         bitmask = bitmask.reshape(BLOCK_SIZE)
 
-        tl.store(
-            logits_ptr + batch_id * logits_strides + offsets, -float("inf"), vocab_mask & bitmask
-        )
+        tl.store(logits_ptr + batch_id * logits_strides + offsets, -float("inf"), vocab_mask & bitmask)
 
 
 def apply_token_bitmask_inplace_triton(
@@ -99,9 +95,9 @@ def apply_token_bitmask_inplace_triton(
     if vocab_size is None:
         vocab_size = detected_vocab_size
     else:
-        assert (
-            vocab_size <= detected_vocab_size
-        ), f"vocab_size {vocab_size} is larger than the detected vocab_size {detected_vocab_size}"
+        assert vocab_size <= detected_vocab_size, (
+            f"vocab_size {vocab_size} is larger than the detected vocab_size {detected_vocab_size}"
+        )
 
     num_rows = len(indices) if indices is not None else logits.shape[0] if logits.ndim == 2 else 1
 

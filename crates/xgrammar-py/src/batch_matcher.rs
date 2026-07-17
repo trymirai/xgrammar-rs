@@ -36,9 +36,7 @@ impl BatchGrammarMatcher {
             // Collect matcher handles and bitmask row indices. The matcher locks are independent,
             // and each task writes to its own bitmask row.
             struct Work {
-                matcher: std::sync::Arc<
-                    std::sync::Mutex<xgrammar::matcher::GrammarMatcher>,
-                >,
+                matcher: std::sync::Arc<std::sync::Mutex<xgrammar::matcher::GrammarMatcher>>,
                 buf: *mut i32,
                 buf_len: usize,
                 index: i32,
@@ -74,19 +72,13 @@ impl BatchGrammarMatcher {
                 let pool = rayon::ThreadPoolBuilder::new()
                     .num_threads(n_threads)
                     .build()
-                    .unwrap_or_else(|_| {
-                        rayon::ThreadPoolBuilder::new()
-                            .build()
-                            .expect("rayon pool")
-                    });
+                    .unwrap_or_else(|_| rayon::ThreadPoolBuilder::new().build().expect("rayon pool"));
 
                 pool.install(|| {
                     work.into_par_iter().for_each(|w| {
                         // SAFETY: no two Work items share the same bitmask row.
                         unsafe {
-                            let buf_slice = std::slice::from_raw_parts_mut(
-                                w.buf, w.buf_len,
-                            );
+                            let buf_slice = std::slice::from_raw_parts_mut(w.buf, w.buf_len);
                             let _ = w
                                 .matcher
                                 .lock()
@@ -109,15 +101,9 @@ impl BatchGrammarMatcher {
         _debug_print: bool,
     ) -> PyResult<Vec<bool>> {
         if matchers.len() != tokens.len() {
-            return Err(PyRuntimeError::new_err(
-                "matchers and tokens length mismatch",
-            ));
+            return Err(PyRuntimeError::new_err("matchers and tokens length mismatch"));
         }
-        Ok(matchers
-            .iter()
-            .zip(tokens)
-            .map(|(m, token)| m.lock().accept_token(token))
-            .collect())
+        Ok(matchers.iter().zip(tokens).map(|(m, token)| m.lock().accept_token(token)).collect())
     }
 
     #[staticmethod]
@@ -128,9 +114,7 @@ impl BatchGrammarMatcher {
         _debug_print: bool,
     ) -> PyResult<Vec<bool>> {
         if matchers.len() != strings.len() {
-            return Err(PyRuntimeError::new_err(
-                "matchers and strings length mismatch",
-            ));
+            return Err(PyRuntimeError::new_err("matchers and strings length mismatch"));
         }
         let mut results = Vec::with_capacity(matchers.len());
         for (m, s) in matchers.iter().zip(strings) {
@@ -151,9 +135,7 @@ impl BatchGrammarMatcher {
         num_tokens: Vec<i32>,
     ) -> PyResult<()> {
         if matchers.len() != num_tokens.len() {
-            return Err(PyRuntimeError::new_err(
-                "matchers and num_tokens length mismatch",
-            ));
+            return Err(PyRuntimeError::new_err("matchers and num_tokens length mismatch"));
         }
         for (m, &n) in matchers.iter().zip(&num_tokens) {
             m.lock().rollback(n);
@@ -165,14 +147,10 @@ impl BatchGrammarMatcher {
 fn parse_max_threads(value: &Bound<'_, PyAny>) -> PyResult<i32> {
     if let Ok(text) = value.extract::<String>() {
         if text == "auto" {
-            return Ok(std::thread::available_parallelism()
-                .map(|p| (p.get() / 2).max(1) as i32)
-                .unwrap_or(1));
+            return Ok(std::thread::available_parallelism().map(|p| (p.get() / 2).max(1) as i32).unwrap_or(1));
         }
     }
-    value.extract::<i32>().map_err(|_| {
-        PyRuntimeError::new_err("max_threads must be an integer or \"auto\"")
-    })
+    value.extract::<i32>().map_err(|_| PyRuntimeError::new_err("max_threads must be an integer or \"auto\""))
 }
 
 /// Registers [`BatchGrammarMatcher`] on the root module.

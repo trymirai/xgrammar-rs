@@ -11,7 +11,7 @@ public func runJsonGrammar() throws {
 
     let tokenizerInfo = try TokenizerInfo(
         encodedVocab: encodedVocab,
-        vocabType: 1, // VocabType::BYTE_FALLBACK
+        vocabType: 1,  // VocabType::BYTE_FALLBACK
         vocabSize: nil,
         stopTokenIds: [256],
         addPrefixSpace: false
@@ -31,7 +31,8 @@ public func runJsonGrammar() throws {
     )
 
     let sample = #"{"name":"Ada","role":"student"}"#
-    precondition(matcher.acceptString(input: sample, debugPrint: false), "grammar rejected: \(sample)")
+    precondition(
+        matcher.acceptString(input: sample, debugPrint: false), "grammar rejected: \(sample)")
     print(sample)
     print("completed=\(matcher.isCompleted()) terminated=\(matcher.isTerminated())")
 }

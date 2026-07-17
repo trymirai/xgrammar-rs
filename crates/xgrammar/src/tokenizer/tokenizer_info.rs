@@ -49,17 +49,8 @@ impl TokenizerInfo {
         stop_token_ids: Option<Vec<i32>>,
         add_prefix_space: bool,
     ) -> Self {
-        let encoded_vocab = encoded_vocab
-            .iter()
-            .map(|token| token.as_bytes().to_vec())
-            .collect::<Vec<_>>();
-        Self::new_from_bytes(
-            &encoded_vocab,
-            vocab_type,
-            vocab_size,
-            stop_token_ids,
-            add_prefix_space,
-        )
+        let encoded_vocab = encoded_vocab.iter().map(|token| token.as_bytes().to_vec()).collect::<Vec<_>>();
+        Self::new_from_bytes(&encoded_vocab, vocab_type, vocab_size, stop_token_ids, add_prefix_space)
     }
 
     /// Builds tokenizer info from an encoded vocabulary containing arbitrary bytes.
@@ -72,8 +63,7 @@ impl TokenizerInfo {
         add_prefix_space: bool,
     ) -> Self {
         let vocab_size = vocab_size.unwrap_or(encoded_vocab.len() as i32);
-        let mut decoded_vocab: Vec<Vec<u8>> =
-            Vec::with_capacity(encoded_vocab.len());
+        let mut decoded_vocab: Vec<Vec<u8>> = Vec::with_capacity(encoded_vocab.len());
         let mut sorted_decoded_vocab: Vec<(i32, Vec<u8>)> = Vec::new();
         let mut stop_ids: Vec<i32> = Vec::new();
         let mut special_ids: Vec<i32> = Vec::new();
@@ -82,9 +72,7 @@ impl TokenizerInfo {
             let id = i as i32;
             let token = decode_token_bytes(encoded, vocab_type);
             let is_stop = match &stop_token_ids {
-                None => DETECTION_STOP_TOKENS
-                    .iter()
-                    .any(|s| s.as_bytes() == token.as_slice()),
+                None => DETECTION_STOP_TOKENS.iter().any(|s| s.as_bytes() == token.as_slice()),
                 Some(ids) => ids.contains(&id),
             };
             if is_stop {
@@ -103,8 +91,7 @@ impl TokenizerInfo {
 
         sorted_decoded_vocab.sort_by(|a, b| a.1.cmp(&b.1));
 
-        let mut token_id_to_sorted_vocab_index =
-            vec![-1i32; vocab_size as usize];
+        let mut token_id_to_sorted_vocab_index = vec![-1i32; vocab_size as usize];
         for (i, (id, _)) in sorted_decoded_vocab.iter().enumerate() {
             token_id_to_sorted_vocab_index[*id as usize] = i as i32;
         }
@@ -133,10 +120,7 @@ impl TokenizerInfo {
         encoded_vocab: &[String],
         metadata: &str,
     ) -> Result<Self, String> {
-        let encoded_vocab = encoded_vocab
-            .iter()
-            .map(|token| token.as_bytes().to_vec())
-            .collect::<Vec<_>>();
+        let encoded_vocab = encoded_vocab.iter().map(|token| token.as_bytes().to_vec()).collect::<Vec<_>>();
         Self::from_vocab_and_metadata_bytes(&encoded_vocab, metadata)
     }
 
@@ -145,28 +129,17 @@ impl TokenizerInfo {
         encoded_vocab: &[Vec<u8>],
         metadata: &str,
     ) -> Result<Self, String> {
-        let meta: serde_json::Value = serde_json::from_str(metadata)
-            .map_err(|e| format!("invalid metadata json: {e}"))?;
-        let vocab_type = VocabType::try_from(
-            meta["vocab_type"].as_i64().ok_or("metadata missing vocab_type")?,
-        )
-        .map_err(|e| e.to_string())?;
+        let meta: serde_json::Value =
+            serde_json::from_str(metadata).map_err(|e| format!("invalid metadata json: {e}"))?;
+        let vocab_type = VocabType::try_from(meta["vocab_type"].as_i64().ok_or("metadata missing vocab_type")?)
+            .map_err(|e| e.to_string())?;
         let vocab_size = meta["vocab_size"].as_i64().map(|v| v as i32);
-        let add_prefix_space =
-            meta["add_prefix_space"].as_bool().unwrap_or(false);
-        let stop_token_ids =
-            meta.get("stop_token_ids").and_then(|v| v.as_array()).map(|arr| {
-                arr.iter()
-                    .filter_map(|v| v.as_i64().map(|n| n as i32))
-                    .collect::<Vec<i32>>()
-            });
-        Ok(Self::new_from_bytes(
-            encoded_vocab,
-            vocab_type,
-            vocab_size,
-            stop_token_ids,
-            add_prefix_space,
-        ))
+        let add_prefix_space = meta["add_prefix_space"].as_bool().unwrap_or(false);
+        let stop_token_ids = meta
+            .get("stop_token_ids")
+            .and_then(|v| v.as_array())
+            .map(|arr| arr.iter().filter_map(|v| v.as_i64().map(|n| n as i32)).collect::<Vec<i32>>());
+        Ok(Self::new_from_bytes(encoded_vocab, vocab_type, vocab_size, stop_token_ids, add_prefix_space))
     }
 
     /// The vocabulary encoding type.
@@ -227,8 +200,7 @@ impl TokenizerInfo {
     /// Dumps the tokenizer metadata as a compact JSON string for compiled-grammar checks.
     #[must_use]
     pub fn dump_metadata(&self) -> String {
-        serde_json::to_string(&self.metadata_value())
-            .expect("tokenizer metadata serialization never fails")
+        serde_json::to_string(&self.metadata_value()).expect("tokenizer metadata serialization never fails")
     }
 
     /// Returns tokenizer metadata as JSON for compiled-grammar serialization.
@@ -251,13 +223,9 @@ impl TokenizerInfo {
         metadata: &Value,
     ) -> Result<(), DeserializeError> {
         let expected = self.metadata_value();
-        for key in
-            ["vocab_type", "vocab_size", "add_prefix_space", "stop_token_ids"]
-        {
+        for key in ["vocab_type", "vocab_size", "add_prefix_space", "stop_token_ids"] {
             if expected.get(key) != metadata.get(key) {
-                return Err(DeserializeError::Format(format!(
-                    "tokenizer metadata mismatch on {key}"
-                )));
+                return Err(DeserializeError::Format(format!("tokenizer metadata mismatch on {key}")));
             }
         }
         Ok(())
@@ -267,11 +235,8 @@ impl TokenizerInfo {
     ///
     /// # Errors
     /// Returns an error if `backend_str` is not valid JSON.
-    pub fn detect_metadata_from_hf(
-        backend_str: &str
-    ) -> Result<String, String> {
-        super::detect_metadata_from_hf(backend_str)
-            .map(|metadata| super::metadata_to_json(&metadata))
+    pub fn detect_metadata_from_hf(backend_str: &str) -> Result<String, String> {
+        super::detect_metadata_from_hf(backend_str).map(|metadata| super::metadata_to_json(&metadata))
     }
 }
 
@@ -282,12 +247,8 @@ impl TokenizerInfo {
         vocab_size: Option<usize>,
     ) -> Vec<String> {
         let vocab = tokenizer.get_vocab(true);
-        let tokenizer_vocab_size = vocab
-            .values()
-            .copied()
-            .max()
-            .map_or(0, |max_id| max_id as usize + 1)
-            .max(vocab.len());
+        let tokenizer_vocab_size =
+            vocab.values().copied().max().map_or(0, |max_id| max_id as usize + 1).max(vocab.len());
         let size = vocab_size.unwrap_or(tokenizer_vocab_size);
         let mut ordered = vec![String::new(); size];
         for (token, id) in vocab {
@@ -330,9 +291,8 @@ impl TokenizerInfo {
         vocab_size: Option<usize>,
         stop_token_ids: Option<&[i32]>,
     ) -> Result<Self, String> {
-        let backend = tokenizer.to_string(false).map_err(|error| {
-            format!("failed to serialize tokenizer backend: {error}")
-        })?;
+        let backend =
+            tokenizer.to_string(false).map_err(|error| format!("failed to serialize tokenizer backend: {error}"))?;
         let metadata = super::detect_metadata_from_hf(&backend)?;
         Ok(Self::from_tokenizers_with_options(
             tokenizer,
@@ -359,14 +319,12 @@ impl TokenizerInfo {
         let mut sorted_decoded_vocab: Vec<(i32, Vec<u8>)> = Vec::new();
         for (i, tok) in decoded_vocab.iter().enumerate() {
             let id = i as i32;
-            if !stop_token_ids.contains(&id) && !special_token_ids.contains(&id)
-            {
+            if !stop_token_ids.contains(&id) && !special_token_ids.contains(&id) {
                 sorted_decoded_vocab.push((id, tok.clone()));
             }
         }
         sorted_decoded_vocab.sort_by(|a, b| a.1.cmp(&b.1));
-        let mut token_id_to_sorted_vocab_index =
-            vec![-1i32; vocab_size as usize];
+        let mut token_id_to_sorted_vocab_index = vec![-1i32; vocab_size as usize];
         for (i, (id, _)) in sorted_decoded_vocab.iter().enumerate() {
             token_id_to_sorted_vocab_index[*id as usize] = i as i32;
         }
@@ -388,13 +346,9 @@ impl TokenizerInfo {
     /// Latin-1, matching the C++).
     #[must_use]
     pub fn serialize_json(&self) -> String {
-        let decoded: Vec<String> =
-            self.decoded_vocab.iter().map(|b| bytes_to_latin1(b)).collect();
-        let sorted: Vec<Value> = self
-            .sorted_decoded_vocab
-            .iter()
-            .map(|(id, tok)| json!([id, bytes_to_latin1(tok)]))
-            .collect();
+        let decoded: Vec<String> = self.decoded_vocab.iter().map(|b| bytes_to_latin1(b)).collect();
+        let sorted: Vec<Value> =
+            self.sorted_decoded_vocab.iter().map(|(id, tok)| json!([id, bytes_to_latin1(tok)])).collect();
         let obj = json!({
             "vocab_type": self.vocab_type as i32,
             "vocab_size": self.vocab_size,
@@ -406,19 +360,15 @@ impl TokenizerInfo {
             "trie_subtree_nodes_range": self.trie_subtree_nodes_range,
             "__VERSION__": SERIALIZATION_VERSION,
         });
-        serde_json::to_string(&obj)
-            .expect("tokenizer info JSON serialization never fails")
+        serde_json::to_string(&obj).expect("tokenizer info JSON serialization never fails")
     }
 
     /// Deserializes tokenizer info from its `"v14"` JSON form.
     ///
     /// # Errors
     /// Returns [`DeserializeError`] for invalid JSON, a version mismatch, or a malformed body.
-    pub fn deserialize_json(
-        json_str: &str
-    ) -> Result<TokenizerInfo, DeserializeError> {
-        let value: Value = serde_json::from_str(json_str)
-            .map_err(|e| DeserializeError::InvalidJson(e.to_string()))?;
+    pub fn deserialize_json(json_str: &str) -> Result<TokenizerInfo, DeserializeError> {
+        let value: Value = serde_json::from_str(json_str).map_err(|e| DeserializeError::InvalidJson(e.to_string()))?;
         match value.get("__VERSION__").and_then(Value::as_str) {
             Some(SERIALIZATION_VERSION) => {},
             Some(other) => {
@@ -428,39 +378,25 @@ impl TokenizerInfo {
                 });
             },
             None => {
-                return Err(DeserializeError::Format(
-                    "missing __VERSION__".to_owned(),
-                ));
+                return Err(DeserializeError::Format("missing __VERSION__".to_owned()));
             },
         }
-        let field = |name: &str| {
-            value.get(name).ok_or_else(|| {
-                DeserializeError::Format(format!("missing {name}"))
-            })
-        };
-        let vocab_type =
-            VocabType::try_from(field("vocab_type")?.as_i64().ok_or_else(
-                || DeserializeError::Format("vocab_type".to_owned()),
-            )?)
-            .map_err(|e| DeserializeError::Format(e.to_string()))?;
-        let vocab_size = field("vocab_size")?
-            .as_i64()
-            .ok_or_else(|| DeserializeError::Format("vocab_size".to_owned()))?
-            as i32;
-        let add_prefix_space =
-            field("add_prefix_space")?.as_bool().unwrap_or(false);
+        let field = |name: &str| value.get(name).ok_or_else(|| DeserializeError::Format(format!("missing {name}")));
+        let vocab_type = VocabType::try_from(
+            field("vocab_type")?.as_i64().ok_or_else(|| DeserializeError::Format("vocab_type".to_owned()))?,
+        )
+        .map_err(|e| DeserializeError::Format(e.to_string()))?;
+        let vocab_size =
+            field("vocab_size")?.as_i64().ok_or_else(|| DeserializeError::Format("vocab_size".to_owned()))? as i32;
+        let add_prefix_space = field("add_prefix_space")?.as_bool().unwrap_or(false);
         let stop_token_ids = i32_array(field("stop_token_ids")?)?;
         let special_token_ids = i32_array(field("special_token_ids")?)?;
         let decoded_vocab: Vec<Vec<u8>> = field("decoded_vocab")?
             .as_array()
-            .ok_or_else(|| {
-                DeserializeError::Format("decoded_vocab".to_owned())
-            })?
+            .ok_or_else(|| DeserializeError::Format("decoded_vocab".to_owned()))?
             .iter()
             .map(|v| {
-                v.as_str().map(latin1_to_bytes).ok_or_else(|| {
-                    DeserializeError::Format("decoded token".to_owned())
-                })
+                v.as_str().map(latin1_to_bytes).ok_or_else(|| DeserializeError::Format("decoded token".to_owned()))
             })
             .collect::<Result<_, _>>()?;
         Ok(Self::from_decoded_parts(
@@ -489,11 +425,7 @@ fn i32_array(value: &Value) -> Result<Vec<i32>, DeserializeError> {
         .as_array()
         .ok_or_else(|| DeserializeError::Format("expected array".to_owned()))?
         .iter()
-        .map(|v| {
-            v.as_i64().map(|n| n as i32).ok_or_else(|| {
-                DeserializeError::Format("expected integer".to_owned())
-            })
-        })
+        .map(|v| v.as_i64().map(|n| n as i32).ok_or_else(|| DeserializeError::Format("expected integer".to_owned())))
         .collect()
 }
 
@@ -505,8 +437,7 @@ fn byte_contains(
     if needle.is_empty() {
         return true;
     }
-    needle.len() <= haystack.len()
-        && haystack.windows(needle.len()).any(|w| w == needle)
+    needle.len() <= haystack.len() && haystack.windows(needle.len()).any(|w| w == needle)
 }
 
 /// Builds the pseudo-trie subtree ranges over the sorted vocabulary.

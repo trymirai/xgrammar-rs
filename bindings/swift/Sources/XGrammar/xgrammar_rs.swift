@@ -8,35 +8,37 @@ import Foundation
 // might be in a separate module, or it might be compiled inline into
 // this module. This is a bit of light hackery to work with both.
 #if canImport(xgrammar_rsFFI)
-import xgrammar_rsFFI
+    import xgrammar_rsFFI
 #endif
 
-fileprivate extension RustBuffer {
+extension RustBuffer {
     // Allocate a new buffer, copying the contents of a `UInt8` array.
-    init(bytes: [UInt8]) {
+    fileprivate init(bytes: [UInt8]) {
         let rbuf = bytes.withUnsafeBufferPointer { ptr in
             RustBuffer.from(ptr)
         }
         self.init(capacity: rbuf.capacity, len: rbuf.len, data: rbuf.data)
     }
 
-    static func empty() -> RustBuffer {
-        RustBuffer(capacity: 0, len:0, data: nil)
+    fileprivate static func empty() -> RustBuffer {
+        RustBuffer(capacity: 0, len: 0, data: nil)
     }
 
-    static func from(_ ptr: UnsafeBufferPointer<UInt8>) -> RustBuffer {
-        try! rustCall { ffi_xgrammar_rs_rustbuffer_from_bytes(ForeignBytes(bufferPointer: ptr), $0) }
+    fileprivate static func from(_ ptr: UnsafeBufferPointer<UInt8>) -> RustBuffer {
+        try! rustCall {
+            ffi_xgrammar_rs_rustbuffer_from_bytes(ForeignBytes(bufferPointer: ptr), $0)
+        }
     }
 
     // Frees the buffer in place.
     // The buffer must not be used after this is called.
-    func deallocate() {
+    fileprivate func deallocate() {
         try! rustCall { ffi_xgrammar_rs_rustbuffer_free(self, $0) }
     }
 }
 
-fileprivate extension ForeignBytes {
-    init(bufferPointer: UnsafeBufferPointer<UInt8>) {
+extension ForeignBytes {
+    fileprivate init(bufferPointer: UnsafeBufferPointer<UInt8>) {
         self.init(len: Int32(bufferPointer.count), data: bufferPointer.baseAddress)
     }
 }
@@ -48,8 +50,8 @@ fileprivate extension ForeignBytes {
 // Helper classes/extensions that don't change.
 // Someday, this will be in a library of its own.
 
-fileprivate extension Data {
-    init(rustBuffer: RustBuffer) {
+extension Data {
+    fileprivate init(rustBuffer: RustBuffer) {
         self.init(
             bytesNoCopy: rustBuffer.data!,
             count: Int(rustBuffer.len),
@@ -72,14 +74,16 @@ fileprivate extension Data {
 //
 // Instead, the read() method and these helper functions input a tuple of data
 
-fileprivate func createReader(data: Data) -> (data: Data, offset: Data.Index) {
+private func createReader(data: Data) -> (data: Data, offset: Data.Index) {
     (data: data, offset: 0)
 }
 
 // Reads an integer at the current offset, in big-endian order, and advances
 // the offset on success. Throws if reading the integer would move the
 // offset past the end of the buffer.
-fileprivate func readInt<T: FixedWidthInteger>(_ reader: inout (data: Data, offset: Data.Index)) throws -> T {
+private func readInt<T: FixedWidthInteger>(_ reader: inout (data: Data, offset: Data.Index)) throws
+    -> T
+{
     let range = reader.offset..<reader.offset + MemoryLayout<T>.size
     guard reader.data.count >= range.upperBound else {
         throw UniffiInternalError.bufferOverflow
@@ -90,15 +94,17 @@ fileprivate func readInt<T: FixedWidthInteger>(_ reader: inout (data: Data, offs
         return value as! T
     }
     var value: T = 0
-    let _ = withUnsafeMutableBytes(of: &value, { reader.data.copyBytes(to: $0, from: range)})
+    let _ = withUnsafeMutableBytes(of: &value, { reader.data.copyBytes(to: $0, from: range) })
     reader.offset = range.upperBound
     return value.bigEndian
 }
 
 // Reads an arbitrary number of bytes, to be used to read
 // raw bytes, this is useful when lifting strings
-fileprivate func readBytes(_ reader: inout (data: Data, offset: Data.Index), count: Int) throws -> Array<UInt8> {
-    let range = reader.offset..<(reader.offset+count)
+private func readBytes(_ reader: inout (data: Data, offset: Data.Index), count: Int) throws
+    -> [UInt8]
+{
+    let range = reader.offset..<(reader.offset + count)
     guard reader.data.count >= range.upperBound else {
         throw UniffiInternalError.bufferOverflow
     }
@@ -111,17 +117,17 @@ fileprivate func readBytes(_ reader: inout (data: Data, offset: Data.Index), cou
 }
 
 // Reads a float at the current offset.
-fileprivate func readFloat(_ reader: inout (data: Data, offset: Data.Index)) throws -> Float {
+private func readFloat(_ reader: inout (data: Data, offset: Data.Index)) throws -> Float {
     return Float(bitPattern: try readInt(&reader))
 }
 
 // Reads a float at the current offset.
-fileprivate func readDouble(_ reader: inout (data: Data, offset: Data.Index)) throws -> Double {
+private func readDouble(_ reader: inout (data: Data, offset: Data.Index)) throws -> Double {
     return Double(bitPattern: try readInt(&reader))
 }
 
 // Indicates if the offset has reached the end of the buffer.
-fileprivate func hasRemaining(_ reader: (data: Data, offset: Data.Index)) -> Bool {
+private func hasRemaining(_ reader: (data: Data, offset: Data.Index)) -> Bool {
     return reader.offset < reader.data.count
 }
 
@@ -129,11 +135,12 @@ fileprivate func hasRemaining(_ reader: (data: Data, offset: Data.Index)) -> Boo
 // struct, but we use standalone functions instead in order to make external
 // types work.  See the above discussion on Readers for details.
 
-fileprivate func createWriter() -> [UInt8] {
+private func createWriter() -> [UInt8] {
     return []
 }
 
-fileprivate func writeBytes<S>(_ writer: inout [UInt8], _ byteArr: S) where S: Sequence, S.Element == UInt8 {
+private func writeBytes<S>(_ writer: inout [UInt8], _ byteArr: S)
+where S: Sequence, S.Element == UInt8 {
     writer.append(contentsOf: byteArr)
 }
 
@@ -141,22 +148,22 @@ fileprivate func writeBytes<S>(_ writer: inout [UInt8], _ byteArr: S) where S: S
 //
 // Warning: make sure what you are trying to write
 // is in the correct type!
-fileprivate func writeInt<T: FixedWidthInteger>(_ writer: inout [UInt8], _ value: T) {
+private func writeInt<T: FixedWidthInteger>(_ writer: inout [UInt8], _ value: T) {
     var value = value.bigEndian
     withUnsafeBytes(of: &value) { writer.append(contentsOf: $0) }
 }
 
-fileprivate func writeFloat(_ writer: inout [UInt8], _ value: Float) {
+private func writeFloat(_ writer: inout [UInt8], _ value: Float) {
     writeInt(&writer, value.bitPattern)
 }
 
-fileprivate func writeDouble(_ writer: inout [UInt8], _ value: Double) {
+private func writeDouble(_ writer: inout [UInt8], _ value: Double) {
     writeInt(&writer, value.bitPattern)
 }
 
 // Protocol for types that transfer other types across the FFI. This is
 // analogous to the Rust trait of the same name.
-fileprivate protocol FfiConverter {
+private protocol FfiConverter {
     associatedtype FfiType
     associatedtype SwiftType
 
@@ -167,19 +174,19 @@ fileprivate protocol FfiConverter {
 }
 
 // Types conforming to `Primitive` pass themselves directly over the FFI.
-fileprivate protocol FfiConverterPrimitive: FfiConverter where FfiType == SwiftType { }
+private protocol FfiConverterPrimitive: FfiConverter where FfiType == SwiftType {}
 
 extension FfiConverterPrimitive {
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
+    #if swift(>=5.8)
+        @_documentation(visibility: private)
+    #endif
     public static func lift(_ value: FfiType) throws -> SwiftType {
         return value
     }
 
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
+    #if swift(>=5.8)
+        @_documentation(visibility: private)
+    #endif
     public static func lower(_ value: SwiftType) -> FfiType {
         return value
     }
@@ -187,12 +194,12 @@ extension FfiConverterPrimitive {
 
 // Types conforming to `FfiConverterRustBuffer` lift and lower into a `RustBuffer`.
 // Used for complex types where it's hard to write a custom lift/lower.
-fileprivate protocol FfiConverterRustBuffer: FfiConverter where FfiType == RustBuffer {}
+private protocol FfiConverterRustBuffer: FfiConverter where FfiType == RustBuffer {}
 
 extension FfiConverterRustBuffer {
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
+    #if swift(>=5.8)
+        @_documentation(visibility: private)
+    #endif
     public static func lift(_ buf: RustBuffer) throws -> SwiftType {
         var reader = createReader(data: Data(rustBuffer: buf))
         let value = try read(from: &reader)
@@ -203,18 +210,18 @@ extension FfiConverterRustBuffer {
         return value
     }
 
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
+    #if swift(>=5.8)
+        @_documentation(visibility: private)
+    #endif
     public static func lower(_ value: SwiftType) -> RustBuffer {
-          var writer = createWriter()
-          write(value, into: &writer)
-          return RustBuffer(bytes: writer)
+        var writer = createWriter()
+        write(value, into: &writer)
+        return RustBuffer(bytes: writer)
     }
 }
 // An error type for FFI errors. These errors occur at the UniFFI level, not
 // the library level.
-fileprivate enum UniffiInternalError: LocalizedError {
+private enum UniffiInternalError: LocalizedError {
     case bufferOverflow
     case incompleteData
     case unexpectedOptionalTag
@@ -227,7 +234,8 @@ fileprivate enum UniffiInternalError: LocalizedError {
 
     public var errorDescription: String? {
         switch self {
-        case .bufferOverflow: return "Reading the requested value would read past the end of the buffer"
+        case .bufferOverflow:
+            return "Reading the requested value would read past the end of the buffer"
         case .incompleteData: return "The buffer still has data after lifting its containing value"
         case .unexpectedOptionalTag: return "Unexpected optional tag; should be 0 or 1"
         case .unexpectedEnumCase: return "Raw enum value doesn't match any cases"
@@ -235,26 +243,26 @@ fileprivate enum UniffiInternalError: LocalizedError {
         case .unexpectedRustCallStatusCode: return "Unexpected RustCallStatus code"
         case .unexpectedRustCallError: return "CALL_ERROR but no errorClass specified"
         case .unexpectedStaleHandle: return "The object in the handle map has been dropped already"
-        case let .rustPanic(message): return message
+        case .rustPanic(let message): return message
         }
     }
 }
 
-fileprivate extension NSLock {
-    func withLock<T>(f: () throws -> T) rethrows -> T {
+extension NSLock {
+    fileprivate func withLock<T>(f: () throws -> T) rethrows -> T {
         self.lock()
         defer { self.unlock() }
         return try f()
     }
 }
 
-fileprivate let CALL_SUCCESS: Int8 = 0
-fileprivate let CALL_ERROR: Int8 = 1
-fileprivate let CALL_UNEXPECTED_ERROR: Int8 = 2
-fileprivate let CALL_CANCELLED: Int8 = 3
+private let CALL_SUCCESS: Int8 = 0
+private let CALL_ERROR: Int8 = 1
+private let CALL_UNEXPECTED_ERROR: Int8 = 2
+private let CALL_CANCELLED: Int8 = 3
 
-fileprivate extension RustCallStatus {
-    init() {
+extension RustCallStatus {
+    fileprivate init() {
         self.init(
             code: CALL_SUCCESS,
             errorBuf: RustBuffer.init(
@@ -273,7 +281,8 @@ private func rustCall<T>(_ callback: (UnsafeMutablePointer<RustCallStatus>) -> T
 
 private func rustCallWithError<T, E: Swift.Error>(
     _ errorHandler: @escaping (RustBuffer) throws -> E,
-    _ callback: (UnsafeMutablePointer<RustCallStatus>) -> T) throws -> T {
+    _ callback: (UnsafeMutablePointer<RustCallStatus>) -> T
+) throws -> T {
     try makeRustCall(callback, errorHandler: errorHandler)
 }
 
@@ -293,40 +302,40 @@ private func uniffiCheckCallStatus<E: Swift.Error>(
     errorHandler: ((RustBuffer) throws -> E)?
 ) throws {
     switch callStatus.code {
-        case CALL_SUCCESS:
-            return
+    case CALL_SUCCESS:
+        return
 
-        case CALL_ERROR:
-            if let errorHandler = errorHandler {
-                throw try errorHandler(callStatus.errorBuf)
-            } else {
-                callStatus.errorBuf.deallocate()
-                throw UniffiInternalError.unexpectedRustCallError
-            }
+    case CALL_ERROR:
+        if let errorHandler = errorHandler {
+            throw try errorHandler(callStatus.errorBuf)
+        } else {
+            callStatus.errorBuf.deallocate()
+            throw UniffiInternalError.unexpectedRustCallError
+        }
 
-        case CALL_UNEXPECTED_ERROR:
-            // When the rust code sees a panic, it tries to construct a RustBuffer
-            // with the message.  But if that code panics, then it just sends back
-            // an empty buffer.
-            if callStatus.errorBuf.len > 0 {
-                throw UniffiInternalError.rustPanic(try FfiConverterString.lift(callStatus.errorBuf))
-            } else {
-                callStatus.errorBuf.deallocate()
-                throw UniffiInternalError.rustPanic("Rust panic")
-            }
+    case CALL_UNEXPECTED_ERROR:
+        // When the rust code sees a panic, it tries to construct a RustBuffer
+        // with the message.  But if that code panics, then it just sends back
+        // an empty buffer.
+        if callStatus.errorBuf.len > 0 {
+            throw UniffiInternalError.rustPanic(try FfiConverterString.lift(callStatus.errorBuf))
+        } else {
+            callStatus.errorBuf.deallocate()
+            throw UniffiInternalError.rustPanic("Rust panic")
+        }
 
-        case CALL_CANCELLED:
-            fatalError("Cancellation not supported yet")
+    case CALL_CANCELLED:
+        fatalError("Cancellation not supported yet")
 
-        default:
-            throw UniffiInternalError.unexpectedRustCallStatusCode
+    default:
+        throw UniffiInternalError.unexpectedRustCallStatusCode
     }
 }
 
 private func uniffiTraitInterfaceCall<T>(
     callStatus: UnsafeMutablePointer<RustCallStatus>,
     makeCall: () throws -> T,
-    writeReturn: (T) -> ()
+    writeReturn: (T) -> Void
 ) {
     do {
         try writeReturn(makeCall())
@@ -339,7 +348,7 @@ private func uniffiTraitInterfaceCall<T>(
 private func uniffiTraitInterfaceCallWithError<T, E>(
     callStatus: UnsafeMutablePointer<RustCallStatus>,
     makeCall: () throws -> T,
-    writeReturn: (T) -> (),
+    writeReturn: (T) -> Void,
     lowerError: (E) -> RustBuffer
 ) {
     do {
@@ -352,12 +361,12 @@ private func uniffiTraitInterfaceCallWithError<T, E>(
         callStatus.pointee.errorBuf = FfiConverterString.lower(String(describing: error))
     }
 }
-// Initial value and increment amount for handles. 
+// Initial value and increment amount for handles.
 // These ensure that SWIFT handles always have the lowest bit set
-fileprivate let UNIFFI_HANDLEMAP_INITIAL: UInt64 = 1
-fileprivate let UNIFFI_HANDLEMAP_DELTA: UInt64 = 2
+private let UNIFFI_HANDLEMAP_INITIAL: UInt64 = 1
+private let UNIFFI_HANDLEMAP_DELTA: UInt64 = 2
 
-fileprivate final class UniffiHandleMap<T>: @unchecked Sendable {
+private final class UniffiHandleMap<T>: @unchecked Sendable {
     // All mutation happens with this lock held, which is why we implement @unchecked Sendable.
     private let lock = NSLock()
     private var map: [UInt64: T] = [:]
@@ -377,7 +386,7 @@ fileprivate final class UniffiHandleMap<T>: @unchecked Sendable {
         return handle
     }
 
-     func get(handle: UInt64) throws -> T {
+    func get(handle: UInt64) throws -> T {
         try lock.withLock {
             guard let obj = map[handle] else {
                 throw UniffiInternalError.unexpectedStaleHandle
@@ -386,7 +395,7 @@ fileprivate final class UniffiHandleMap<T>: @unchecked Sendable {
         }
     }
 
-     func clone(handle: UInt64) throws -> UInt64 {
+    func clone(handle: UInt64) throws -> UInt64 {
         try lock.withLock {
             guard let obj = map[handle] else {
                 throw UniffiInternalError.unexpectedStaleHandle
@@ -406,20 +415,16 @@ fileprivate final class UniffiHandleMap<T>: @unchecked Sendable {
     }
 
     var count: Int {
-        get {
-            map.count
-        }
+        map.count
     }
 }
 
-
 // Public interface members begin here.
 
-
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterInt32: FfiConverterPrimitive {
+private struct FfiConverterInt32: FfiConverterPrimitive {
     typealias FfiType = Int32
     typealias SwiftType = Int32
 
@@ -433,9 +438,9 @@ fileprivate struct FfiConverterInt32: FfiConverterPrimitive {
 }
 
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterUInt64: FfiConverterPrimitive {
+private struct FfiConverterUInt64: FfiConverterPrimitive {
     typealias FfiType = UInt64
     typealias SwiftType = UInt64
 
@@ -449,9 +454,9 @@ fileprivate struct FfiConverterUInt64: FfiConverterPrimitive {
 }
 
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterInt64: FfiConverterPrimitive {
+private struct FfiConverterInt64: FfiConverterPrimitive {
     typealias FfiType = Int64
     typealias SwiftType = Int64
 
@@ -465,9 +470,9 @@ fileprivate struct FfiConverterInt64: FfiConverterPrimitive {
 }
 
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterBool : FfiConverter {
+private struct FfiConverterBool: FfiConverter {
     typealias FfiType = Int8
     typealias SwiftType = Bool
 
@@ -489,9 +494,9 @@ fileprivate struct FfiConverterBool : FfiConverter {
 }
 
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterString: FfiConverter {
+private struct FfiConverterString: FfiConverter {
     typealias SwiftType = String
     typealias FfiType = RustBuffer
 
@@ -530,9 +535,9 @@ fileprivate struct FfiConverterString: FfiConverter {
 }
 
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterData: FfiConverterRustBuffer {
+private struct FfiConverterData: FfiConverterRustBuffer {
     typealias SwiftType = Data
 
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Data {
@@ -547,45 +552,38 @@ fileprivate struct FfiConverterData: FfiConverterRustBuffer {
     }
 }
 
-
-
-
-/**
- * A grammar compiled against a tokenizer, ready to drive a matcher.
- */
+/// A grammar compiled against a tokenizer, ready to drive a matcher.
 public protocol CompiledGrammarProtocol: AnyObject, Sendable {
-    
+
     /**
      * The underlying grammar.
      */
-    func grammar()  -> Grammar
-    
+    func grammar() -> Grammar
+
     /**
      * Approximate in-memory size of the compiled grammar, in bytes.
      */
-    func memorySizeBytes()  -> UInt64
-    
+    func memorySizeBytes() -> UInt64
+
     /**
      * Serializes the compiled grammar without embedding the full tokenizer info.
      */
-    func serializeJson()  -> String
-    
+    func serializeJson() -> String
+
     /**
      * The tokenizer info the grammar was compiled against.
      */
-    func tokenizerInfo()  -> TokenizerInfo
-    
+    func tokenizerInfo() -> TokenizerInfo
+
 }
-/**
- * A grammar compiled against a tokenizer, ready to drive a matcher.
- */
+/// A grammar compiled against a tokenizer, ready to drive a matcher.
 open class CompiledGrammar: CompiledGrammarProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
 
     /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
+    #if swift(>=5.8)
+        @_documentation(visibility: private)
+    #endif
     public struct NoHandle {
         public init() {}
     }
@@ -593,9 +591,9 @@ open class CompiledGrammar: CompiledGrammarProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
+    #if swift(>=5.8)
+        @_documentation(visibility: private)
+    #endif
     required public init(unsafeFromHandle handle: UInt64) {
         self.handle = handle
     }
@@ -605,16 +603,16 @@ open class CompiledGrammar: CompiledGrammarProtocol, @unchecked Sendable {
     //
     // - Warning:
     //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
+    #if swift(>=5.8)
+        @_documentation(visibility: private)
+    #endif
     public init(noHandle: NoHandle) {
         self.handle = 0
     }
 
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
+    #if swift(>=5.8)
+        @_documentation(visibility: private)
+    #endif
     public func uniffiCloneHandle() -> UInt64 {
         return try! rustCall { uniffi_xgrammar_rs_fn_clone_compiledgrammar(self.handle, $0) }
     }
@@ -629,60 +627,58 @@ open class CompiledGrammar: CompiledGrammarProtocol, @unchecked Sendable {
         try! rustCall { uniffi_xgrammar_rs_fn_free_compiledgrammar(handle, $0) }
     }
 
-    
-
-    
     /**
      * The underlying grammar.
      */
-open func grammar() -> Grammar  {
-    return try!  FfiConverterTypeGrammar_lift(try! rustCall() {
-    uniffi_xgrammar_rs_fn_method_compiledgrammar_grammar(
-            self.uniffiCloneHandle(),$0
-    )
-})
-}
-    
+    open func grammar() -> Grammar {
+        return try! FfiConverterTypeGrammar_lift(
+            try! rustCall {
+                uniffi_xgrammar_rs_fn_method_compiledgrammar_grammar(
+                    self.uniffiCloneHandle(), $0
+                )
+            })
+    }
+
     /**
      * Approximate in-memory size of the compiled grammar, in bytes.
      */
-open func memorySizeBytes() -> UInt64  {
-    return try!  FfiConverterUInt64.lift(try! rustCall() {
-    uniffi_xgrammar_rs_fn_method_compiledgrammar_memory_size_bytes(
-            self.uniffiCloneHandle(),$0
-    )
-})
-}
-    
+    open func memorySizeBytes() -> UInt64 {
+        return try! FfiConverterUInt64.lift(
+            try! rustCall {
+                uniffi_xgrammar_rs_fn_method_compiledgrammar_memory_size_bytes(
+                    self.uniffiCloneHandle(), $0
+                )
+            })
+    }
+
     /**
      * Serializes the compiled grammar without embedding the full tokenizer info.
      */
-open func serializeJson() -> String  {
-    return try!  FfiConverterString.lift(try! rustCall() {
-    uniffi_xgrammar_rs_fn_method_compiledgrammar_serialize_json(
-            self.uniffiCloneHandle(),$0
-    )
-})
-}
-    
+    open func serializeJson() -> String {
+        return try! FfiConverterString.lift(
+            try! rustCall {
+                uniffi_xgrammar_rs_fn_method_compiledgrammar_serialize_json(
+                    self.uniffiCloneHandle(), $0
+                )
+            })
+    }
+
     /**
      * The tokenizer info the grammar was compiled against.
      */
-open func tokenizerInfo() -> TokenizerInfo  {
-    return try!  FfiConverterTypeTokenizerInfo_lift(try! rustCall() {
-    uniffi_xgrammar_rs_fn_method_compiledgrammar_tokenizer_info(
-            self.uniffiCloneHandle(),$0
-    )
-})
-}
-    
+    open func tokenizerInfo() -> TokenizerInfo {
+        return try! FfiConverterTypeTokenizerInfo_lift(
+            try! rustCall {
+                uniffi_xgrammar_rs_fn_method_compiledgrammar_tokenizer_info(
+                    self.uniffiCloneHandle(), $0
+                )
+            })
+    }
 
-    
 }
-
 
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public struct FfiConverterTypeCompiledGrammar: FfiConverter {
     typealias FfiType = UInt64
@@ -696,7 +692,9 @@ public struct FfiConverterTypeCompiledGrammar: FfiConverter {
         return value.uniffiCloneHandle()
     }
 
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CompiledGrammar {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws
+        -> CompiledGrammar
+    {
         let handle: UInt64 = try readInt(&buf)
         return try lift(handle)
     }
@@ -706,52 +704,42 @@ public struct FfiConverterTypeCompiledGrammar: FfiConverter {
     }
 }
 
-
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public func FfiConverterTypeCompiledGrammar_lift(_ handle: UInt64) throws -> CompiledGrammar {
     return try FfiConverterTypeCompiledGrammar.lift(handle)
 }
 
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public func FfiConverterTypeCompiledGrammar_lower(_ value: CompiledGrammar) -> UInt64 {
     return FfiConverterTypeCompiledGrammar.lower(value)
 }
 
-
-
-
-
-
-/**
- * A context-free grammar compiled from EBNF, JSON Schema, regex, or a structural tag.
- */
+/// A context-free grammar compiled from EBNF, JSON Schema, regex, or a structural tag.
 public protocol GrammarProtocol: AnyObject, Sendable {
-    
+
     /**
      * Serializes the grammar to its `"v14"` JSON form.
      */
-    func serializeJson()  -> String
-    
+    func serializeJson() -> String
+
     /**
      * The EBNF (GBNF) string form of the grammar.
      */
-    func toString()  -> String
-    
+    func toString() -> String
+
 }
-/**
- * A context-free grammar compiled from EBNF, JSON Schema, regex, or a structural tag.
- */
+/// A context-free grammar compiled from EBNF, JSON Schema, regex, or a structural tag.
 open class Grammar: GrammarProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
 
     /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
+    #if swift(>=5.8)
+        @_documentation(visibility: private)
+    #endif
     public struct NoHandle {
         public init() {}
     }
@@ -759,9 +747,9 @@ open class Grammar: GrammarProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
+    #if swift(>=5.8)
+        @_documentation(visibility: private)
+    #endif
     required public init(unsafeFromHandle handle: UInt64) {
         self.handle = handle
     }
@@ -771,16 +759,16 @@ open class Grammar: GrammarProtocol, @unchecked Sendable {
     //
     // - Warning:
     //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
+    #if swift(>=5.8)
+        @_documentation(visibility: private)
+    #endif
     public init(noHandle: NoHandle) {
         self.handle = 0
     }
 
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
+    #if swift(>=5.8)
+        @_documentation(visibility: private)
+    #endif
     public func uniffiCloneHandle() -> UInt64 {
         return try! rustCall { uniffi_xgrammar_rs_fn_clone_grammar(self.handle, $0) }
     }
@@ -795,38 +783,34 @@ open class Grammar: GrammarProtocol, @unchecked Sendable {
         try! rustCall { uniffi_xgrammar_rs_fn_free_grammar(handle, $0) }
     }
 
-    
-
-    
     /**
      * Serializes the grammar to its `"v14"` JSON form.
      */
-open func serializeJson() -> String  {
-    return try!  FfiConverterString.lift(try! rustCall() {
-    uniffi_xgrammar_rs_fn_method_grammar_serialize_json(
-            self.uniffiCloneHandle(),$0
-    )
-})
-}
-    
+    open func serializeJson() -> String {
+        return try! FfiConverterString.lift(
+            try! rustCall {
+                uniffi_xgrammar_rs_fn_method_grammar_serialize_json(
+                    self.uniffiCloneHandle(), $0
+                )
+            })
+    }
+
     /**
      * The EBNF (GBNF) string form of the grammar.
      */
-open func toString() -> String  {
-    return try!  FfiConverterString.lift(try! rustCall() {
-    uniffi_xgrammar_rs_fn_method_grammar_to_string(
-            self.uniffiCloneHandle(),$0
-    )
-})
-}
-    
+    open func toString() -> String {
+        return try! FfiConverterString.lift(
+            try! rustCall {
+                uniffi_xgrammar_rs_fn_method_grammar_to_string(
+                    self.uniffiCloneHandle(), $0
+                )
+            })
+    }
 
-    
 }
-
 
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public struct FfiConverterTypeGrammar: FfiConverter {
     typealias FfiType = UInt64
@@ -850,87 +834,80 @@ public struct FfiConverterTypeGrammar: FfiConverter {
     }
 }
 
-
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public func FfiConverterTypeGrammar_lift(_ handle: UInt64) throws -> Grammar {
     return try FfiConverterTypeGrammar.lift(handle)
 }
 
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public func FfiConverterTypeGrammar_lower(_ value: Grammar) -> UInt64 {
     return FfiConverterTypeGrammar.lower(value)
 }
 
-
-
-
-
-
-/**
- * Compiles grammars against a tokenizer, with a result cache.
- */
+/// Compiles grammars against a tokenizer, with a result cache.
 public protocol GrammarCompilerProtocol: AnyObject, Sendable {
-    
+
     /**
      * The cache memory limit, in bytes.
      */
-    func cacheLimitBytes()  -> Int64
-    
+    func cacheLimitBytes() -> Int64
+
     /**
      * Clears the result cache.
      */
-    func clearCache() 
-    
+    func clearCache()
+
     /**
      * Compiles the built-in JSON grammar.
      */
-    func compileBuiltinJsonGrammar()  -> CompiledGrammar
-    
+    func compileBuiltinJsonGrammar() -> CompiledGrammar
+
     /**
      * Compiles an existing [`Grammar`].
      */
-    func compileGrammarEbnf(grammar: Grammar)  -> CompiledGrammar
-    
+    func compileGrammarEbnf(grammar: Grammar) -> CompiledGrammar
+
     /**
      * Compiles a grammar from an EBNF string.
      */
-    func compileGrammarFromStrings(ebnfString: String, rootRuleName: String)  -> CompiledGrammar
-    
+    func compileGrammarFromStrings(ebnfString: String, rootRuleName: String) -> CompiledGrammar
+
     /**
      * Compiles a JSON Schema string.
      */
-    func compileJsonSchema(schema: String, anyWhitespace: Bool, indent: Int32?, separatorItem: String?, separatorKv: String?, strictMode: Bool, maxWhitespaceCnt: Int32?, anyOrder: Bool)  -> CompiledGrammar
-    
+    func compileJsonSchema(
+        schema: String, anyWhitespace: Bool, indent: Int32?, separatorItem: String?,
+        separatorKv: String?, strictMode: Bool, maxWhitespaceCnt: Int32?, anyOrder: Bool
+    ) -> CompiledGrammar
+
     /**
      * Compiles a regular expression.
      */
-    func compileRegex(regex: String)  -> CompiledGrammar
-    
+    func compileRegex(regex: String) -> CompiledGrammar
+
     /**
      * Compiles a structural-tag JSON document.
      */
-    func compileStructuralTag(structuralTagJson: String) throws  -> CompiledGrammar
-    
+    func compileStructuralTag(structuralTagJson: String) throws -> CompiledGrammar
+
     /**
      * The current cache memory usage, in bytes.
      */
-    func getCacheSizeBytes()  -> Int64
-    
+    func getCacheSizeBytes() -> Int64
+
 }
-/**
- * Compiles grammars against a tokenizer, with a result cache.
- */
+/// Compiles grammars against a tokenizer, with a result cache.
 open class GrammarCompiler: GrammarCompilerProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
 
     /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
+    #if swift(>=5.8)
+        @_documentation(visibility: private)
+    #endif
     public struct NoHandle {
         public init() {}
     }
@@ -938,9 +915,9 @@ open class GrammarCompiler: GrammarCompilerProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
+    #if swift(>=5.8)
+        @_documentation(visibility: private)
+    #endif
     required public init(unsafeFromHandle handle: UInt64) {
         self.handle = handle
     }
@@ -950,31 +927,33 @@ open class GrammarCompiler: GrammarCompilerProtocol, @unchecked Sendable {
     //
     // - Warning:
     //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
+    #if swift(>=5.8)
+        @_documentation(visibility: private)
+    #endif
     public init(noHandle: NoHandle) {
         self.handle = 0
     }
 
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
+    #if swift(>=5.8)
+        @_documentation(visibility: private)
+    #endif
     public func uniffiCloneHandle() -> UInt64 {
         return try! rustCall { uniffi_xgrammar_rs_fn_clone_grammarcompiler(self.handle, $0) }
     }
-public convenience init(tokenizerInfo: TokenizerInfo, maxThreads: Int32, cacheEnabled: Bool, cacheLimitBytes: Int64) {
-    let handle =
-        try! rustCall() {
-    uniffi_xgrammar_rs_fn_constructor_grammarcompiler_new(
-        FfiConverterTypeTokenizerInfo_lower(tokenizerInfo),
-        FfiConverterInt32.lower(maxThreads),
-        FfiConverterBool.lower(cacheEnabled),
-        FfiConverterInt64.lower(cacheLimitBytes),$0
-    )
-}
-    self.init(unsafeFromHandle: handle)
-}
+    public convenience init(
+        tokenizerInfo: TokenizerInfo, maxThreads: Int32, cacheEnabled: Bool, cacheLimitBytes: Int64
+    ) {
+        let handle =
+            try! rustCall {
+                uniffi_xgrammar_rs_fn_constructor_grammarcompiler_new(
+                    FfiConverterTypeTokenizerInfo_lower(tokenizerInfo),
+                    FfiConverterInt32.lower(maxThreads),
+                    FfiConverterBool.lower(cacheEnabled),
+                    FfiConverterInt64.lower(cacheLimitBytes), $0
+                )
+            }
+        self.init(unsafeFromHandle: handle)
+    }
 
     deinit {
         if handle == 0 {
@@ -985,127 +964,134 @@ public convenience init(tokenizerInfo: TokenizerInfo, maxThreads: Int32, cacheEn
         try! rustCall { uniffi_xgrammar_rs_fn_free_grammarcompiler(handle, $0) }
     }
 
-    
-
-    
     /**
      * The cache memory limit, in bytes.
      */
-open func cacheLimitBytes() -> Int64  {
-    return try!  FfiConverterInt64.lift(try! rustCall() {
-    uniffi_xgrammar_rs_fn_method_grammarcompiler_cache_limit_bytes(
-            self.uniffiCloneHandle(),$0
-    )
-})
-}
-    
+    open func cacheLimitBytes() -> Int64 {
+        return try! FfiConverterInt64.lift(
+            try! rustCall {
+                uniffi_xgrammar_rs_fn_method_grammarcompiler_cache_limit_bytes(
+                    self.uniffiCloneHandle(), $0
+                )
+            })
+    }
+
     /**
      * Clears the result cache.
      */
-open func clearCache()  {try! rustCall() {
-    uniffi_xgrammar_rs_fn_method_grammarcompiler_clear_cache(
-            self.uniffiCloneHandle(),$0
-    )
-}
-}
-    
+    open func clearCache() {
+        try! rustCall {
+            uniffi_xgrammar_rs_fn_method_grammarcompiler_clear_cache(
+                self.uniffiCloneHandle(), $0
+            )
+        }
+    }
+
     /**
      * Compiles the built-in JSON grammar.
      */
-open func compileBuiltinJsonGrammar() -> CompiledGrammar  {
-    return try!  FfiConverterTypeCompiledGrammar_lift(try! rustCall() {
-    uniffi_xgrammar_rs_fn_method_grammarcompiler_compile_builtin_json_grammar(
-            self.uniffiCloneHandle(),$0
-    )
-})
-}
-    
+    open func compileBuiltinJsonGrammar() -> CompiledGrammar {
+        return try! FfiConverterTypeCompiledGrammar_lift(
+            try! rustCall {
+                uniffi_xgrammar_rs_fn_method_grammarcompiler_compile_builtin_json_grammar(
+                    self.uniffiCloneHandle(), $0
+                )
+            })
+    }
+
     /**
      * Compiles an existing [`Grammar`].
      */
-open func compileGrammarEbnf(grammar: Grammar) -> CompiledGrammar  {
-    return try!  FfiConverterTypeCompiledGrammar_lift(try! rustCall() {
-    uniffi_xgrammar_rs_fn_method_grammarcompiler_compile_grammar_ebnf(
-            self.uniffiCloneHandle(),
-        FfiConverterTypeGrammar_lower(grammar),$0
-    )
-})
-}
-    
+    open func compileGrammarEbnf(grammar: Grammar) -> CompiledGrammar {
+        return try! FfiConverterTypeCompiledGrammar_lift(
+            try! rustCall {
+                uniffi_xgrammar_rs_fn_method_grammarcompiler_compile_grammar_ebnf(
+                    self.uniffiCloneHandle(),
+                    FfiConverterTypeGrammar_lower(grammar), $0
+                )
+            })
+    }
+
     /**
      * Compiles a grammar from an EBNF string.
      */
-open func compileGrammarFromStrings(ebnfString: String, rootRuleName: String) -> CompiledGrammar  {
-    return try!  FfiConverterTypeCompiledGrammar_lift(try! rustCall() {
-    uniffi_xgrammar_rs_fn_method_grammarcompiler_compile_grammar_from_strings(
-            self.uniffiCloneHandle(),
-        FfiConverterString.lower(ebnfString),
-        FfiConverterString.lower(rootRuleName),$0
-    )
-})
-}
-    
+    open func compileGrammarFromStrings(ebnfString: String, rootRuleName: String) -> CompiledGrammar
+    {
+        return try! FfiConverterTypeCompiledGrammar_lift(
+            try! rustCall {
+                uniffi_xgrammar_rs_fn_method_grammarcompiler_compile_grammar_from_strings(
+                    self.uniffiCloneHandle(),
+                    FfiConverterString.lower(ebnfString),
+                    FfiConverterString.lower(rootRuleName), $0
+                )
+            })
+    }
+
     /**
      * Compiles a JSON Schema string.
      */
-open func compileJsonSchema(schema: String, anyWhitespace: Bool, indent: Int32?, separatorItem: String?, separatorKv: String?, strictMode: Bool, maxWhitespaceCnt: Int32?, anyOrder: Bool) -> CompiledGrammar  {
-    return try!  FfiConverterTypeCompiledGrammar_lift(try! rustCall() {
-    uniffi_xgrammar_rs_fn_method_grammarcompiler_compile_json_schema(
-            self.uniffiCloneHandle(),
-        FfiConverterString.lower(schema),
-        FfiConverterBool.lower(anyWhitespace),
-        FfiConverterOptionInt32.lower(indent),
-        FfiConverterOptionString.lower(separatorItem),
-        FfiConverterOptionString.lower(separatorKv),
-        FfiConverterBool.lower(strictMode),
-        FfiConverterOptionInt32.lower(maxWhitespaceCnt),
-        FfiConverterBool.lower(anyOrder),$0
-    )
-})
-}
-    
+    open func compileJsonSchema(
+        schema: String, anyWhitespace: Bool, indent: Int32?, separatorItem: String?,
+        separatorKv: String?, strictMode: Bool, maxWhitespaceCnt: Int32?, anyOrder: Bool
+    ) -> CompiledGrammar {
+        return try! FfiConverterTypeCompiledGrammar_lift(
+            try! rustCall {
+                uniffi_xgrammar_rs_fn_method_grammarcompiler_compile_json_schema(
+                    self.uniffiCloneHandle(),
+                    FfiConverterString.lower(schema),
+                    FfiConverterBool.lower(anyWhitespace),
+                    FfiConverterOptionInt32.lower(indent),
+                    FfiConverterOptionString.lower(separatorItem),
+                    FfiConverterOptionString.lower(separatorKv),
+                    FfiConverterBool.lower(strictMode),
+                    FfiConverterOptionInt32.lower(maxWhitespaceCnt),
+                    FfiConverterBool.lower(anyOrder), $0
+                )
+            })
+    }
+
     /**
      * Compiles a regular expression.
      */
-open func compileRegex(regex: String) -> CompiledGrammar  {
-    return try!  FfiConverterTypeCompiledGrammar_lift(try! rustCall() {
-    uniffi_xgrammar_rs_fn_method_grammarcompiler_compile_regex(
-            self.uniffiCloneHandle(),
-        FfiConverterString.lower(regex),$0
-    )
-})
-}
-    
+    open func compileRegex(regex: String) -> CompiledGrammar {
+        return try! FfiConverterTypeCompiledGrammar_lift(
+            try! rustCall {
+                uniffi_xgrammar_rs_fn_method_grammarcompiler_compile_regex(
+                    self.uniffiCloneHandle(),
+                    FfiConverterString.lower(regex), $0
+                )
+            })
+    }
+
     /**
      * Compiles a structural-tag JSON document.
      */
-open func compileStructuralTag(structuralTagJson: String)throws  -> CompiledGrammar  {
-    return try  FfiConverterTypeCompiledGrammar_lift(try rustCallWithError(FfiConverterTypeXgrammarError_lift) {
-    uniffi_xgrammar_rs_fn_method_grammarcompiler_compile_structural_tag(
-            self.uniffiCloneHandle(),
-        FfiConverterString.lower(structuralTagJson),$0
-    )
-})
-}
-    
+    open func compileStructuralTag(structuralTagJson: String) throws -> CompiledGrammar {
+        return try FfiConverterTypeCompiledGrammar_lift(
+            try rustCallWithError(FfiConverterTypeXgrammarError_lift) {
+                uniffi_xgrammar_rs_fn_method_grammarcompiler_compile_structural_tag(
+                    self.uniffiCloneHandle(),
+                    FfiConverterString.lower(structuralTagJson), $0
+                )
+            })
+    }
+
     /**
      * The current cache memory usage, in bytes.
      */
-open func getCacheSizeBytes() -> Int64  {
-    return try!  FfiConverterInt64.lift(try! rustCall() {
-    uniffi_xgrammar_rs_fn_method_grammarcompiler_get_cache_size_bytes(
-            self.uniffiCloneHandle(),$0
-    )
-})
-}
-    
+    open func getCacheSizeBytes() -> Int64 {
+        return try! FfiConverterInt64.lift(
+            try! rustCall {
+                uniffi_xgrammar_rs_fn_method_grammarcompiler_get_cache_size_bytes(
+                    self.uniffiCloneHandle(), $0
+                )
+            })
+    }
 
-    
 }
-
 
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public struct FfiConverterTypeGrammarCompiler: FfiConverter {
     typealias FfiType = UInt64
@@ -1119,7 +1105,9 @@ public struct FfiConverterTypeGrammarCompiler: FfiConverter {
         return value.uniffiCloneHandle()
     }
 
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> GrammarCompiler {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws
+        -> GrammarCompiler
+    {
         let handle: UInt64 = try readInt(&buf)
         return try lift(handle)
     }
@@ -1129,82 +1117,72 @@ public struct FfiConverterTypeGrammarCompiler: FfiConverter {
     }
 }
 
-
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public func FfiConverterTypeGrammarCompiler_lift(_ handle: UInt64) throws -> GrammarCompiler {
     return try FfiConverterTypeGrammarCompiler.lift(handle)
 }
 
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public func FfiConverterTypeGrammarCompiler_lower(_ value: GrammarCompiler) -> UInt64 {
     return FfiConverterTypeGrammarCompiler.lower(value)
 }
 
-
-
-
-
-
-/**
- * Drives constrained decoding over a compiled grammar.
- */
+/// Drives constrained decoding over a compiled grammar.
 public protocol GrammarMatcherProtocol: AnyObject, Sendable {
-    
+
     /**
      * Accepts a UTF-8 string, advancing the matcher. Returns whether it was accepted.
      */
-    func acceptString(input: String, debugPrint: Bool)  -> Bool
-    
+    func acceptString(input: String, debugPrint: Bool) -> Bool
+
     /**
      * Accepts a single token id, advancing the matcher. Returns whether it was accepted.
      */
-    func acceptToken(tokenId: Int32, debugPrint: Bool)  -> Bool
-    
+    func acceptToken(tokenId: Int32, debugPrint: Bool) -> Bool
+
     /**
      * Returns a deep copy of the matcher at its current state.
      */
-    func fork()  -> GrammarMatcher
-    
+    func fork() -> GrammarMatcher
+
     /**
      * Whether the grammar is fully matched (root completed).
      */
-    func isCompleted()  -> Bool
-    
+    func isCompleted() -> Bool
+
     /**
      * Whether the matcher has reached an accepting terminal state.
      */
-    func isTerminated()  -> Bool
-    
+    func isTerminated() -> Bool
+
     /**
      * Resets the matcher to its initial state.
      */
-    func reset() 
-    
+    func reset()
+
     /**
      * Rolls back the last `num_tokens` accepted tokens.
      */
-    func rollback(numTokens: Int32) 
-    
+    func rollback(numTokens: Int32)
+
     /**
      * The stop token ids the matcher accepts as terminators.
      */
-    func stopTokenIds()  -> [Int32]
-    
+    func stopTokenIds() -> [Int32]
+
 }
-/**
- * Drives constrained decoding over a compiled grammar.
- */
+/// Drives constrained decoding over a compiled grammar.
 open class GrammarMatcher: GrammarMatcherProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
 
     /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
+    #if swift(>=5.8)
+        @_documentation(visibility: private)
+    #endif
     public struct NoHandle {
         public init() {}
     }
@@ -1212,9 +1190,9 @@ open class GrammarMatcher: GrammarMatcherProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
+    #if swift(>=5.8)
+        @_documentation(visibility: private)
+    #endif
     required public init(unsafeFromHandle handle: UInt64) {
         self.handle = handle
     }
@@ -1224,31 +1202,34 @@ open class GrammarMatcher: GrammarMatcherProtocol, @unchecked Sendable {
     //
     // - Warning:
     //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
+    #if swift(>=5.8)
+        @_documentation(visibility: private)
+    #endif
     public init(noHandle: NoHandle) {
         self.handle = 0
     }
 
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
+    #if swift(>=5.8)
+        @_documentation(visibility: private)
+    #endif
     public func uniffiCloneHandle() -> UInt64 {
         return try! rustCall { uniffi_xgrammar_rs_fn_clone_grammarmatcher(self.handle, $0) }
     }
-public convenience init(compiledGrammar: CompiledGrammar, overrideStopTokens: [Int32]?, terminateWithoutStopToken: Bool, maxRollbackTokens: Int32) {
-    let handle =
-        try! rustCall() {
-    uniffi_xgrammar_rs_fn_constructor_grammarmatcher_new(
-        FfiConverterTypeCompiledGrammar_lower(compiledGrammar),
-        FfiConverterOptionSequenceInt32.lower(overrideStopTokens),
-        FfiConverterBool.lower(terminateWithoutStopToken),
-        FfiConverterInt32.lower(maxRollbackTokens),$0
-    )
-}
-    self.init(unsafeFromHandle: handle)
-}
+    public convenience init(
+        compiledGrammar: CompiledGrammar, overrideStopTokens: [Int32]?,
+        terminateWithoutStopToken: Bool, maxRollbackTokens: Int32
+    ) {
+        let handle =
+            try! rustCall {
+                uniffi_xgrammar_rs_fn_constructor_grammarmatcher_new(
+                    FfiConverterTypeCompiledGrammar_lower(compiledGrammar),
+                    FfiConverterOptionSequenceInt32.lower(overrideStopTokens),
+                    FfiConverterBool.lower(terminateWithoutStopToken),
+                    FfiConverterInt32.lower(maxRollbackTokens), $0
+                )
+            }
+        self.init(unsafeFromHandle: handle)
+    }
 
     deinit {
         if handle == 0 {
@@ -1259,107 +1240,109 @@ public convenience init(compiledGrammar: CompiledGrammar, overrideStopTokens: [I
         try! rustCall { uniffi_xgrammar_rs_fn_free_grammarmatcher(handle, $0) }
     }
 
-    
-
-    
     /**
      * Accepts a UTF-8 string, advancing the matcher. Returns whether it was accepted.
      */
-open func acceptString(input: String, debugPrint: Bool) -> Bool  {
-    return try!  FfiConverterBool.lift(try! rustCall() {
-    uniffi_xgrammar_rs_fn_method_grammarmatcher_accept_string(
-            self.uniffiCloneHandle(),
-        FfiConverterString.lower(input),
-        FfiConverterBool.lower(debugPrint),$0
-    )
-})
-}
-    
+    open func acceptString(input: String, debugPrint: Bool) -> Bool {
+        return try! FfiConverterBool.lift(
+            try! rustCall {
+                uniffi_xgrammar_rs_fn_method_grammarmatcher_accept_string(
+                    self.uniffiCloneHandle(),
+                    FfiConverterString.lower(input),
+                    FfiConverterBool.lower(debugPrint), $0
+                )
+            })
+    }
+
     /**
      * Accepts a single token id, advancing the matcher. Returns whether it was accepted.
      */
-open func acceptToken(tokenId: Int32, debugPrint: Bool) -> Bool  {
-    return try!  FfiConverterBool.lift(try! rustCall() {
-    uniffi_xgrammar_rs_fn_method_grammarmatcher_accept_token(
-            self.uniffiCloneHandle(),
-        FfiConverterInt32.lower(tokenId),
-        FfiConverterBool.lower(debugPrint),$0
-    )
-})
-}
-    
+    open func acceptToken(tokenId: Int32, debugPrint: Bool) -> Bool {
+        return try! FfiConverterBool.lift(
+            try! rustCall {
+                uniffi_xgrammar_rs_fn_method_grammarmatcher_accept_token(
+                    self.uniffiCloneHandle(),
+                    FfiConverterInt32.lower(tokenId),
+                    FfiConverterBool.lower(debugPrint), $0
+                )
+            })
+    }
+
     /**
      * Returns a deep copy of the matcher at its current state.
      */
-open func fork() -> GrammarMatcher  {
-    return try!  FfiConverterTypeGrammarMatcher_lift(try! rustCall() {
-    uniffi_xgrammar_rs_fn_method_grammarmatcher_fork(
-            self.uniffiCloneHandle(),$0
-    )
-})
-}
-    
+    open func fork() -> GrammarMatcher {
+        return try! FfiConverterTypeGrammarMatcher_lift(
+            try! rustCall {
+                uniffi_xgrammar_rs_fn_method_grammarmatcher_fork(
+                    self.uniffiCloneHandle(), $0
+                )
+            })
+    }
+
     /**
      * Whether the grammar is fully matched (root completed).
      */
-open func isCompleted() -> Bool  {
-    return try!  FfiConverterBool.lift(try! rustCall() {
-    uniffi_xgrammar_rs_fn_method_grammarmatcher_is_completed(
-            self.uniffiCloneHandle(),$0
-    )
-})
-}
-    
+    open func isCompleted() -> Bool {
+        return try! FfiConverterBool.lift(
+            try! rustCall {
+                uniffi_xgrammar_rs_fn_method_grammarmatcher_is_completed(
+                    self.uniffiCloneHandle(), $0
+                )
+            })
+    }
+
     /**
      * Whether the matcher has reached an accepting terminal state.
      */
-open func isTerminated() -> Bool  {
-    return try!  FfiConverterBool.lift(try! rustCall() {
-    uniffi_xgrammar_rs_fn_method_grammarmatcher_is_terminated(
-            self.uniffiCloneHandle(),$0
-    )
-})
-}
-    
+    open func isTerminated() -> Bool {
+        return try! FfiConverterBool.lift(
+            try! rustCall {
+                uniffi_xgrammar_rs_fn_method_grammarmatcher_is_terminated(
+                    self.uniffiCloneHandle(), $0
+                )
+            })
+    }
+
     /**
      * Resets the matcher to its initial state.
      */
-open func reset()  {try! rustCall() {
-    uniffi_xgrammar_rs_fn_method_grammarmatcher_reset(
-            self.uniffiCloneHandle(),$0
-    )
-}
-}
-    
+    open func reset() {
+        try! rustCall {
+            uniffi_xgrammar_rs_fn_method_grammarmatcher_reset(
+                self.uniffiCloneHandle(), $0
+            )
+        }
+    }
+
     /**
      * Rolls back the last `num_tokens` accepted tokens.
      */
-open func rollback(numTokens: Int32)  {try! rustCall() {
-    uniffi_xgrammar_rs_fn_method_grammarmatcher_rollback(
-            self.uniffiCloneHandle(),
-        FfiConverterInt32.lower(numTokens),$0
-    )
-}
-}
-    
+    open func rollback(numTokens: Int32) {
+        try! rustCall {
+            uniffi_xgrammar_rs_fn_method_grammarmatcher_rollback(
+                self.uniffiCloneHandle(),
+                FfiConverterInt32.lower(numTokens), $0
+            )
+        }
+    }
+
     /**
      * The stop token ids the matcher accepts as terminators.
      */
-open func stopTokenIds() -> [Int32]  {
-    return try!  FfiConverterSequenceInt32.lift(try! rustCall() {
-    uniffi_xgrammar_rs_fn_method_grammarmatcher_stop_token_ids(
-            self.uniffiCloneHandle(),$0
-    )
-})
-}
-    
+    open func stopTokenIds() -> [Int32] {
+        return try! FfiConverterSequenceInt32.lift(
+            try! rustCall {
+                uniffi_xgrammar_rs_fn_method_grammarmatcher_stop_token_ids(
+                    self.uniffiCloneHandle(), $0
+                )
+            })
+    }
 
-    
 }
-
 
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public struct FfiConverterTypeGrammarMatcher: FfiConverter {
     typealias FfiType = UInt64
@@ -1373,7 +1356,9 @@ public struct FfiConverterTypeGrammarMatcher: FfiConverter {
         return value.uniffiCloneHandle()
     }
 
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> GrammarMatcher {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws
+        -> GrammarMatcher
+    {
         let handle: UInt64 = try readInt(&buf)
         return try lift(handle)
     }
@@ -1383,85 +1368,75 @@ public struct FfiConverterTypeGrammarMatcher: FfiConverter {
     }
 }
 
-
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public func FfiConverterTypeGrammarMatcher_lift(_ handle: UInt64) throws -> GrammarMatcher {
     return try FfiConverterTypeGrammarMatcher.lift(handle)
 }
 
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public func FfiConverterTypeGrammarMatcher_lower(_ value: GrammarMatcher) -> UInt64 {
     return FfiConverterTypeGrammarMatcher.lower(value)
 }
 
-
-
-
-
-
-/**
- * A thin opaque wrapper over [`xgrammar::tokenizer::TokenizerInfo`].
- */
+/// A thin opaque wrapper over [`xgrammar::tokenizer::TokenizerInfo`].
 public protocol TokenizerInfoProtocol: AnyObject, Sendable {
-    
+
     /**
      * Whether a prefix space is added during tokenization.
      */
-    func addPrefixSpace()  -> Bool
-    
+    func addPrefixSpace() -> Bool
+
     /**
      * The decoded byte string of each token id.
      *
      * Omitted on the wasm backend, which cannot return `Vec<Vec<u8>>` directly; the Python
      * tests only exercise this under PyO3.
      */
-    func decodedVocab()  -> [Data]
-    
+    func decodedVocab() -> [Data]
+
     /**
      * Dumps tokenizer metadata (vocab type and prefix-space flag) as JSON.
      */
-    func dumpMetadata()  -> String
-    
+    func dumpMetadata() -> String
+
     /**
      * Serializes the tokenizer info to its `"v14"` JSON form.
      */
-    func serializeJson()  -> String
-    
+    func serializeJson() -> String
+
     /**
      * The special token ids.
      */
-    func specialTokenIds()  -> [Int32]
-    
+    func specialTokenIds() -> [Int32]
+
     /**
      * The stop token ids.
      */
-    func stopTokenIds()  -> [Int32]
-    
+    func stopTokenIds() -> [Int32]
+
     /**
      * The vocabulary size (including padding tokens).
      */
-    func vocabSize()  -> Int32
-    
+    func vocabSize() -> Int32
+
     /**
      * The vocabulary type, as the integer `VocabType` value.
      */
-    func vocabType()  -> Int32
-    
+    func vocabType() -> Int32
+
 }
-/**
- * A thin opaque wrapper over [`xgrammar::tokenizer::TokenizerInfo`].
- */
+/// A thin opaque wrapper over [`xgrammar::tokenizer::TokenizerInfo`].
 open class TokenizerInfo: TokenizerInfoProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
 
     /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
+    #if swift(>=5.8)
+        @_documentation(visibility: private)
+    #endif
     public struct NoHandle {
         public init() {}
     }
@@ -1469,9 +1444,9 @@ open class TokenizerInfo: TokenizerInfoProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
+    #if swift(>=5.8)
+        @_documentation(visibility: private)
+    #endif
     required public init(unsafeFromHandle handle: UInt64) {
         self.handle = handle
     }
@@ -1481,32 +1456,35 @@ open class TokenizerInfo: TokenizerInfoProtocol, @unchecked Sendable {
     //
     // - Warning:
     //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
+    #if swift(>=5.8)
+        @_documentation(visibility: private)
+    #endif
     public init(noHandle: NoHandle) {
         self.handle = 0
     }
 
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
+    #if swift(>=5.8)
+        @_documentation(visibility: private)
+    #endif
     public func uniffiCloneHandle() -> UInt64 {
         return try! rustCall { uniffi_xgrammar_rs_fn_clone_tokenizerinfo(self.handle, $0) }
     }
-public convenience init(encodedVocab: [String], vocabType: Int32, vocabSize: Int32?, stopTokenIds: [Int32]?, addPrefixSpace: Bool)throws  {
-    let handle =
-        try rustCallWithError(FfiConverterTypeXgrammarError_lift) {
-    uniffi_xgrammar_rs_fn_constructor_tokenizerinfo_new(
-        FfiConverterSequenceString.lower(encodedVocab),
-        FfiConverterInt32.lower(vocabType),
-        FfiConverterOptionInt32.lower(vocabSize),
-        FfiConverterOptionSequenceInt32.lower(stopTokenIds),
-        FfiConverterBool.lower(addPrefixSpace),$0
-    )
-}
-    self.init(unsafeFromHandle: handle)
-}
+    public convenience init(
+        encodedVocab: [String], vocabType: Int32, vocabSize: Int32?, stopTokenIds: [Int32]?,
+        addPrefixSpace: Bool
+    ) throws {
+        let handle =
+            try rustCallWithError(FfiConverterTypeXgrammarError_lift) {
+                uniffi_xgrammar_rs_fn_constructor_tokenizerinfo_new(
+                    FfiConverterSequenceString.lower(encodedVocab),
+                    FfiConverterInt32.lower(vocabType),
+                    FfiConverterOptionInt32.lower(vocabSize),
+                    FfiConverterOptionSequenceInt32.lower(stopTokenIds),
+                    FfiConverterBool.lower(addPrefixSpace), $0
+                )
+            }
+        self.init(unsafeFromHandle: handle)
+    }
 
     deinit {
         if handle == 0 {
@@ -1517,107 +1495,109 @@ public convenience init(encodedVocab: [String], vocabType: Int32, vocabSize: Int
         try! rustCall { uniffi_xgrammar_rs_fn_free_tokenizerinfo(handle, $0) }
     }
 
-    
-
-    
     /**
      * Whether a prefix space is added during tokenization.
      */
-open func addPrefixSpace() -> Bool  {
-    return try!  FfiConverterBool.lift(try! rustCall() {
-    uniffi_xgrammar_rs_fn_method_tokenizerinfo_add_prefix_space(
-            self.uniffiCloneHandle(),$0
-    )
-})
-}
-    
+    open func addPrefixSpace() -> Bool {
+        return try! FfiConverterBool.lift(
+            try! rustCall {
+                uniffi_xgrammar_rs_fn_method_tokenizerinfo_add_prefix_space(
+                    self.uniffiCloneHandle(), $0
+                )
+            })
+    }
+
     /**
      * The decoded byte string of each token id.
      *
      * Omitted on the wasm backend, which cannot return `Vec<Vec<u8>>` directly; the Python
      * tests only exercise this under PyO3.
      */
-open func decodedVocab() -> [Data]  {
-    return try!  FfiConverterSequenceData.lift(try! rustCall() {
-    uniffi_xgrammar_rs_fn_method_tokenizerinfo_decoded_vocab(
-            self.uniffiCloneHandle(),$0
-    )
-})
-}
-    
+    open func decodedVocab() -> [Data] {
+        return try! FfiConverterSequenceData.lift(
+            try! rustCall {
+                uniffi_xgrammar_rs_fn_method_tokenizerinfo_decoded_vocab(
+                    self.uniffiCloneHandle(), $0
+                )
+            })
+    }
+
     /**
      * Dumps tokenizer metadata (vocab type and prefix-space flag) as JSON.
      */
-open func dumpMetadata() -> String  {
-    return try!  FfiConverterString.lift(try! rustCall() {
-    uniffi_xgrammar_rs_fn_method_tokenizerinfo_dump_metadata(
-            self.uniffiCloneHandle(),$0
-    )
-})
-}
-    
+    open func dumpMetadata() -> String {
+        return try! FfiConverterString.lift(
+            try! rustCall {
+                uniffi_xgrammar_rs_fn_method_tokenizerinfo_dump_metadata(
+                    self.uniffiCloneHandle(), $0
+                )
+            })
+    }
+
     /**
      * Serializes the tokenizer info to its `"v14"` JSON form.
      */
-open func serializeJson() -> String  {
-    return try!  FfiConverterString.lift(try! rustCall() {
-    uniffi_xgrammar_rs_fn_method_tokenizerinfo_serialize_json(
-            self.uniffiCloneHandle(),$0
-    )
-})
-}
-    
+    open func serializeJson() -> String {
+        return try! FfiConverterString.lift(
+            try! rustCall {
+                uniffi_xgrammar_rs_fn_method_tokenizerinfo_serialize_json(
+                    self.uniffiCloneHandle(), $0
+                )
+            })
+    }
+
     /**
      * The special token ids.
      */
-open func specialTokenIds() -> [Int32]  {
-    return try!  FfiConverterSequenceInt32.lift(try! rustCall() {
-    uniffi_xgrammar_rs_fn_method_tokenizerinfo_special_token_ids(
-            self.uniffiCloneHandle(),$0
-    )
-})
-}
-    
+    open func specialTokenIds() -> [Int32] {
+        return try! FfiConverterSequenceInt32.lift(
+            try! rustCall {
+                uniffi_xgrammar_rs_fn_method_tokenizerinfo_special_token_ids(
+                    self.uniffiCloneHandle(), $0
+                )
+            })
+    }
+
     /**
      * The stop token ids.
      */
-open func stopTokenIds() -> [Int32]  {
-    return try!  FfiConverterSequenceInt32.lift(try! rustCall() {
-    uniffi_xgrammar_rs_fn_method_tokenizerinfo_stop_token_ids(
-            self.uniffiCloneHandle(),$0
-    )
-})
-}
-    
+    open func stopTokenIds() -> [Int32] {
+        return try! FfiConverterSequenceInt32.lift(
+            try! rustCall {
+                uniffi_xgrammar_rs_fn_method_tokenizerinfo_stop_token_ids(
+                    self.uniffiCloneHandle(), $0
+                )
+            })
+    }
+
     /**
      * The vocabulary size (including padding tokens).
      */
-open func vocabSize() -> Int32  {
-    return try!  FfiConverterInt32.lift(try! rustCall() {
-    uniffi_xgrammar_rs_fn_method_tokenizerinfo_vocab_size(
-            self.uniffiCloneHandle(),$0
-    )
-})
-}
-    
+    open func vocabSize() -> Int32 {
+        return try! FfiConverterInt32.lift(
+            try! rustCall {
+                uniffi_xgrammar_rs_fn_method_tokenizerinfo_vocab_size(
+                    self.uniffiCloneHandle(), $0
+                )
+            })
+    }
+
     /**
      * The vocabulary type, as the integer `VocabType` value.
      */
-open func vocabType() -> Int32  {
-    return try!  FfiConverterInt32.lift(try! rustCall() {
-    uniffi_xgrammar_rs_fn_method_tokenizerinfo_vocab_type(
-            self.uniffiCloneHandle(),$0
-    )
-})
-}
-    
+    open func vocabType() -> Int32 {
+        return try! FfiConverterInt32.lift(
+            try! rustCall {
+                uniffi_xgrammar_rs_fn_method_tokenizerinfo_vocab_type(
+                    self.uniffiCloneHandle(), $0
+                )
+            })
+    }
 
-    
 }
-
 
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public struct FfiConverterTypeTokenizerInfo: FfiConverter {
     typealias FfiType = UInt64
@@ -1631,7 +1611,9 @@ public struct FfiConverterTypeTokenizerInfo: FfiConverter {
         return value.uniffiCloneHandle()
     }
 
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TokenizerInfo {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws
+        -> TokenizerInfo
+    {
         let handle: UInt64 = try readInt(&buf)
         return try lift(handle)
     }
@@ -1641,22 +1623,19 @@ public struct FfiConverterTypeTokenizerInfo: FfiConverter {
     }
 }
 
-
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public func FfiConverterTypeTokenizerInfo_lift(_ handle: UInt64) throws -> TokenizerInfo {
     return try FfiConverterTypeTokenizerInfo.lift(handle)
 }
 
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public func FfiConverterTypeTokenizerInfo_lower(_ value: TokenizerInfo) -> UInt64 {
     return FfiConverterTypeTokenizerInfo.lower(value)
 }
-
-
 
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
@@ -1669,7 +1648,7 @@ public func FfiConverterTypeTokenizerInfo_lower(_ value: TokenizerInfo) -> UInt6
  */
 
 public enum VocabType: Equatable, Hashable {
-    
+
     /**
      * Tokens are used verbatim.
      */
@@ -1683,18 +1662,14 @@ public enum VocabType: Equatable, Hashable {
      */
     case byteLevel
 
-
-
-
-
 }
 
 #if compiler(>=6)
-extension VocabType: Sendable {}
+    extension VocabType: Sendable {}
 #endif
 
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public struct FfiConverterTypeVocabType: FfiConverterRustBuffer {
     typealias SwiftType = VocabType
@@ -1702,140 +1677,121 @@ public struct FfiConverterTypeVocabType: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> VocabType {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        
+
         case 1: return .raw
-        
+
         case 2: return .byteFallback
-        
+
         case 3: return .byteLevel
-        
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: VocabType, into buf: inout [UInt8]) {
         switch value {
-        
-        
+
         case .raw:
             writeInt(&buf, Int32(1))
-        
-        
+
         case .byteFallback:
             writeInt(&buf, Int32(2))
-        
-        
+
         case .byteLevel:
             writeInt(&buf, Int32(3))
-        
+
         }
     }
 }
 
-
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public func FfiConverterTypeVocabType_lift(_ buf: RustBuffer) throws -> VocabType {
     return try FfiConverterTypeVocabType.lift(buf)
 }
 
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public func FfiConverterTypeVocabType_lower(_ value: VocabType) -> RustBuffer {
     return FfiConverterTypeVocabType.lower(value)
 }
 
-
-
-/**
- * A backend-agnostic error wrapping a message — exported so NAPI / UniFFI / wasm get a
- * native error type. (Unused under the PyO3 backend, which uses [`pyo3::PyErr`] directly.)
- */
+/// A backend-agnostic error wrapping a message — exported so NAPI / UniFFI / wasm get a
+/// native error type. (Unused under the PyO3 backend, which uses [`pyo3::PyErr`] directly.)
 public enum XgrammarError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
-    
-    
     /**
      * A grammar / schema / serialization operation failed.
      */
     case Invalid(
         /**
          * The underlying error message.
-         */message: String
+         */
+        message: String
     )
 
-    
-
-    
-
-    
     public var errorDescription: String? {
         String(reflecting: self)
     }
-    
+
 }
 
 #if compiler(>=6)
-extension XgrammarError: Sendable {}
+    extension XgrammarError: Sendable {}
 #endif
 
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public struct FfiConverterTypeXgrammarError: FfiConverterRustBuffer {
     typealias SwiftType = XgrammarError
 
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> XgrammarError {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws
+        -> XgrammarError
+    {
         let variant: Int32 = try readInt(&buf)
         switch variant {
 
-        
-
-        
-        case 1: return .Invalid(
-            message: try FfiConverterString.read(from: &buf)
+        case 1:
+            return .Invalid(
+                message: try FfiConverterString.read(from: &buf)
             )
 
-         default: throw UniffiInternalError.unexpectedEnumCase
+        default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: XgrammarError, into buf: inout [UInt8]) {
         switch value {
 
-        
-
-        
-        
-        case let .Invalid(message):
+        case .Invalid(let message):
             writeInt(&buf, Int32(1))
             FfiConverterString.write(message, into: &buf)
-            
+
         }
     }
 }
 
-
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public func FfiConverterTypeXgrammarError_lift(_ buf: RustBuffer) throws -> XgrammarError {
     return try FfiConverterTypeXgrammarError.lift(buf)
 }
 
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public func FfiConverterTypeXgrammarError_lower(_ value: XgrammarError) -> RustBuffer {
     return FfiConverterTypeXgrammarError.lower(value)
 }
 
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterOptionInt32: FfiConverterRustBuffer {
+private struct FfiConverterOptionInt32: FfiConverterRustBuffer {
     typealias SwiftType = Int32?
 
     public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
@@ -1857,9 +1813,9 @@ fileprivate struct FfiConverterOptionInt32: FfiConverterRustBuffer {
 }
 
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterOptionString: FfiConverterRustBuffer {
+private struct FfiConverterOptionString: FfiConverterRustBuffer {
     typealias SwiftType = String?
 
     public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
@@ -1881,9 +1837,9 @@ fileprivate struct FfiConverterOptionString: FfiConverterRustBuffer {
 }
 
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterOptionSequenceInt32: FfiConverterRustBuffer {
+private struct FfiConverterOptionSequenceInt32: FfiConverterRustBuffer {
     typealias SwiftType = [Int32]?
 
     public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
@@ -1905,9 +1861,9 @@ fileprivate struct FfiConverterOptionSequenceInt32: FfiConverterRustBuffer {
 }
 
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterSequenceInt32: FfiConverterRustBuffer {
+private struct FfiConverterSequenceInt32: FfiConverterRustBuffer {
     typealias SwiftType = [Int32]
 
     public static func write(_ value: [Int32], into buf: inout [UInt8]) {
@@ -1922,7 +1878,7 @@ fileprivate struct FfiConverterSequenceInt32: FfiConverterRustBuffer {
         let len: Int32 = try readInt(&buf)
         var seq = [Int32]()
         seq.reserveCapacity(Int(len))
-        for _ in 0 ..< len {
+        for _ in 0..<len {
             seq.append(try FfiConverterInt32.read(from: &buf))
         }
         return seq
@@ -1930,9 +1886,9 @@ fileprivate struct FfiConverterSequenceInt32: FfiConverterRustBuffer {
 }
 
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterSequenceString: FfiConverterRustBuffer {
+private struct FfiConverterSequenceString: FfiConverterRustBuffer {
     typealias SwiftType = [String]
 
     public static func write(_ value: [String], into buf: inout [UInt8]) {
@@ -1947,7 +1903,7 @@ fileprivate struct FfiConverterSequenceString: FfiConverterRustBuffer {
         let len: Int32 = try readInt(&buf)
         var seq = [String]()
         seq.reserveCapacity(Int(len))
-        for _ in 0 ..< len {
+        for _ in 0..<len {
             seq.append(try FfiConverterString.read(from: &buf))
         }
         return seq
@@ -1955,9 +1911,9 @@ fileprivate struct FfiConverterSequenceString: FfiConverterRustBuffer {
 }
 
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterSequenceData: FfiConverterRustBuffer {
+private struct FfiConverterSequenceData: FfiConverterRustBuffer {
     typealias SwiftType = [Data]
 
     public static func write(_ value: [Data], into buf: inout [UInt8]) {
@@ -1972,106 +1928,127 @@ fileprivate struct FfiConverterSequenceData: FfiConverterRustBuffer {
         let len: Int32 = try readInt(&buf)
         var seq = [Data]()
         seq.reserveCapacity(Int(len))
-        for _ in 0 ..< len {
+        for _ in 0..<len {
             seq.append(try FfiConverterData.read(from: &buf))
         }
         return seq
     }
 }
-public func compiledGrammarDeserializeJson(jsonString: String, tokenizerInfo: TokenizerInfo)throws  -> CompiledGrammar  {
-    return try  FfiConverterTypeCompiledGrammar_lift(try rustCallWithError(FfiConverterTypeXgrammarError_lift) {
-    uniffi_xgrammar_rs_fn_func_compiled_grammar_deserialize_json(
-        FfiConverterString.lower(jsonString),
-        FfiConverterTypeTokenizerInfo_lower(tokenizerInfo),$0
-    )
-})
+public func compiledGrammarDeserializeJson(jsonString: String, tokenizerInfo: TokenizerInfo) throws
+    -> CompiledGrammar
+{
+    return try FfiConverterTypeCompiledGrammar_lift(
+        try rustCallWithError(FfiConverterTypeXgrammarError_lift) {
+            uniffi_xgrammar_rs_fn_func_compiled_grammar_deserialize_json(
+                FfiConverterString.lower(jsonString),
+                FfiConverterTypeTokenizerInfo_lower(tokenizerInfo), $0
+            )
+        })
 }
-public func grammarBuiltinJsonGrammar() -> Grammar  {
-    return try!  FfiConverterTypeGrammar_lift(try! rustCall() {
-    uniffi_xgrammar_rs_fn_func_grammar_builtin_json_grammar($0
-    )
-})
+public func grammarBuiltinJsonGrammar() -> Grammar {
+    return try! FfiConverterTypeGrammar_lift(
+        try! rustCall {
+            uniffi_xgrammar_rs_fn_func_grammar_builtin_json_grammar(
+                $0
+            )
+        })
 }
-public func grammarConcat(grammars: [String])throws  -> Grammar  {
-    return try  FfiConverterTypeGrammar_lift(try rustCallWithError(FfiConverterTypeXgrammarError_lift) {
-    uniffi_xgrammar_rs_fn_func_grammar_concat(
-        FfiConverterSequenceString.lower(grammars),$0
-    )
-})
+public func grammarConcat(grammars: [String]) throws -> Grammar {
+    return try FfiConverterTypeGrammar_lift(
+        try rustCallWithError(FfiConverterTypeXgrammarError_lift) {
+            uniffi_xgrammar_rs_fn_func_grammar_concat(
+                FfiConverterSequenceString.lower(grammars), $0
+            )
+        })
 }
-public func grammarDeserializeJson(jsonString: String)throws  -> Grammar  {
-    return try  FfiConverterTypeGrammar_lift(try rustCallWithError(FfiConverterTypeXgrammarError_lift) {
-    uniffi_xgrammar_rs_fn_func_grammar_deserialize_json(
-        FfiConverterString.lower(jsonString),$0
-    )
-})
+public func grammarDeserializeJson(jsonString: String) throws -> Grammar {
+    return try FfiConverterTypeGrammar_lift(
+        try rustCallWithError(FfiConverterTypeXgrammarError_lift) {
+            uniffi_xgrammar_rs_fn_func_grammar_deserialize_json(
+                FfiConverterString.lower(jsonString), $0
+            )
+        })
 }
-public func grammarFromEbnf(ebnfString: String, rootRuleName: String)throws  -> Grammar  {
-    return try  FfiConverterTypeGrammar_lift(try rustCallWithError(FfiConverterTypeXgrammarError_lift) {
-    uniffi_xgrammar_rs_fn_func_grammar_from_ebnf(
-        FfiConverterString.lower(ebnfString),
-        FfiConverterString.lower(rootRuleName),$0
-    )
-})
+public func grammarFromEbnf(ebnfString: String, rootRuleName: String) throws -> Grammar {
+    return try FfiConverterTypeGrammar_lift(
+        try rustCallWithError(FfiConverterTypeXgrammarError_lift) {
+            uniffi_xgrammar_rs_fn_func_grammar_from_ebnf(
+                FfiConverterString.lower(ebnfString),
+                FfiConverterString.lower(rootRuleName), $0
+            )
+        })
 }
-public func grammarFromJsonSchema(schema: String, anyWhitespace: Bool, indent: Int32?, separatorItem: String?, separatorKv: String?, strictMode: Bool, maxWhitespaceCnt: Int32?, printConvertedEbnf: Bool, anyOrder: Bool)throws  -> Grammar  {
-    return try  FfiConverterTypeGrammar_lift(try rustCallWithError(FfiConverterTypeXgrammarError_lift) {
-    uniffi_xgrammar_rs_fn_func_grammar_from_json_schema(
-        FfiConverterString.lower(schema),
-        FfiConverterBool.lower(anyWhitespace),
-        FfiConverterOptionInt32.lower(indent),
-        FfiConverterOptionString.lower(separatorItem),
-        FfiConverterOptionString.lower(separatorKv),
-        FfiConverterBool.lower(strictMode),
-        FfiConverterOptionInt32.lower(maxWhitespaceCnt),
-        FfiConverterBool.lower(printConvertedEbnf),
-        FfiConverterBool.lower(anyOrder),$0
-    )
-})
+public func grammarFromJsonSchema(
+    schema: String, anyWhitespace: Bool, indent: Int32?, separatorItem: String?,
+    separatorKv: String?, strictMode: Bool, maxWhitespaceCnt: Int32?, printConvertedEbnf: Bool,
+    anyOrder: Bool
+) throws -> Grammar {
+    return try FfiConverterTypeGrammar_lift(
+        try rustCallWithError(FfiConverterTypeXgrammarError_lift) {
+            uniffi_xgrammar_rs_fn_func_grammar_from_json_schema(
+                FfiConverterString.lower(schema),
+                FfiConverterBool.lower(anyWhitespace),
+                FfiConverterOptionInt32.lower(indent),
+                FfiConverterOptionString.lower(separatorItem),
+                FfiConverterOptionString.lower(separatorKv),
+                FfiConverterBool.lower(strictMode),
+                FfiConverterOptionInt32.lower(maxWhitespaceCnt),
+                FfiConverterBool.lower(printConvertedEbnf),
+                FfiConverterBool.lower(anyOrder), $0
+            )
+        })
 }
-public func grammarFromRegex(regexString: String, printConvertedEbnf: Bool)throws  -> Grammar  {
-    return try  FfiConverterTypeGrammar_lift(try rustCallWithError(FfiConverterTypeXgrammarError_lift) {
-    uniffi_xgrammar_rs_fn_func_grammar_from_regex(
-        FfiConverterString.lower(regexString),
-        FfiConverterBool.lower(printConvertedEbnf),$0
-    )
-})
+public func grammarFromRegex(regexString: String, printConvertedEbnf: Bool) throws -> Grammar {
+    return try FfiConverterTypeGrammar_lift(
+        try rustCallWithError(FfiConverterTypeXgrammarError_lift) {
+            uniffi_xgrammar_rs_fn_func_grammar_from_regex(
+                FfiConverterString.lower(regexString),
+                FfiConverterBool.lower(printConvertedEbnf), $0
+            )
+        })
 }
-public func grammarFromStructuralTag(structuralTagJson: String)throws  -> Grammar  {
-    return try  FfiConverterTypeGrammar_lift(try rustCallWithError(FfiConverterTypeXgrammarError_lift) {
-    uniffi_xgrammar_rs_fn_func_grammar_from_structural_tag(
-        FfiConverterString.lower(structuralTagJson),$0
-    )
-})
+public func grammarFromStructuralTag(structuralTagJson: String) throws -> Grammar {
+    return try FfiConverterTypeGrammar_lift(
+        try rustCallWithError(FfiConverterTypeXgrammarError_lift) {
+            uniffi_xgrammar_rs_fn_func_grammar_from_structural_tag(
+                FfiConverterString.lower(structuralTagJson), $0
+            )
+        })
 }
-public func grammarUnion(grammars: [String])throws  -> Grammar  {
-    return try  FfiConverterTypeGrammar_lift(try rustCallWithError(FfiConverterTypeXgrammarError_lift) {
-    uniffi_xgrammar_rs_fn_func_grammar_union(
-        FfiConverterSequenceString.lower(grammars),$0
-    )
-})
+public func grammarUnion(grammars: [String]) throws -> Grammar {
+    return try FfiConverterTypeGrammar_lift(
+        try rustCallWithError(FfiConverterTypeXgrammarError_lift) {
+            uniffi_xgrammar_rs_fn_func_grammar_union(
+                FfiConverterSequenceString.lower(grammars), $0
+            )
+        })
 }
-public func tokenizerInfoDetectMetadataFromHf(backendStr: String)throws  -> String  {
-    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeXgrammarError_lift) {
-    uniffi_xgrammar_rs_fn_func_tokenizer_info__detect_metadata_from_hf(
-        FfiConverterString.lower(backendStr),$0
-    )
-})
+public func tokenizerInfoDetectMetadataFromHf(backendStr: String) throws -> String {
+    return try FfiConverterString.lift(
+        try rustCallWithError(FfiConverterTypeXgrammarError_lift) {
+            uniffi_xgrammar_rs_fn_func_tokenizer_info__detect_metadata_from_hf(
+                FfiConverterString.lower(backendStr), $0
+            )
+        })
 }
-public func tokenizerInfoDeserializeJson(jsonString: String)throws  -> TokenizerInfo  {
-    return try  FfiConverterTypeTokenizerInfo_lift(try rustCallWithError(FfiConverterTypeXgrammarError_lift) {
-    uniffi_xgrammar_rs_fn_func_tokenizer_info_deserialize_json(
-        FfiConverterString.lower(jsonString),$0
-    )
-})
+public func tokenizerInfoDeserializeJson(jsonString: String) throws -> TokenizerInfo {
+    return try FfiConverterTypeTokenizerInfo_lift(
+        try rustCallWithError(FfiConverterTypeXgrammarError_lift) {
+            uniffi_xgrammar_rs_fn_func_tokenizer_info_deserialize_json(
+                FfiConverterString.lower(jsonString), $0
+            )
+        })
 }
-public func tokenizerInfoFromVocabAndMetadata(encodedVocab: [String], metadata: String)throws  -> TokenizerInfo  {
-    return try  FfiConverterTypeTokenizerInfo_lift(try rustCallWithError(FfiConverterTypeXgrammarError_lift) {
-    uniffi_xgrammar_rs_fn_func_tokenizer_info_from_vocab_and_metadata(
-        FfiConverterSequenceString.lower(encodedVocab),
-        FfiConverterString.lower(metadata),$0
-    )
-})
+public func tokenizerInfoFromVocabAndMetadata(encodedVocab: [String], metadata: String) throws
+    -> TokenizerInfo
+{
+    return try FfiConverterTypeTokenizerInfo_lift(
+        try rustCallWithError(FfiConverterTypeXgrammarError_lift) {
+            uniffi_xgrammar_rs_fn_func_tokenizer_info_from_vocab_and_metadata(
+                FfiConverterSequenceString.lower(encodedVocab),
+                FfiConverterString.lower(metadata), $0
+            )
+        })
 }
 
 private enum InitializationResult {
@@ -2089,142 +2066,142 @@ private let initializationResult: InitializationResult = {
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
     }
-    if (uniffi_xgrammar_rs_checksum_func_compiled_grammar_deserialize_json() != 24099) {
+    if uniffi_xgrammar_rs_checksum_func_compiled_grammar_deserialize_json() != 24099 {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_xgrammar_rs_checksum_func_grammar_builtin_json_grammar() != 8945) {
+    if uniffi_xgrammar_rs_checksum_func_grammar_builtin_json_grammar() != 8945 {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_xgrammar_rs_checksum_func_grammar_concat() != 5519) {
+    if uniffi_xgrammar_rs_checksum_func_grammar_concat() != 5519 {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_xgrammar_rs_checksum_func_grammar_deserialize_json() != 60886) {
+    if uniffi_xgrammar_rs_checksum_func_grammar_deserialize_json() != 60886 {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_xgrammar_rs_checksum_func_grammar_from_ebnf() != 5744) {
+    if uniffi_xgrammar_rs_checksum_func_grammar_from_ebnf() != 5744 {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_xgrammar_rs_checksum_func_grammar_from_json_schema() != 11142) {
+    if uniffi_xgrammar_rs_checksum_func_grammar_from_json_schema() != 11142 {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_xgrammar_rs_checksum_func_grammar_from_regex() != 30139) {
+    if uniffi_xgrammar_rs_checksum_func_grammar_from_regex() != 30139 {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_xgrammar_rs_checksum_func_grammar_from_structural_tag() != 22672) {
+    if uniffi_xgrammar_rs_checksum_func_grammar_from_structural_tag() != 22672 {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_xgrammar_rs_checksum_func_grammar_union() != 26047) {
+    if uniffi_xgrammar_rs_checksum_func_grammar_union() != 26047 {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_xgrammar_rs_checksum_func_tokenizer_info__detect_metadata_from_hf() != 49208) {
+    if uniffi_xgrammar_rs_checksum_func_tokenizer_info__detect_metadata_from_hf() != 49208 {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_xgrammar_rs_checksum_func_tokenizer_info_deserialize_json() != 44800) {
+    if uniffi_xgrammar_rs_checksum_func_tokenizer_info_deserialize_json() != 44800 {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_xgrammar_rs_checksum_func_tokenizer_info_from_vocab_and_metadata() != 40111) {
+    if uniffi_xgrammar_rs_checksum_func_tokenizer_info_from_vocab_and_metadata() != 40111 {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_xgrammar_rs_checksum_method_compiledgrammar_grammar() != 43562) {
+    if uniffi_xgrammar_rs_checksum_method_compiledgrammar_grammar() != 43562 {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_xgrammar_rs_checksum_method_compiledgrammar_memory_size_bytes() != 47290) {
+    if uniffi_xgrammar_rs_checksum_method_compiledgrammar_memory_size_bytes() != 47290 {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_xgrammar_rs_checksum_method_compiledgrammar_serialize_json() != 34432) {
+    if uniffi_xgrammar_rs_checksum_method_compiledgrammar_serialize_json() != 34432 {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_xgrammar_rs_checksum_method_compiledgrammar_tokenizer_info() != 901) {
+    if uniffi_xgrammar_rs_checksum_method_compiledgrammar_tokenizer_info() != 901 {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_xgrammar_rs_checksum_method_grammarcompiler_cache_limit_bytes() != 44569) {
+    if uniffi_xgrammar_rs_checksum_method_grammarcompiler_cache_limit_bytes() != 44569 {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_xgrammar_rs_checksum_method_grammarcompiler_clear_cache() != 6194) {
+    if uniffi_xgrammar_rs_checksum_method_grammarcompiler_clear_cache() != 6194 {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_xgrammar_rs_checksum_method_grammarcompiler_compile_builtin_json_grammar() != 55798) {
+    if uniffi_xgrammar_rs_checksum_method_grammarcompiler_compile_builtin_json_grammar() != 55798 {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_xgrammar_rs_checksum_method_grammarcompiler_compile_grammar_ebnf() != 40219) {
+    if uniffi_xgrammar_rs_checksum_method_grammarcompiler_compile_grammar_ebnf() != 40219 {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_xgrammar_rs_checksum_method_grammarcompiler_compile_grammar_from_strings() != 59367) {
+    if uniffi_xgrammar_rs_checksum_method_grammarcompiler_compile_grammar_from_strings() != 59367 {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_xgrammar_rs_checksum_method_grammarcompiler_compile_json_schema() != 53909) {
+    if uniffi_xgrammar_rs_checksum_method_grammarcompiler_compile_json_schema() != 53909 {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_xgrammar_rs_checksum_method_grammarcompiler_compile_regex() != 40922) {
+    if uniffi_xgrammar_rs_checksum_method_grammarcompiler_compile_regex() != 40922 {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_xgrammar_rs_checksum_method_grammarcompiler_compile_structural_tag() != 2173) {
+    if uniffi_xgrammar_rs_checksum_method_grammarcompiler_compile_structural_tag() != 2173 {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_xgrammar_rs_checksum_method_grammarcompiler_get_cache_size_bytes() != 950) {
+    if uniffi_xgrammar_rs_checksum_method_grammarcompiler_get_cache_size_bytes() != 950 {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_xgrammar_rs_checksum_method_grammar_serialize_json() != 42309) {
+    if uniffi_xgrammar_rs_checksum_method_grammar_serialize_json() != 42309 {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_xgrammar_rs_checksum_method_grammar_to_string() != 5604) {
+    if uniffi_xgrammar_rs_checksum_method_grammar_to_string() != 5604 {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_xgrammar_rs_checksum_method_grammarmatcher_accept_string() != 40620) {
+    if uniffi_xgrammar_rs_checksum_method_grammarmatcher_accept_string() != 40620 {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_xgrammar_rs_checksum_method_grammarmatcher_accept_token() != 45185) {
+    if uniffi_xgrammar_rs_checksum_method_grammarmatcher_accept_token() != 45185 {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_xgrammar_rs_checksum_method_grammarmatcher_fork() != 24213) {
+    if uniffi_xgrammar_rs_checksum_method_grammarmatcher_fork() != 24213 {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_xgrammar_rs_checksum_method_grammarmatcher_is_completed() != 27310) {
+    if uniffi_xgrammar_rs_checksum_method_grammarmatcher_is_completed() != 27310 {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_xgrammar_rs_checksum_method_grammarmatcher_is_terminated() != 11311) {
+    if uniffi_xgrammar_rs_checksum_method_grammarmatcher_is_terminated() != 11311 {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_xgrammar_rs_checksum_method_grammarmatcher_reset() != 12638) {
+    if uniffi_xgrammar_rs_checksum_method_grammarmatcher_reset() != 12638 {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_xgrammar_rs_checksum_method_grammarmatcher_rollback() != 44035) {
+    if uniffi_xgrammar_rs_checksum_method_grammarmatcher_rollback() != 44035 {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_xgrammar_rs_checksum_method_grammarmatcher_stop_token_ids() != 15172) {
+    if uniffi_xgrammar_rs_checksum_method_grammarmatcher_stop_token_ids() != 15172 {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_xgrammar_rs_checksum_method_tokenizerinfo_add_prefix_space() != 31876) {
+    if uniffi_xgrammar_rs_checksum_method_tokenizerinfo_add_prefix_space() != 31876 {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_xgrammar_rs_checksum_method_tokenizerinfo_decoded_vocab() != 3468) {
+    if uniffi_xgrammar_rs_checksum_method_tokenizerinfo_decoded_vocab() != 3468 {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_xgrammar_rs_checksum_method_tokenizerinfo_dump_metadata() != 19705) {
+    if uniffi_xgrammar_rs_checksum_method_tokenizerinfo_dump_metadata() != 19705 {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_xgrammar_rs_checksum_method_tokenizerinfo_serialize_json() != 60728) {
+    if uniffi_xgrammar_rs_checksum_method_tokenizerinfo_serialize_json() != 60728 {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_xgrammar_rs_checksum_method_tokenizerinfo_special_token_ids() != 12090) {
+    if uniffi_xgrammar_rs_checksum_method_tokenizerinfo_special_token_ids() != 12090 {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_xgrammar_rs_checksum_method_tokenizerinfo_stop_token_ids() != 51068) {
+    if uniffi_xgrammar_rs_checksum_method_tokenizerinfo_stop_token_ids() != 51068 {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_xgrammar_rs_checksum_method_tokenizerinfo_vocab_size() != 15343) {
+    if uniffi_xgrammar_rs_checksum_method_tokenizerinfo_vocab_size() != 15343 {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_xgrammar_rs_checksum_method_tokenizerinfo_vocab_type() != 8015) {
+    if uniffi_xgrammar_rs_checksum_method_tokenizerinfo_vocab_type() != 8015 {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_xgrammar_rs_checksum_constructor_grammarcompiler_new() != 22434) {
+    if uniffi_xgrammar_rs_checksum_constructor_grammarcompiler_new() != 22434 {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_xgrammar_rs_checksum_constructor_grammarmatcher_new() != 41324) {
+    if uniffi_xgrammar_rs_checksum_constructor_grammarmatcher_new() != 41324 {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_xgrammar_rs_checksum_constructor_tokenizerinfo_new() != 12687) {
+    if uniffi_xgrammar_rs_checksum_constructor_tokenizerinfo_new() != 12687 {
         return InitializationResult.apiChecksumMismatch
     }
 

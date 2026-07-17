@@ -16,9 +16,7 @@ model_name = "Qwen/Qwen2.5-0.5B-Instruct"
 # model_name = "microsoft/Phi-3.5-mini-instruct"
 # model_name = "meta-llama/Llama-3.2-1B-Instruct"
 
-model = AutoModelForCausalLM.from_pretrained(
-    model_name, torch_dtype=torch.float32, device_map=device
-)
+model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=torch.float32, device_map=device)
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 config = AutoConfig.from_pretrained(model_name)
 # This can be larger than tokenizer.vocab_size due to paddings
@@ -43,8 +41,7 @@ for prompt in prompts:
     ]
     messages_list.append(messages)
 texts = [
-    tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-    for messages in messages_list
+    tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True) for messages in messages_list
 ]
 
 # For batched requests, either use a model that has a padding token, or specify your own
@@ -53,15 +50,10 @@ model_inputs = tokenizer(texts, return_tensors="pt").to(model.device)
 
 # 3. Instantiate logits_processor per each generate, and call generate()
 xgr_logits_processor = xgr.contrib.hf.LogitsProcessor(compiled_grammar)
-generated_ids = model.generate(
-    **model_inputs, max_new_tokens=512, logits_processor=[xgr_logits_processor]
-)
+generated_ids = model.generate(**model_inputs, max_new_tokens=512, logits_processor=[xgr_logits_processor])
 
 # 4. Post-process outputs and print out response
-generated_ids = [
-    output_ids[len(input_ids) :]
-    for input_ids, output_ids in zip(model_inputs.input_ids, generated_ids)
-]
+generated_ids = [output_ids[len(input_ids) :] for input_ids, output_ids in zip(model_inputs.input_ids, generated_ids)]
 responses = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
 for response in responses:
     print(response, end="\n\n")

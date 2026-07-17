@@ -22,10 +22,7 @@ _BYTE_TOKEN_PREFIX = "\ue000xgrammar-bytes:"
 
 
 def _encode_vocab_for_binding(encoded_vocab: List[Union[bytes, str]]) -> List[str]:
-    return [
-        _BYTE_TOKEN_PREFIX + token.hex() if isinstance(token, bytes) else token
-        for token in encoded_vocab
-    ]
+    return [_BYTE_TOKEN_PREFIX + token.hex() if isinstance(token, bytes) else token for token in encoded_vocab]
 
 
 class VocabType(Enum):
@@ -122,9 +119,7 @@ class TokenizerInfo(XGRObject):
             return False
 
         # helper to check if tokenizer is a tiktoken tokenizer
-        has_tiktoken_encoding = hasattr(tokenizer, "tokenizer") and isinstance(
-            tokenizer.tokenizer, tiktoken.Encoding
-        )
+        has_tiktoken_encoding = hasattr(tokenizer, "tokenizer") and isinstance(tokenizer.tokenizer, tiktoken.Encoding)
 
         filename_pattern = (
             hasattr(tokenizer, "vocab_files_names")
@@ -176,8 +171,7 @@ class TokenizerInfo(XGRObject):
             and isinstance(tokenizer.tokenizer.sp_model, sentencepiece.SentencePieceProcessor)
         ) or (
             # Support Teuken-7B-instruct-v0.6
-            hasattr(tokenizer, "tok")
-            and isinstance(tokenizer.tok, sentencepiece.SentencePieceProcessor)
+            hasattr(tokenizer, "tok") and isinstance(tokenizer.tok, sentencepiece.SentencePieceProcessor)
         )
 
         return has_sp_model_attr or has_nested_sp_model_attr
@@ -404,9 +398,7 @@ class TokenizerInfo(XGRObject):
         return str(self._handle.dump_metadata())
 
     @staticmethod
-    def from_vocab_and_metadata(
-        encoded_vocab: List[Union[bytes, str]], metadata: str
-    ) -> "TokenizerInfo":
+    def from_vocab_and_metadata(encoded_vocab: List[Union[bytes, str]], metadata: str) -> "TokenizerInfo":
         """Construct the tokenizer info from the vocabulary and the metadata string in json
         format.
 
@@ -419,9 +411,7 @@ class TokenizerInfo(XGRObject):
             The metadata string in json format.
         """
         return TokenizerInfo._create_from_handle(
-            _core.TokenizerInfo.from_vocab_and_metadata(
-                _encode_vocab_for_binding(encoded_vocab), metadata
-            )
+            _core.TokenizerInfo.from_vocab_and_metadata(_encode_vocab_for_binding(encoded_vocab), metadata)
         )
 
     @staticmethod

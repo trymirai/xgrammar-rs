@@ -3,8 +3,7 @@ use clap::{CommandFactory, Parser, Subcommand};
 use cli_tools::{
     configs::{HOST_TARGET, PlatformsConfig},
     languages::{
-        LanguageBackend, PythonLanguageBackend, RustLanguageBackend, SwiftLanguageBackend,
-        TypeScriptLanguageBackend,
+        LanguageBackend, PythonLanguageBackend, RustLanguageBackend, SwiftLanguageBackend, TypeScriptLanguageBackend,
     },
     release::run_release,
     sync::run_sync,
@@ -87,9 +86,7 @@ fn run_verify(config: &PlatformsConfig) -> Result<()> {
     let (output, _) = Command::git_status_porcelain().output()?;
     if !output.is_empty() {
         eprintln!("{output}");
-        return Err(anyhow!(
-            "The repository has uncommitted changes after building all languages"
-        ));
+        return Err(anyhow!("The repository has uncommitted changes after building all languages"));
     }
     Ok(())
 }
@@ -115,52 +112,49 @@ fn main() -> Result<()> {
         Some(Commands::Setup {
             include_platform_specific,
         }) => run_setup(include_platform_specific)?,
-        Some(Commands::Install { language }) => {
-            language_backend(language, config)?.install()?
-        }
+        Some(Commands::Install {
+            language,
+        }) => language_backend(language, config)?.install()?,
         Some(Commands::Build {
             language,
             configuration,
             targets,
             capabilities,
-        }) => language_backend(language, config)?.build(
-            configuration,
-            targets,
-            capabilities,
-        )?,
-        Some(Commands::Test { language }) => {
+        }) => language_backend(language, config)?.build(configuration, targets, capabilities)?,
+        Some(Commands::Test {
+            language,
+        }) => {
             let configuration = Configuration::Release;
             let capabilities = vec![];
             let backend = language_backend(language, config.clone())?;
             if backend.expects_prebuild_for_run() {
-                backend.build(
-                    configuration,
-                    vec![host_target.clone()],
-                    capabilities.clone(),
-                )?;
+                backend.build(configuration, vec![host_target.clone()], capabilities.clone())?;
             }
             backend.test(configuration, host_target.clone(), capabilities)?
-        }
-        Some(Commands::Example { language, name }) => {
+        },
+        Some(Commands::Example {
+            language,
+            name,
+        }) => {
             let configuration = Configuration::Release;
             let capabilities = vec![];
             let backend = language_backend(language, config.clone())?;
             if backend.expects_prebuild_for_run() {
-                backend.build(
-                    configuration,
-                    vec![host_target.clone()],
-                    capabilities.clone(),
-                )?;
+                backend.build(configuration, vec![host_target.clone()], capabilities.clone())?;
             }
             backend.example(&name, configuration, host_target.clone(), capabilities)?
-        }
-        Some(Commands::Sync { check }) => run_sync(check)?,
+        },
+        Some(Commands::Sync {
+            check,
+        }) => run_sync(check)?,
         Some(Commands::Verify) => run_verify(&config)?,
-        Some(Commands::Release { version }) => run_release(&version)?,
+        Some(Commands::Release {
+            version,
+        }) => run_release(&version)?,
         None => {
             let mut cmd = Cli::command();
             cmd.print_help()?;
-        }
+        },
     }
 
     Ok(())

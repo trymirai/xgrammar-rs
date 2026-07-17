@@ -37,8 +37,7 @@ pub struct WorkspaceManifest {
 impl WorkspaceManifest {
     pub fn load() -> Result<Self> {
         let path = Paths::new()?.workspace_manifest_path();
-        let body = fs::read_to_string(&path)
-            .with_context(|| format!("Failed to read {}", path.display()))?;
+        let body = fs::read_to_string(&path).with_context(|| format!("Failed to read {}", path.display()))?;
         let manifest: WorkspaceManifest = toml::from_str(&body)?;
         Ok(manifest)
     }

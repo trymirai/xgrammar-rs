@@ -5,8 +5,8 @@ use syn::Ident;
 use crate::{
     backends::Backend,
     contexts::{
-        ClassContext, EnumerationContext, EnumerationShape, ErrorContext,
-        ImplementationContext, MethodMetadata, StructureContext,
+        ClassContext, EnumerationContext, ErrorContext, ImplementationContext,
+        MethodMetadata, StructureContext,
     },
     types::MethodFlavor,
 };
@@ -16,7 +16,6 @@ pub struct Pyo3;
 impl Backend for Pyo3 {
     fn structure_attributes(_context: &StructureContext) -> TokenStream {
         quote! {
-            #[cfg_attr(feature = "bindings-pyo3", pyo3_stub_gen::derive::gen_stub_pyclass)]
             #[cfg_attr(feature = "bindings-pyo3", pyo3::pyclass(get_all, from_py_object))]
         }
     }
@@ -32,7 +31,6 @@ impl Backend for Pyo3 {
 
     fn class_attributes(_context: &ClassContext) -> TokenStream {
         quote! {
-            #[cfg_attr(feature = "bindings-pyo3", pyo3_stub_gen::derive::gen_stub_pyclass)]
             #[cfg_attr(feature = "bindings-pyo3", pyo3::pyclass(from_py_object))]
         }
     }
@@ -41,17 +39,8 @@ impl Backend for Pyo3 {
         registration(&context.item.ident)
     }
 
-    fn enumeration_attributes(context: &EnumerationContext) -> TokenStream {
-        let stub_gen_attribute = match context.shape {
-            EnumerationShape::Unit => quote! {
-                #[cfg_attr(feature = "bindings-pyo3", pyo3_stub_gen::derive::gen_stub_pyclass_enum)]
-            },
-            EnumerationShape::Data => quote! {
-                #[cfg_attr(feature = "bindings-pyo3", pyo3_stub_gen::derive::gen_stub_pyclass_complex_enum)]
-            },
-        };
+    fn enumeration_attributes(_context: &EnumerationContext) -> TokenStream {
         quote! {
-            #stub_gen_attribute
             #[cfg_attr(feature = "bindings-pyo3", pyo3::pyclass(eq, from_py_object))]
         }
     }
@@ -130,7 +119,6 @@ fn implementation_expansion(context: &ImplementationContext) -> TokenStream {
         const _: () = {
             #[allow(unused_imports)]
             use ::pyo3::prelude::*;
-            #[pyo3_stub_gen::derive::gen_stub_pymethods]
             #[pyo3::pymethods]
             impl #self_type {
                 #( #wrappers )*
@@ -141,16 +129,11 @@ fn implementation_expansion(context: &ImplementationContext) -> TokenStream {
 
 fn build_stream_protocol(next_method: &syn::ImplItemFn) -> TokenStream {
     let next_ident = &next_method.sig.ident;
-    let item_repr = next_item_type_repr(&next_method.sig.output)
-        .unwrap_or_else(|| "typing.Any".to_string());
-    let anext_repr = format!("collections.abc.Awaitable[{item_repr}]");
-
     quote! {
         pub fn __aiter__(slf: ::pyo3::PyRef<'_, Self>) -> ::pyo3::PyRef<'_, Self> {
             slf
         }
 
-        #[gen_stub(override_return_type(type_repr = #anext_repr, imports = ("collections.abc")))]
         pub fn __anext__<'py>(
             &self,
             py: ::pyo3::Python<'py>,
@@ -170,34 +153,6 @@ fn build_stream_protocol(next_method: &syn::ImplItemFn) -> TokenStream {
             slf
         }
     }
-}
-
-fn next_item_type_repr(output: &syn::ReturnType) -> Option<String> {
-    let return_type = match output {
-        syn::ReturnType::Default => return None,
-        syn::ReturnType::Type(_, return_type) => return_type.as_ref(),
-    };
-    let path = match return_type {
-        syn::Type::Path(type_path) => &type_path.path,
-        _ => return None,
-    };
-    let last = path.segments.last()?;
-    if last.ident != "Option" {
-        return None;
-    }
-    let arguments = match &last.arguments {
-        syn::PathArguments::AngleBracketed(angle) => &angle.args,
-        _ => return None,
-    };
-    let inner = arguments.iter().find_map(|argument| match argument {
-        syn::GenericArgument::Type(inner_type) => Some(inner_type),
-        _ => None,
-    })?;
-    let inner_path = match inner {
-        syn::Type::Path(type_path) => &type_path.path,
-        _ => return None,
-    };
-    Some(inner_path.segments.last()?.ident.to_string())
 }
 
 fn build_method_wrapper(metadata: &MethodMetadata) -> TokenStream {
@@ -277,11 +232,6 @@ fn build_method_wrapper(metadata: &MethodMetadata) -> TokenStream {
     };
 
     if asyncness {
-        let inner_repr = rust_return_to_python_repr(&method.sig.output);
-        let awaitable_repr = format!("collections.abc.Awaitable[{inner_repr}]");
-        let stub_attribute = quote! {
-            #[gen_stub(override_return_type(type_repr = #awaitable_repr, imports = ("collections.abc")))]
-        };
         let py_argument = quote! { py: ::pyo3::Python<'py> };
         let inputs_with_py = if receiver.is_some() {
             if typed_arg_tokens.is_empty() {
@@ -318,7 +268,6 @@ fn build_method_wrapper(metadata: &MethodMetadata) -> TokenStream {
         quote! {
             #pyo3_attribute
             #pyo3_name_attribute
-            #stub_attribute
             pub fn #wrapper_ident<'py>(
                 #inputs_with_py
             ) -> ::pyo3::PyResult<::pyo3::Bound<'py, ::pyo3::PyAny>> {
@@ -352,112 +301,6 @@ fn strip_outer_ref(ty: &syn::Type) -> TokenStream {
     } else {
         quote! { #ty }
     }
-}
-
-fn rust_return_to_python_repr(output: &syn::ReturnType) -> String {
-    let return_type = match output {
-        syn::ReturnType::Default => return "None".to_string(),
-        syn::ReturnType::Type(_, return_type) => return_type.as_ref(),
-    };
-    rust_type_to_python_repr(unwrap_result(return_type))
-}
-
-fn rust_return_to_python_repr_for_self(
-    output: &syn::ReturnType,
-    self_type: &syn::Type,
-) -> String {
-    let representation = rust_return_to_python_repr(output);
-    let self_name = type_path_last_ident(self_type)
-        .map(|ident| ident.to_string())
-        .unwrap_or_else(|| "typing.Any".to_string());
-    representation.replace("Self", &self_name)
-}
-
-fn type_path_last_ident(ty: &syn::Type) -> Option<&Ident> {
-    if let syn::Type::Path(type_path) = ty {
-        return type_path.path.segments.last().map(|segment| &segment.ident);
-    }
-    None
-}
-
-fn unwrap_result(ty: &syn::Type) -> &syn::Type {
-    if let syn::Type::Path(type_path) = ty
-        && let Some(last) = type_path.path.segments.last()
-        && last.ident == "Result"
-        && let syn::PathArguments::AngleBracketed(arguments) = &last.arguments
-        && let Some(syn::GenericArgument::Type(inner)) = arguments
-            .args
-            .iter()
-            .find(|argument| matches!(argument, syn::GenericArgument::Type(_)))
-    {
-        return inner;
-    }
-    ty
-}
-
-fn rust_type_to_python_repr(ty: &syn::Type) -> String {
-    match ty {
-        syn::Type::Path(type_path) => {
-            let Some(last) = type_path.path.segments.last() else {
-                return "typing.Any".to_string();
-            };
-            let name = last.ident.to_string();
-            match name.as_str() {
-                "bool" => "builtins.bool".to_string(),
-                "i8" | "i16" | "i32" | "i64" | "i128" | "u8" | "u16"
-                | "u32" | "u64" | "u128" | "isize" | "usize" => {
-                    "builtins.int".to_string()
-                },
-                "f32" | "f64" => "builtins.float".to_string(),
-                "String" | "str" => "builtins.str".to_string(),
-                "Option" => match generic_args(&last.arguments).as_slice() {
-                    [inner] => {
-                        format!("{} | None", rust_type_to_python_repr(inner))
-                    },
-                    _ => "typing.Any".to_string(),
-                },
-                "Vec" => match generic_args(&last.arguments).as_slice() {
-                    [inner] => format!(
-                        "builtins.list[{}]",
-                        rust_type_to_python_repr(inner)
-                    ),
-                    _ => "typing.Any".to_string(),
-                },
-                "HashMap" | "BTreeMap" | "IndexMap" => {
-                    match generic_args(&last.arguments).as_slice() {
-                        [key, value] => {
-                            format!(
-                                "builtins.dict[{}, {}]",
-                                rust_type_to_python_repr(key),
-                                rust_type_to_python_repr(value)
-                            )
-                        },
-                        _ => "typing.Any".to_string(),
-                    }
-                },
-                _ => name,
-            }
-        },
-        syn::Type::Tuple(tuple) if tuple.elems.is_empty() => "None".to_string(),
-        syn::Type::Reference(reference) => {
-            rust_type_to_python_repr(reference.elem.as_ref())
-        },
-        _ => "typing.Any".to_string(),
-    }
-}
-
-fn generic_args(arguments: &syn::PathArguments) -> Vec<&syn::Type> {
-    let syn::PathArguments::AngleBracketed(angle) = arguments else {
-        return Vec::new();
-    };
-    angle
-        .args
-        .iter()
-        .filter_map(|argument| match argument {
-            syn::GenericArgument::Type(ty) => Some(ty),
-            _ => None,
-        })
-        .collect()
 }
 
 fn factory_expansion(
@@ -554,18 +397,14 @@ fn factory_or_constructor_expansion(
                 ::std::result::Result::<_, ::pyo3::PyErr>::Ok(__value)
             }
         };
-        let inner_repr = rust_return_to_python_repr_for_self(output, self_type);
-        let awaitable_repr = format!("collections.abc.Awaitable[{inner_repr}]");
         quote! {
             #[cfg(feature = "bindings-pyo3")]
             const _: () = {
                 #[allow(unused_imports)]
                 use ::pyo3::prelude::*;
-                #[pyo3_stub_gen::derive::gen_stub_pymethods]
                 #[pyo3::pymethods]
                 impl #self_type {
                     #pyo3_method_kind
-                    #[gen_stub(override_return_type(type_repr = #awaitable_repr, imports = ("collections.abc")))]
                     pub fn #wrapper_ident<'py>(
                         py: ::pyo3::Python<'py>,
                         #inputs
@@ -583,7 +422,6 @@ fn factory_or_constructor_expansion(
             const _: () = {
                 #[allow(unused_imports)]
                 use ::pyo3::prelude::*;
-                #[pyo3_stub_gen::derive::gen_stub_pymethods]
                 #[pyo3::pymethods]
                 impl #self_type {
                     #pyo3_method_kind
@@ -625,25 +463,16 @@ fn factory_with_callback_expansion(
     } else {
         quote! { ( #( #synthetic_idents ),* , ) }
     };
-    let callback_arg_reprs: Vec<String> =
-        callback_inputs.iter().map(rust_type_to_python_repr).collect();
-    let callable_repr = format!(
-        "collections.abc.Callable[[{}], None]",
-        callback_arg_reprs.join(", ")
-    );
-
     quote! {
         #[cfg(feature = "bindings-pyo3")]
         const _: () = {
             #[allow(unused_imports)]
             use ::pyo3::prelude::*;
-            #[pyo3_stub_gen::derive::gen_stub_pymethods]
             #[pyo3::pymethods]
             impl #self_type {
                 #[staticmethod]
                 #[pyo3(name = #method_name)]
                 pub fn #wrapper_ident(
-                    #[gen_stub(override_type(type_repr = #callable_repr, imports = ("collections.abc")))]
                     callback: ::pyo3::Py<::pyo3::PyAny>,
                 ) -> ::pyo3::PyResult<Self> {
                     let callback: ::std::boxed::Box<
@@ -695,7 +524,6 @@ fn struct_constructor(item_struct: &syn::ItemStruct) -> TokenStream {
         const _: () = {
             #[allow(unused_imports)]
             use ::pyo3::prelude::*;
-            #[pyo3_stub_gen::derive::gen_stub_pymethods]
             #[pyo3::pymethods]
             impl #type_name {
                 #[new]
@@ -763,14 +591,5 @@ fn error_implementations(type_name: &Ident) -> TokenStream {
             }
         }
 
-        #[cfg(feature = "bindings-pyo3")]
-        impl ::pyo3_stub_gen::PyStubType for #type_name {
-            fn type_output() -> ::pyo3_stub_gen::TypeInfo {
-                ::pyo3_stub_gen::TypeInfo::builtin("str")
-            }
-            fn type_input() -> ::pyo3_stub_gen::TypeInfo {
-                ::pyo3_stub_gen::TypeInfo::builtin("str")
-            }
-        }
     }
 }

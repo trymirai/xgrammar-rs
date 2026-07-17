@@ -60,6 +60,7 @@ impl Backend for Uniffi {
         metadata: &MethodMetadata,
     ) -> TokenStream {
         match metadata.flavor {
+            MethodFlavor::Constructor => constructor_expansion(context, metadata),
             MethodFlavor::Factory => factory_expansion(context, metadata),
             MethodFlavor::FactoryWithCallback => {
                 factory_with_callback_expansion(context, metadata)
@@ -71,6 +72,36 @@ impl Backend for Uniffi {
     fn error_attributes(_context: &ErrorContext) -> TokenStream {
         quote! {
             #[cfg_attr(feature = "bindings-uniffi", derive(uniffi::Error))]
+        }
+    }
+}
+
+fn constructor_expansion(
+    context: &ImplementationContext,
+    metadata: &MethodMetadata,
+) -> TokenStream {
+    let self_type = &context.self_type;
+    let method = &metadata.method;
+    let inputs = &method.sig.inputs;
+    let output = replace_self_in_return(&method.sig.output, self_type);
+    let asyncness = &method.sig.asyncness;
+    let body = &method.block;
+    let export_attribute = if asyncness.is_some() {
+        quote! { #[uniffi::export(async_runtime = "tokio")] }
+    } else {
+        quote! { #[uniffi::export] }
+    };
+
+    // Must be named `new` so UniFFI emits a Swift primary `init` / NAPI-style ctor.
+    // Body is inlined because constructors are extracted from the source impl.
+    quote! {
+        #[cfg(feature = "bindings-uniffi")]
+        #export_attribute
+        impl #self_type {
+            #[uniffi::constructor]
+            pub #asyncness fn new( #inputs ) #output {
+                #body
+            }
         }
     }
 }

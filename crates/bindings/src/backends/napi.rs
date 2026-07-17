@@ -103,6 +103,9 @@ impl Backend for Napi {
         metadata: &MethodMetadata,
     ) -> TokenStream {
         match metadata.flavor {
+            MethodFlavor::Constructor => {
+                constructor_expansion(&context.self_type, metadata)
+            },
             MethodFlavor::Factory => {
                 factory_expansion(&context.self_type, metadata)
             },
@@ -418,6 +421,29 @@ fn enum_variant_classes(
                 }
             }
         };
+    }
+}
+
+fn constructor_expansion(
+    self_type: &syn::Type,
+    metadata: &MethodMetadata,
+) -> TokenStream {
+    let method = &metadata.method;
+    let inputs = &method.sig.inputs;
+    let output = &method.sig.output;
+    let asyncness = &method.sig.asyncness;
+    let body = &method.block;
+
+    // Body is inlined because constructors are extracted from the source impl.
+    quote! {
+        #[cfg(feature = "bindings-napi")]
+        #[napi_derive::napi]
+        impl #self_type {
+            #[napi(constructor)]
+            pub #asyncness fn new( #inputs ) #output {
+                #body
+            }
+        }
     }
 }
 

@@ -116,6 +116,58 @@ impl Grammar {
         max_whitespace_cnt: Option<i32>,
         print_converted_ebnf: bool,
     ) -> Result<Self, String> {
+        Self::from_json_schema_impl(
+            schema,
+            any_whitespace,
+            indent,
+            separators,
+            strict_mode,
+            max_whitespace_cnt,
+            print_converted_ebnf,
+            false,
+        )
+    }
+
+    /// Construct a grammar from JSON schema, optionally allowing object properties in any order.
+    ///
+    /// When `any_order` is true, an object may contain its declared properties in any order.
+    /// Required-property tracking is relaxed: duplicate properties are allowed and a different
+    /// required property may be absent as long as the object has enough entries.
+    ///
+    /// The remaining parameters have the same meaning as in [`Self::from_json_schema`].
+    pub fn from_json_schema_with_any_order(
+        schema: &str,
+        any_whitespace: bool,
+        indent: Option<i32>,
+        separators: Option<(impl AsRef<str>, impl AsRef<str>)>,
+        strict_mode: bool,
+        max_whitespace_cnt: Option<i32>,
+        print_converted_ebnf: bool,
+        any_order: bool,
+    ) -> Result<Self, String> {
+        Self::from_json_schema_impl(
+            schema,
+            any_whitespace,
+            indent,
+            separators,
+            strict_mode,
+            max_whitespace_cnt,
+            print_converted_ebnf,
+            any_order,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn from_json_schema_impl(
+        schema: &str,
+        any_whitespace: bool,
+        indent: Option<i32>,
+        separators: Option<(impl AsRef<str>, impl AsRef<str>)>,
+        strict_mode: bool,
+        max_whitespace_cnt: Option<i32>,
+        print_converted_ebnf: bool,
+        any_order: bool,
+    ) -> Result<Self, String> {
         cxx::let_cxx_string!(schema_cxx = schema);
         let has_indent = indent.is_some();
         let indent_i32: i32 = indent.unwrap_or(0) as i32;
@@ -150,6 +202,7 @@ impl Grammar {
                 has_max_whitespace_cnt,
                 max_whitespace_cnt_i32,
                 print_converted_ebnf,
+                any_order,
                 error_out_cxx.as_mut().get_unchecked_mut(),
             )
         };

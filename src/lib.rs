@@ -229,6 +229,7 @@ mod ffi {
             has_max_whitespace_cnt: bool,
             max_whitespace_cnt: i32,
             print_converted_ebnf: bool,
+            any_order: bool,
             error_out: *mut CxxString,
         ) -> UniquePtr<Grammar>;
 
@@ -339,6 +340,7 @@ mod ffi {
             strict_mode: bool,
             has_max_whitespace_cnt: bool,
             max_whitespace_cnt: i32,
+            any_order: bool,
             error_out: *mut CxxString,
         ) -> UniquePtr<CompiledGrammar>;
 

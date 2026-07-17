@@ -90,6 +90,56 @@ impl GrammarCompiler {
         strict_mode: bool,
         max_whitespace_cnt: Option<i32>,
     ) -> Result<CompiledGrammar, String> {
+        self.compile_json_schema_impl(
+            schema,
+            any_whitespace,
+            indent,
+            separators,
+            strict_mode,
+            max_whitespace_cnt,
+            false,
+        )
+    }
+
+    /// Compile a JSON schema, optionally allowing object properties in any order.
+    ///
+    /// When `any_order` is true, an object may contain its declared properties in any order.
+    /// Required-property tracking is relaxed: duplicate properties are allowed and a different
+    /// required property may be absent as long as the object has enough entries.
+    ///
+    /// The remaining parameters have the same meaning as in [`Self::compile_json_schema`].
+    pub fn compile_json_schema_with_any_order(
+        &mut self,
+        schema: &str,
+        any_whitespace: bool,
+        indent: Option<i32>,
+        separators: Option<(impl AsRef<str>, impl AsRef<str>)>,
+        strict_mode: bool,
+        max_whitespace_cnt: Option<i32>,
+        any_order: bool,
+    ) -> Result<CompiledGrammar, String> {
+        self.compile_json_schema_impl(
+            schema,
+            any_whitespace,
+            indent,
+            separators,
+            strict_mode,
+            max_whitespace_cnt,
+            any_order,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn compile_json_schema_impl(
+        &mut self,
+        schema: &str,
+        any_whitespace: bool,
+        indent: Option<i32>,
+        separators: Option<(impl AsRef<str>, impl AsRef<str>)>,
+        strict_mode: bool,
+        max_whitespace_cnt: Option<i32>,
+        any_order: bool,
+    ) -> Result<CompiledGrammar, String> {
         cxx::let_cxx_string!(schema_cxx = schema);
         let has_indent = indent.is_some();
         let indent_i32: i32 = indent.unwrap_or(0);
@@ -116,6 +166,7 @@ impl GrammarCompiler {
                 strict_mode,
                 max_whitespace_cnt.is_some(),
                 max_whitespace_cnt.unwrap_or(0),
+                any_order,
                 error_out_cxx.as_mut().get_unchecked_mut(),
             )
         };

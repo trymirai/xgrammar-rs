@@ -1,5 +1,4 @@
-//! Adaptive token-mask cache builder — a port of `GrammarMatcherForTokenMaskCache` in
-//! `cpp/grammar_compiler.cc`.
+//! Adaptive token-mask cache builder.
 
 use std::sync::Arc;
 

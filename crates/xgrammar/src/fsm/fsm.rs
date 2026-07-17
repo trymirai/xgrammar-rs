@@ -1,5 +1,4 @@
-//! A mutable finite-state machine stored as an adjacency list — a port of `FSM` in
-//! `cpp/fsm.{h,cc}`.
+//! A mutable finite-state machine stored as an adjacency list.
 //!
 //! States are integer ids; each state owns a `Vec<FsmEdge>`. Aux-bearing edges (repeat,
 //! token, exclude-token) index into the shared `edge_aux_data` buffer.

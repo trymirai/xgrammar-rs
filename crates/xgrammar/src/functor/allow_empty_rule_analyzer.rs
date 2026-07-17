@@ -1,5 +1,4 @@
-//! Determines which rules can match the empty string — a port of `AllowEmptyRuleAnalyzer`
-//! (and its helper `RuleRefGraphFinder`) in `cpp/grammar_functor.cc`.
+//! Determines which rules can match the empty string.
 
 use std::collections::{HashSet, VecDeque};
 
@@ -17,7 +16,7 @@ pub fn allow_empty_rule_ids(grammar: &Grammar) -> Vec<i32> {
     result
 }
 
-/// Builds the inverse reference graph: `graph[referee] = [referrers...]`.
+/// Builds the inverse reference graph: `graph[referee] = [referrers.]`.
 pub(crate) fn rule_ref_graph(grammar: &Grammar) -> Vec<Vec<i32>> {
     let n = grammar.num_rules();
     let mut graph: Vec<Vec<i32>> = vec![Vec::new(); n as usize];

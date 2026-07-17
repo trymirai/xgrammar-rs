@@ -1,5 +1,4 @@
-//! Renames the root rule to `root` — a port of `RootRuleRenamer` in
-//! `cpp/grammar_functor.cc`.
+//! Renames the root rule to `root`.
 
 use std::collections::HashSet;
 

@@ -1,4 +1,4 @@
-//! A disjoint-set (union-find) structure — a port of `cpp/support/union_find_set.h`.
+//! A disjoint-set (union-find) structure.
 //!
 //! Used by the FSM simplification passes to coalesce equivalent states. Only the elements
 //! explicitly [`add`](UnionFindSet::add)ed participate; [`get_all_sets`](UnionFindSet::get_all_sets)

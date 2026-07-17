@@ -1,16 +1,18 @@
-//! Batched matcher operations — a port of `BatchGrammarMatcher` in `cpp/grammar_matcher.cc`.
-//!
-//! Each method applies the corresponding [`GrammarMatcher`] operation across a slice of
-//! matchers, preserving per-matcher order. (The C++ parallelizes via a thread pool; that is a
-//! performance optimization deferred to the perf phase — the results are order-identical.)
+//! Batched matcher operations for processing multiple [`GrammarMatcher`]s in parallel.
 
 use super::{grammar_matcher::GrammarMatcher, matcher_error::MatcherTerminatedError};
 
-/// Batched front end over a slice of [`GrammarMatcher`]s.
+/// A batched version of [`GrammarMatcher`] for better efficiency.
 ///
-/// `max_threads` is retained for API parity with C++; the core batch helpers currently run
-/// sequentially (order-identical to a single-threaded C++ pool). The Python binding
-/// parallelizes `batch_fill_next_token_bitmask` with rayon.
+/// This class supports batch processing of multiple [`GrammarMatcher`] objects in parallel.
+/// It provides batched versions of the core methods of [`GrammarMatcher`], including
+/// [`Self::batch_fill_next_token_bitmask`], [`Self::batch_accept_string`], and
+/// [`Self::batch_accept_token`]. It utilizes multi-threading to process multiple
+/// [`GrammarMatcher`] objects simultaneously, significantly improving efficiency when dealing
+/// with a large number of matchers.
+///
+/// `max_threads` is retained for API parity; the core batch helpers currently run sequentially.
+/// The Python binding parallelizes `batch_fill_next_token_bitmask` with rayon.
 #[derive(Debug, Clone, Copy)]
 pub struct BatchGrammarMatcher {
     max_threads: i32,
@@ -38,7 +40,10 @@ impl BatchGrammarMatcher {
         self.max_threads
     }
 
-    /// Accepts `token_ids[i]` into `matchers[i]`, returning per-matcher success.
+    /// A batched version of [`GrammarMatcher::accept_token`] for better efficiency.
+    ///
+    /// `matchers` is the array of [`GrammarMatcher`] objects. `token_ids` is the array of token
+    /// ids to be accepted. Returns a vector indicating whether each token is accepted.
     ///
     /// # Panics
     /// Panics if the slice lengths differ.
@@ -50,7 +55,10 @@ impl BatchGrammarMatcher {
         matchers.iter_mut().zip(token_ids).map(|(m, &t)| m.accept_token(t)).collect()
     }
 
-    /// Accepts `inputs[i]` (bytes) into `matchers[i]`, returning per-matcher success.
+    /// A batched version of [`GrammarMatcher::accept_string`] for better efficiency.
+    ///
+    /// `matchers` is the array of [`GrammarMatcher`] objects. `inputs` is the array of input
+    /// strings to be accepted. Returns a vector indicating whether each string is accepted.
     ///
     /// # Panics
     /// Panics if the slice lengths differ.
@@ -62,7 +70,10 @@ impl BatchGrammarMatcher {
         matchers.iter_mut().zip(inputs).map(|(m, inp)| m.accept_bytes(inp)).collect()
     }
 
-    /// Rolls each `matchers[i]` back by `num_tokens[i]`.
+    /// A batched version of [`GrammarMatcher::rollback`] for better efficiency.
+    ///
+    /// `matchers` is the array of [`GrammarMatcher`] objects. `num_tokens` is the array of the
+    /// number of tokens to rollback for each matcher.
     ///
     /// # Panics
     /// Panics if the slice lengths differ.
@@ -76,8 +87,12 @@ impl BatchGrammarMatcher {
         }
     }
 
-    /// Fills `bitmask` with one row per matcher: `matchers[i]` writes row `indices[i]` (or row
-    /// `i` if `indices` is `None`).
+    /// A batched version of [`GrammarMatcher::fill_next_token_bitmask`] for better efficiency.
+    ///
+    /// `matchers` is the array of [`GrammarMatcher`] objects. `bitmask` is the pre-allocated
+    /// buffer to store the result bitmasks. `indices` optionally specifies which matcher
+    /// corresponds to which slice of the bitmask tensor. If not provided, all matchers write to
+    /// the corresponding indices (`matchers[i]` to `bitmask[i]`).
     ///
     /// # Errors
     /// Returns [`MatcherTerminatedError`] if any matcher has accepted the stop token.

@@ -1,5 +1,4 @@
-//! Removes rules unreachable from the root — a port of `DeadCodeEliminator` and its
-//! `UsedRulesAnalyzer` in `cpp/grammar_functor.cc`.
+//! Removes rules unreachable from the root.
 
 use std::collections::{BTreeSet, HashMap, VecDeque};
 

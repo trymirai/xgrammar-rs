@@ -1,5 +1,4 @@
-//! Thread-safe LRU cache for crossing-grammar adaptive token masks — a port of
-//! `RuleLevelCache` in `cpp/grammar_functor.cc`.
+//! Thread-safe LRU cache for crossing-grammar adaptive token masks.
 
 use std::{
     collections::{HashMap, VecDeque},

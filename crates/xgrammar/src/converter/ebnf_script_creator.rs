@@ -1,5 +1,4 @@
-//! A string builder for EBNF grammar scripts — a port of `EBNFScriptCreator` in
-//! `cpp/ebnf_script_creator.h`.
+//! A string builder for EBNF grammar scripts.
 //!
 //! It allocates unique rule names, accumulates `(name, body)` rules in order, and renders
 //! the final script. The JSON-schema and structural-tag converters build their grammars

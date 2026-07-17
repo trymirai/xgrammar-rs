@@ -1,5 +1,4 @@
-//! Expands bounded/unbounded repetitions into explicit rules — a port of
-//! `RepetitionRangeExpander` in `cpp/grammar_functor.cc`.
+//! Expands bounded/unbounded repetitions into explicit rules.
 //!
 //! Small bounds are "unzipped" into repeated elements and a tail of optional rules; large
 //! bounds keep a `Repeat` node wrapped so the matcher can count efficiently. Lookups go

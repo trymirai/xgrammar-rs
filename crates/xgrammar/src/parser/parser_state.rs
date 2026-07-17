@@ -1,8 +1,8 @@
-//! The state of the Earley parser — a port of `ParserState` in `cpp/earley_parser.h`.
+//! The state of the Earley parser.
 //!
 //! A live state walks a rule's compiled FSM: `element_id` is the current FSM node,
 //! `rule_start_pos` the input position the rule was predicted at. `Eq`/`Hash` cover all
-//! fields (the C++ `StateEqualForParsing` / `StateHashForParsing`), which is what the
+//! fields (equality/hash for parsing), which is what the
 //! parser's queue de-duplication needs.
 
 use std::fmt;

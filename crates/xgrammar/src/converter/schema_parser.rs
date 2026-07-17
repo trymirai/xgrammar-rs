@@ -1,5 +1,4 @@
-//! Parses a JSON Schema (a [`serde_json::Value`]) into the [`SchemaSpec`] IR — a port of
-//! `SchemaParser` in `cpp/json_schema_converter.cc`.
+//! Parses a JSON Schema (a [`serde_json::Value`]) into the [`SchemaSpec`] IR.
 
 use std::collections::{HashMap, HashSet};
 

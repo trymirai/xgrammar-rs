@@ -1,5 +1,4 @@
-//! Infers lookahead assertions for rules — a port of `LookaheadAssertionAnalyzer` in
-//! `cpp/grammar_functor.cc`.
+//! Infers lookahead assertions for rules.
 //!
 //! When a rule is referenced in exactly one place where it is not the final element of a
 //! sequence, the text that must follow it is fixed; that suffix is attached to the rule as

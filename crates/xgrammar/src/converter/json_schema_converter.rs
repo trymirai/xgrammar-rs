@@ -1,5 +1,4 @@
-//! Converts a parsed [`SchemaSpec`] tree into a JSON-shaped EBNF grammar — a port of
-//! `JSONSchemaConverter` and `JSONSchemaToEBNF` in `cpp/json_schema_converter.cc`.
+//! Converts a parsed [`SchemaSpec`] tree into a JSON-shaped EBNF grammar.
 
 use std::{
     collections::{BTreeMap, HashMap},
@@ -24,7 +23,23 @@ use super::{
 use crate::grammar::Grammar;
 
 impl Grammar {
-    /// Builds a grammar from a JSON Schema string (the C++ `Grammar::FromJSONSchema`).
+    /// Constructs a BNF grammar from a JSON schema string.
+    ///
+    /// The schema string should be in the format of the schema of a JSON file. The schema is
+    /// parsed and a BNF grammar is generated.
+    ///
+    /// `indent` is the number of spaces for indentation. If `None`, the output will be in one
+    /// line. Default: 2.
+    ///
+    /// `separators` are the two separators used in the schema: comma and colon. Examples:
+    /// `(",", ":")`, `(", ", ": ")`. If `None`, the default separators are used: `(",", ": ")`
+    /// when `indent` is set, and `(", ", ": ")` otherwise. This follows the convention in Python
+    /// `json.dumps()`.
+    ///
+    /// `strict_mode`, when true, does not allow properties and items that are not specified in
+    /// the schema. This is equivalent to setting `unevaluatedProperties` and
+    /// `unevaluatedItems` to false. This helps LLMs generate accurate output in grammar-guided
+    /// generation with JSON schema.
     ///
     /// # Errors
     /// Returns a [`SchemaError`] if the schema is invalid or unsatisfiable.
@@ -48,7 +63,11 @@ impl Grammar {
         )
     }
 
-    /// Builds a grammar from JSON Schema, optionally allowing object properties in any order.
+    /// Constructs a BNF grammar from a JSON schema string, optionally allowing object
+    /// properties in any order.
+    ///
+    /// When `any_order` is true, object properties may appear in any order; only key validity
+    /// and each key's value schema are enforced.
     ///
     /// # Errors
     /// Returns a [`SchemaError`] if the schema is invalid or unsatisfiable.
@@ -74,7 +93,9 @@ impl Grammar {
         )
     }
 
-    /// Full `FromJSONSchema` options, including `print_converted_ebnf`.
+    /// Constructs a BNF grammar from a JSON schema string with full formatting options.
+    ///
+    /// If `print_converted_ebnf` is true, the converted EBNF string is printed (for debugging).
     ///
     /// # Errors
     /// Returns a [`SchemaError`] if the schema is invalid or unsatisfiable.

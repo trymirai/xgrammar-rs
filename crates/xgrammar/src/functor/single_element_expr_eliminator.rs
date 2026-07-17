@@ -1,5 +1,4 @@
-//! Eliminates single-element sequences/choices and single-char classes — a port of
-//! `SingleElementExprEliminator` in `cpp/grammar_functor.cc`.
+//! Eliminates single-element sequences/choices and single-char classes.
 
 use super::mutator::{GrammarMutator, MutatorState};
 use crate::{grammar::GrammarExprType, support::char_to_utf8_bytes};

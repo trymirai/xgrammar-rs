@@ -1,5 +1,4 @@
-//! Tracks which parser states have already been enqueued this round — a port of
-//! `RepeatDetector` in `cpp/earley_parser.h`.
+//! Tracks which parser states have already been enqueued this round.
 //!
 //! The C++ switches from a linear scan to a hash set past a size threshold; that is a pure
 //! performance optimization, so this uses a [`HashSet`] throughout (equivalent semantics

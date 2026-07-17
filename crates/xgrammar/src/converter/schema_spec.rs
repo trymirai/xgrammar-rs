@@ -1,5 +1,4 @@
-//! The intermediate representation for a parsed JSON Schema — a port of the `SchemaSpec`
-//! variant family in `cpp/json_schema_converter.h`.
+//! The intermediate representation for a parsed JSON Schema.
 //!
 //! `SchemaParser` produces a tree of these (shared via [`SchemaSpecPtr`] for `$ref` reuse
 //! and de-duplication); `JsonSchemaConverter` walks the tree to emit EBNF.
@@ -168,7 +167,7 @@ pub(crate) struct AllOfSpec {
     pub schemas: Vec<SchemaSpecPtr>,
 }
 
-/// A `type: [...]` array of alternative type schemas.
+/// A `type: [.]` array of alternative type schemas.
 #[derive(Debug, Clone)]
 pub(crate) struct TypeArraySpec {
     pub type_schemas: Vec<SchemaSpecPtr>,

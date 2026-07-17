@@ -1,5 +1,4 @@
-//! Error raised by the JSON-schema converter — a port of `SchemaError` /
-//! `SchemaErrorType` in `cpp/json_schema_converter.*`.
+//! Error raised by the JSON-schema converter.
 
 /// The category of a [`SchemaError`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -1,5 +1,4 @@
-//! A borrowed view over one grammar expression — a port of
-//! `Grammar::Impl::GrammarExpr` in `cpp/grammar_impl.h`.
+//! A borrowed view over one grammar expression.
 
 use super::{character_class_element::CharacterClassElement, grammar_expr_type::GrammarExprType};
 

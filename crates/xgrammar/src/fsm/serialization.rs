@@ -1,4 +1,4 @@
-//! JSON serialization for FSM types — matches the C++ `"v13"` reflection layout.
+//! JSON serialization for FSM types — uses the `"v13"` reflection layout.
 
 use serde_json::{Value, json};
 
@@ -28,7 +28,7 @@ fn serialize_edges(edges: &crate::support::Compact2dArray<FsmEdge>) -> Value {
     serialize_compact_2d_fsm_edges(edges)
 }
 
-/// Serializes a CSR edge table in the C++ `Compact2DArray<FSMEdge>` form.
+/// Serializes a CSR edge table in the Compact2DArray FSMEdge form.
 #[must_use]
 pub fn serialize_compact_2d_fsm_edges(edges: &crate::support::Compact2dArray<FsmEdge>) -> Value {
     let data: Vec<Value> = edges.data().iter().map(FsmEdge::serialize_json_value).collect();
@@ -38,7 +38,7 @@ pub fn serialize_compact_2d_fsm_edges(edges: &crate::support::Compact2dArray<Fsm
     })
 }
 
-/// Deserializes a CSR edge table from the C++ `Compact2DArray<FSMEdge>` form.
+/// Deserializes a CSR edge table from the Compact2DArray FSMEdge form.
 ///
 /// # Errors
 /// Returns [`DeserializeError`] when the JSON shape is invalid.

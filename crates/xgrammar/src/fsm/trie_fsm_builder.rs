@@ -1,5 +1,4 @@
-//! Builds a trie / Aho-Corasick FSM from a set of byte patterns — a port of
-//! `TrieFSMBuilder` in `cpp/fsm_builder.cc`.
+//! Builds a trie / Aho-Corasick FSM from a set of byte patterns.
 //!
 //! Without back edges this is a plain prefix trie; with `add_back_edges` it is completed into
 //! an Aho-Corasick automaton whose every state has a transition for all 256 byte values

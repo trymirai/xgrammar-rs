@@ -1,5 +1,4 @@
-//! Normalizes grammar structure — a port of `StructureNormalizer` in
-//! `cpp/grammar_functor.cc`.
+//! Normalizes grammar structure.
 //!
 //! After the [`SingleElementExprEliminator`] pre-pass, every rule body is rewritten into
 //! the normal form `rule ::= ("" | (e1 e2 …) | …)`: a choices of sequences of leaf

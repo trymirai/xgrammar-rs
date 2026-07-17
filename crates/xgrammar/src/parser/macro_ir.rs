@@ -1,5 +1,4 @@
-//! Intermediate representation for macro arguments — a port of `EBNFParser::MacroIR`
-//! in `cpp/grammar_parser.cc`.
+//! Intermediate representation for macro arguments.
 
 /// A parsed macro argument value: a string, integer, boolean, identifier, or tuple of
 /// nested values.

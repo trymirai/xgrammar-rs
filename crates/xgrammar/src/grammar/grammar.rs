@@ -1,5 +1,8 @@
-//! The BNF grammar AST in flat CSR form — a port of `Grammar::Impl` in
-//! `cpp/grammar_impl.h` (the matching-aux FSM fields are introduced in M5).
+//! The [`Grammar`] type: the BNF abstract syntax tree (AST) in flat CSR form.
+//!
+//! This class stores the AST of the Backus–Naur Form (BNF) grammar. The BNF definition here is
+//! standard BNF, and the characters are represented using regex-style character classes (e.g.
+//! `[a-z]`, `[^a-z]`).
 
 use serde::{Deserialize, Serialize};
 
@@ -9,11 +12,11 @@ use crate::{
     support::Compact2dArray,
 };
 
-/// A Backus–Naur Form grammar: an ordered set of [`Rule`]s plus all grammar expressions
-/// stored contiguously, with one root rule.
+/// Stores the abstract syntax tree (AST) of a Backus–Naur Form (BNF) grammar.
 ///
-/// Each expression occupies one row of `exprs`, laid out as `[type_tag, data...]`; the row
-/// length encodes the payload length (so the C++ `data_len` header is unnecessary here).
+/// The BNF definition is standard BNF; characters are represented using regex-style character
+/// classes (e.g. `[a-z]`, `[^a-z]`). Rules and [`GrammarExpr`]s are stored in CSR-matrix
+/// style: each expression occupies one row of `exprs`, laid out as `[type_tag, data.]`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Grammar {
     rules: Vec<Rule>,

@@ -1,8 +1,5 @@
-//! Grammar compilation: optimizing a grammar against a tokenizer into a [`CompiledGrammar`]
-//! that the matcher runs on, with a result cache. Ported from `cpp/grammar_compiler.cc` and
-//! `cpp/compiled_grammar.cc`.
-//!
-//! One dedicated type per file; re-exported here.
+//! Grammar compilation: preprocessing a grammar and tokenizer into a [`CompiledGrammar`]
+//! for use by [`GrammarMatcher`](crate::matcher::GrammarMatcher), with a result cache.
 
 mod adaptive_token_mask;
 mod compiled_grammar;

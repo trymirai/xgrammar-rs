@@ -1,5 +1,4 @@
-//! Decoded form of a [`GrammarExprType::TagDispatch`] expression — a port of
-//! `Grammar::Impl::TagDispatch` and `GetTagDispatch` in `cpp/grammar_impl.h`.
+//! Decoded form of a [`GrammarExprType::TagDispatch`] expression.
 
 use super::{grammar::Grammar, grammar_expr_type::GrammarExprType};
 

@@ -10,13 +10,20 @@
 
 </div>
 
-This repository ports the XGrammar C++ core to safe Rust. The main crate has no C or C++
-build dependency. Grammar parsing, JSON Schema and regex conversion, compilation, matching,
-token masks, serialization, and tokenizer metadata all run in Rust.
+XGrammar is an open-source library for efficient, flexible, and portable structured generation.
+It uses constrained decoding to ensure structural correctness of model output. It supports
+general context-free grammars, including JSON, regular expressions, and custom EBNF. XGrammar
+achieves near-zero overhead in JSON generation, making it one of the fastest structured
+generation engines available.
 
-The upstream [`mlc-ai/xgrammar`](https://github.com/mlc-ai/xgrammar) tree is a local reference
-checkout at gitignored `external/xgrammar` (pin in [`xgrammar.rev`](xgrammar.rev)). Its original
-Python tests are kept unchanged and run against this Rust extension in CI.
+This repository ports the upstream [`mlc-ai/xgrammar`](https://github.com/mlc-ai/xgrammar) core
+to safe Rust. The main crate has no C or C++ build dependency. Grammar parsing, JSON Schema and
+regex conversion, compilation, matching, token masks, serialization, and tokenizer metadata all
+run in Rust.
+
+The upstream tree is a local reference checkout at gitignored `external/xgrammar` (pin in
+[`xgrammar.rev`](xgrammar.rev)). Its original Python tests are kept unchanged and run against
+this Rust extension in CI.
 
 ## Packages
 

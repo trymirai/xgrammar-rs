@@ -1,4 +1,4 @@
-//! Compressed-sparse-row (CSR) 2D array — a port of `cpp/support/compact_2d_array.h`.
+//! Compressed-sparse-row (CSR) 2D array.
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -9,10 +9,10 @@ use serde_json::{Value, json};
 /// Two parallel vectors back it:
 /// - `data` — all row elements, concatenated;
 /// - `indptr` — the start offset of each row in `data`; its last element equals
-///   `data.len()`, so row `i` occupies `data[indptr[i]..indptr[i + 1]]`.
+/// `data.len()`, so row `i` occupies `data[indptr[i].indptr[i + 1]]`.
 ///
 /// Rows are immutable once inserted (you can still mutate their elements in place via
-/// [`Compact2dArray::row_mut`]). Unlike the C++ original, which hands out raw-pointer
+/// [`Compact2dArray::row_mut`]). Provides
 /// `Row` views, this returns borrowed slices — the borrow checker enforces the
 /// "inserting a row invalidates outstanding rows" invariant for free.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]

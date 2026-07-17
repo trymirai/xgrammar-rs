@@ -1,5 +1,4 @@
-//! Fuses consecutive byte strings within a sequence — a port of `ByteStringFuser` in
-//! `cpp/grammar_functor.cc`.
+//! Fuses consecutive byte strings within a sequence.
 //!
 //! Runs on a normalized grammar: within each sequence, runs of adjacent byte-string
 //! elements are merged into a single byte string, which keeps the matcher's hot path

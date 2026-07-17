@@ -1,13 +1,15 @@
-//! Pure-Rust core of [XGrammar](https://github.com/mlc-ai/xgrammar) — an efficient,
-//! flexible and portable engine for structured generation.
+//! Pure-Rust core of [XGrammar](https://github.com/mlc-ai/xgrammar) — an open-source library
+//! for efficient, flexible, and portable structured generation.
 //!
-//! This crate is a from-scratch Rust reimplementation of the xgrammar C++ core. It
+//! XGrammar uses constrained decoding (grammar-guided generation) to enforce structural
+//! correctness of model output. It supports general context-free grammars, including JSON,
+//! regular expressions, and custom EBNF. A [`GrammarMatcher`](matcher::GrammarMatcher) drives
+//! a non-deterministic pushdown automaton (NPDA) over a compiled grammar and tokenizer,
+//! producing token bitmasks that downstream inference engines apply to logits.
+//!
+//! This crate is a from-scratch Rust reimplementation of the upstream xgrammar core. It
 //! carries no C/C++ dependency and builds with `cargo` alone on every supported target
 //! (macOS, Linux, Windows, iOS, `wasm32`).
-//!
-//! Modules are introduced milestone by milestone:
-//! `support` → `grammar` → `parser` → `converter` → `fsm` → `compiler` → `matcher`
-//! → `tokenizer` → `error`.
 
 #![forbid(unsafe_op_in_unsafe_fn)]
 

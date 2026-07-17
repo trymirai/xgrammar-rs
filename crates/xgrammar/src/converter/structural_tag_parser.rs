@@ -1,5 +1,4 @@
-//! Parses a structural-tag JSON document into the [`Format`] IR — a port of
-//! `StructuralTagParser` in `cpp/structural_tag.cc`.
+//! Parses a structural-tag JSON document into the [`Format`] IR.
 
 use serde_json::{Map, Value};
 

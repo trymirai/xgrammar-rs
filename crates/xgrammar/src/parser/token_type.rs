@@ -1,4 +1,4 @@
-//! EBNF lexer token kinds — a port of `EBNFLexer::TokenType` in `cpp/grammar_parser.h`.
+//! EBNF lexer token kinds.
 
 /// The kind of a lexical token produced by the EBNF lexer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

@@ -1,4 +1,4 @@
-//! UTF-8 and escape-sequence encoding/decoding — a port of `cpp/support/encoding.h`.
+//! UTF-8 and escape-sequence encoding/decoding.
 //!
 //! Upstream signals failures via negative sentinel codepoints; this port uses
 //! [`Result`] with [`CharHandlingError`] instead, and operates on byte slices rather than
@@ -214,7 +214,7 @@ fn default_escape_to_codepoint(escape_char: u8) -> Option<Codepoint> {
 /// Parses the first escape sequence in `data`, which must begin with `\`.
 ///
 /// `additional_escape_map` (escape char → codepoint) takes precedence over the built-in
-/// C-style escapes. Supports `\xHH...` (arbitrary-length hex), `\uHHHH`, and `\UHHHHHHHH`.
+/// C-style escapes. Supports `\xHH.` (arbitrary-length hex), `\uHHHH`, and `\UHHHHHHHH`.
 ///
 /// # Errors
 /// Returns [`CharHandlingError::InvalidEscape`] if `data` does not start with a valid

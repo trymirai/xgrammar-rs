@@ -1,5 +1,4 @@
-//! Normalizes `kRepeat` expressions in place — a port of `RepetitionNormalizer` in
-//! `cpp/grammar_functor.cc`.
+//! Normalizes `kRepeat` expressions in place.
 //!
 //! For every repeat, the repeated rule is marked exact-lookahead; if that rule is nullable
 //! the repeat's minimum count is lowered to 0 (reducing parser uncertainty). Must run after

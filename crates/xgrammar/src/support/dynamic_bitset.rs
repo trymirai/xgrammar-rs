@@ -1,4 +1,4 @@
-//! Runtime-sized bitset over a `u32` word array — a port of `cpp/support/dynamic_bitset.h`.
+//! Runtime-sized bitset over a `u32` word array.
 //!
 //! This is the owned form; the matcher's external-buffer (DLTensor) view lands in M6.
 
@@ -10,9 +10,9 @@ pub const BITS_PER_BLOCK: usize = 32;
 
 /// A bitset whose length is fixed at construction time.
 ///
-/// Bits `0..len` are addressable; the final word may contain unused high padding bits
+/// Bits `0.len` are addressable; the final word may contain unused high padding bits
 /// (e.g. after [`DynamicBitset::set_all`]). Scans that could return a padding index are
-/// bounded by `len`, matching the C++ behavior.
+/// bounded by `len`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(try_from = "DynamicBitsetRepr")]
 pub struct DynamicBitset {

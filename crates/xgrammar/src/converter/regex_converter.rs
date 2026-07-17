@@ -1,5 +1,4 @@
-//! Converts a (JavaScript-flavored) regex into EBNF — a port of `RegexConverter` in
-//! `cpp/regex_converter.cc`.
+//! Converts a (JavaScript-flavored) regex into EBNF.
 //!
 //! The grammar reference is
 //! <https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Regular_expressions>.
@@ -11,7 +10,7 @@ use crate::{
 };
 
 impl Grammar {
-    /// Builds a grammar from a regular expression.
+    /// Constructs a grammar from a regular expression string.
     ///
     /// # Errors
     /// Returns a [`RegexError`] if the regex is malformed or uses an unsupported feature.
@@ -19,7 +18,10 @@ impl Grammar {
         Self::from_regex_with_options(regex, false)
     }
 
-    /// Builds a grammar from a regular expression, optionally printing the converted EBNF.
+    /// Constructs a grammar from a regular expression string.
+    ///
+    /// This method converts the regex to EBNF first. If `print_converted_ebnf` is true, the
+    /// converted EBNF string is printed. For debugging purposes.
     ///
     /// # Errors
     /// Returns a [`RegexError`] if the regex is malformed or uses an unsupported feature.

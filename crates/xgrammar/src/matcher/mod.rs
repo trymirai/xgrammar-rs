@@ -1,7 +1,10 @@
-//! The grammar matcher: drives the Earley parser to accept input and (later) produce token
-//! bitmasks. Ported from `cpp/grammar_matcher.cc`.
+//! Grammar-guided generation: stateful matchers that drive constrained decoding.
 //!
-//! One dedicated type per file; re-exported here.
+//! [`GrammarMatcher`] is the core logic of grammar-guided generation. It implements a
+//! non-deterministic pushdown automaton (NPDA) matching algorithm to match characters to a BNF
+//! grammar, maintains several internal stacks as possible paths in the NPDA, and supports
+//! backtracking. It is particularly capable of finding the set of tokens acceptable for the
+//! next step and storing them in a bitmask.
 
 mod batch_grammar_matcher;
 mod grammar_matcher;

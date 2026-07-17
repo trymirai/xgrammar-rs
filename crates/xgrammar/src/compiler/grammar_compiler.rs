@@ -1,10 +1,11 @@
-//! The grammar compiler with a result cache — a port of `GrammarCompiler` in
-//! `cpp/grammar_compiler.cc`.
+//! A cache to get the compiled grammar for a grammar or schema.
 //!
-//! Optimizes grammars (running the full functor pipeline so per-rule FSMs and
-//! `allow_empty_rule_ids` are built) against a fixed tokenizer, caching the results keyed by
-//! their source so repeated requests reuse the work. When `max_memory_bytes` is set, the
-//! cache evicts least-recently-used entries until under the limit.
+//! This class avoids redundant preprocessing of the grammar or schema when constructing a
+//! [`CompiledGrammar`].
+//!
+//! This class is associated with a vocabulary when constructed. The vocabulary is used to
+//! create every compiled grammar. If multiple token tables are used to create init contexts,
+//! an instance of this class for each vocabulary should be created.
 
 use std::{
     collections::{HashMap, VecDeque},
@@ -105,7 +106,10 @@ impl CacheState {
     }
 }
 
-/// Compiles grammars/schemas/regexes/structural-tags against a fixed tokenizer, with a cache.
+/// A cache to get the compiled grammar for a grammar or schema.
+///
+/// Avoids redundant preprocessing when constructing a [`CompiledGrammar`]. Always creates
+/// compiled grammars with the vocabulary supplied at construction.
 #[derive(Debug)]
 pub struct GrammarCompiler {
     tokenizer_info: Arc<TokenizerInfo>,
@@ -118,11 +122,13 @@ pub struct GrammarCompiler {
 }
 
 impl GrammarCompiler {
-    /// Creates a compiler bound to `tokenizer_info`.
+    /// Constructs a [`GrammarCompiler`] with a vocabulary.
     ///
-    /// `max_threads` controls adaptive token-mask cache build parallelism.
-    /// `max_memory_bytes` is `-1` for unlimited; otherwise the LRU cache evicts until under
-    /// the limit.
+    /// This class will always create compiled grammars with this vocabulary.
+    ///
+    /// `max_threads` is the maximum number of threads to use for compiling grammars.
+    /// `cache_enabled` controls whether the cache is enabled.
+    /// `max_memory_bytes` is the maximum memory usage in bytes (`-1` for unlimited).
     #[must_use]
     pub fn new(
         tokenizer_info: TokenizerInfo,
@@ -156,13 +162,13 @@ impl GrammarCompiler {
         }
     }
 
-    /// Creates a compiler with the C++ defaults (`max_threads=8`, cache on, unlimited memory).
+    /// Creates a compiler with default settings (`max_threads=8`, cache enabled, unlimited memory).
     #[must_use]
     pub fn with_defaults(tokenizer_info: TokenizerInfo) -> Self {
         Self::new(tokenizer_info, 8, true, UNLIMITED)
     }
 
-    /// Compiles an already-built grammar.
+    /// Gets the compiled grammar for a grammar.
     #[must_use]
     pub fn compile_grammar(
         &self,
@@ -187,16 +193,13 @@ impl GrammarCompiler {
         })
     }
 
-    /// Compiles the built-in JSON grammar.
+    /// Gets the compiled grammar for pure JSON.
     #[must_use]
     pub fn compile_builtin_json_grammar(&self) -> CompiledGrammar {
         self.cached("builtin_json".to_owned(), || self.optimize(&Grammar::builtin_json_grammar()))
     }
 
-    /// Compiles a JSON Schema (see [`Grammar::from_json_schema`]).
-    ///
-    /// # Panics
-    /// Panics if the schema is invalid.
+    /// Gets the compiled grammar for a JSON schema string.
     #[must_use]
     pub fn compile_json_schema(
         &self,
@@ -218,7 +221,8 @@ impl GrammarCompiler {
         )
     }
 
-    /// Compiles JSON Schema with optional property-order independence.
+    /// Gets the compiled grammar for a JSON schema string, with optional property-order
+    /// independence.
     #[must_use]
     #[allow(clippy::too_many_arguments)]
     pub fn compile_json_schema_with_any_order(
@@ -249,7 +253,7 @@ impl GrammarCompiler {
         })
     }
 
-    /// Compiles a regex (see [`Grammar::from_regex`]).
+    /// Gets the compiled grammar for a regex.
     ///
     /// # Panics
     /// Panics if the regex is invalid.
@@ -264,7 +268,7 @@ impl GrammarCompiler {
         })
     }
 
-    /// Compiles a structural tag (see [`Grammar::from_structural_tag`]).
+    /// Gets the compiled grammar for a structural tag.
     ///
     /// # Errors
     /// Returns a [`StructuralTagError`] if the structural tag is invalid.
@@ -286,18 +290,20 @@ impl GrammarCompiler {
         Ok(compiled)
     }
 
-    /// Clears the result cache.
+    /// Clears the internal cache of compiled grammars.
     pub fn clear_cache(&self) {
         self.cache.lock().expect("cache mutex").clear();
     }
 
-    /// The approximate cache memory usage, in bytes.
+    /// Returns the approximate memory usage of the compiler cache in bytes.
     #[must_use]
     pub fn get_cache_size_bytes(&self) -> i64 {
         self.cache.lock().expect("cache mutex").size_bytes
     }
 
-    /// The configured cache memory limit (`-1` = unlimited).
+    /// Returns the approximate memory usage limit of the compiler cache in bytes.
+    ///
+    /// `-1` means unlimited.
     #[must_use]
     pub fn cache_limit_bytes(&self) -> i64 {
         self.max_memory_bytes

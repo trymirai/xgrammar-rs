@@ -1,9 +1,8 @@
-//! JSON serialization for [`Grammar`] — a port of the grammar (de)serialization in
-//! `cpp/support/json_serializer.h` + `grammar.cc`.
+//! JSON serialization for [`Grammar`].
 //!
-//! The on-disk format matches the C++ `"v14"` layout: rules as
+//! The on-disk format uses the `"v14"` layout: rules as
 //! `[name, body_expr_id, lookahead_assertion_id, is_exact_lookahead]`, and the expression
-//! store as a flat `grammar_expr_indptr` array of `[type, data_len, data...]` rows indexed by
+//! store as a flat `grammar_expr_indptr` array of `[type, data_len, data.]` rows indexed by
 //! `grammar_expr_data` offsets (the two key names are swapped relative to their contents, a
 //! C++ historical quirk reproduced here for byte parity).
 
@@ -12,7 +11,7 @@ use serde_json::{Value, json};
 use super::{grammar::Grammar, rule::Rule};
 use crate::{config::SERIALIZATION_VERSION, fsm::CompactFsm, support::Compact2dArray};
 
-/// An error from [`Grammar::deserialize_json`] (and other deserializers) — a port of the C++
+/// An error from [`Grammar::deserialize_json`] (and other deserializers).
 /// `SerializationError` family.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum DeserializeError {

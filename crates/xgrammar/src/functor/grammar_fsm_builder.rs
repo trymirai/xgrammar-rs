@@ -1,5 +1,4 @@
-//! Builds finite-state machines from grammar expressions — a port of `GrammarFSMBuilder`
-//! in `cpp/grammar_functor.cc`.
+//! Builds finite-state machines from grammar expressions.
 //!
 //! Each rule body lowers into an [`FsmWithStartEnd`]: byte strings, character classes
 //! (with full UTF-8 multibyte range encoding), rule references, tokens, repeats, and the
@@ -323,7 +322,7 @@ impl GrammarFsmBuilder {
     }
 }
 
-/// An empty FSM with no states (start 0, no ends) — the C++ default `FSMWithStartEnd`.
+/// An empty FSM with no states (start 0, no ends).
 fn empty_fsm() -> FsmWithStartEnd {
     FsmWithStartEnd::new(Fsm::new(0), 0, Vec::new(), false)
 }

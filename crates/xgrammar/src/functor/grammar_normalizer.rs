@@ -1,5 +1,4 @@
-//! The normalization pipeline and the `Grammar::from_ebnf` constructor — a port of
-//! `GrammarNormalizer` and `Grammar::FromEBNF`.
+//! Grammar normalization and constructors from EBNF and built-in JSON.
 
 use super::{root_rule_renamer::root_rule_renamer, structure_normalizer::structure_normalizer};
 use crate::{
@@ -14,7 +13,9 @@ pub fn grammar_normalizer(grammar: &Grammar) -> Grammar {
 }
 
 impl Grammar {
-    /// Parses an EBNF grammar string and normalizes it.
+    /// Constructs a BNF grammar with an EBNF-formatted string.
+    ///
+    /// The grammar will be normalized (simplified) by default.
     ///
     /// # Errors
     /// Returns [`EbnfError`] on a lexing or parsing failure.
@@ -35,7 +36,9 @@ impl Grammar {
         })
     }
 
-    /// The built-in JSON grammar (a port of `Grammar::BuiltinJSONGrammar`).
+    /// Returns the grammar of standard JSON format.
+    ///
+    /// XGrammar has built-in support for JSON.
     ///
     /// # Panics
     /// Never in practice — the embedded grammar is a valid constant.
@@ -46,7 +49,7 @@ impl Grammar {
 }
 
 /// The EBNF source of [`Grammar::builtin_json_grammar`] — a verbatim copy of
-/// `kJSONGrammarString` in `cpp/grammar.cc`.
+/// the built-in JSON grammar string.
 const BUILTIN_JSON_GRAMMAR: &str = r#"
 root ::= (
     "{" [ \n\t]* members_and_embrace |

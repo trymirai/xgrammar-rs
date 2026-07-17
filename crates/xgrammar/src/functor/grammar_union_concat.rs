@@ -1,10 +1,11 @@
-//! Grammar union and concatenation — a port of `GrammarUnionFunctor`,
-//! `GrammarConcatFunctor`, and `SubGrammarAdder` in `cpp/grammar_functor.cc`.
+//! Grammar union and concatenation.
 
 use crate::grammar::{Grammar, GrammarBuilder, GrammarExprType, NO_EXPR};
 
 impl Grammar {
-    /// Returns a grammar accepting any string accepted by one of `grammars`.
+    /// Creates a grammar that matches any of the grammars in the list.
+    ///
+    /// Equivalent to using the `|` operator to concatenate the grammars in the list.
     ///
     /// # Panics
     /// Panics if `grammars` is empty.
@@ -24,7 +25,9 @@ impl Grammar {
         builder.into_grammar_with_root_id(root)
     }
 
-    /// Returns a grammar accepting the in-order concatenation of strings from `grammars`.
+    /// Creates a grammar that matches the concatenation of the grammars in the list.
+    ///
+    /// Equivalent to using the `+` operator to concatenate the grammars in the list.
     ///
     /// # Panics
     /// Panics if `grammars` is empty.

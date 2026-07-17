@@ -1,4 +1,4 @@
-//! EBNF lexing and parsing into the BNF AST. Ported from `cpp/grammar_parser.cc`.
+//! EBNF lexing and parsing into the BNF AST. 
 //!
 //! One dedicated type per file; re-exported here.
 

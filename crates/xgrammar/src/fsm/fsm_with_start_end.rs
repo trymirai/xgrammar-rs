@@ -1,4 +1,4 @@
-//! An FSM paired with a start state and a set of accepting states — a port of
+//! An FSM paired with a start state and a set of accepting states.
 //! `FSMWithStartEnd` (over `FSM`) in `cpp/fsm.{h,cc}`.
 //!
 //! This carries the regex/grammar building algebra (`concat`, `union`, `star`, `plus`,

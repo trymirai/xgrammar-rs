@@ -1,8 +1,5 @@
 //! Converters that turn external schema languages (regex, JSON Schema, structural tags)
-//! into xgrammar grammars. Ported from `cpp/regex_converter.*`, `json_schema_converter.*`,
-//! and `structural_tag.*`.
-//!
-//! One dedicated type per file; re-exported here.
+//! into XGrammar BNF grammars.
 
 mod ebnf_script_creator;
 mod indent_manager;
@@ -29,7 +26,7 @@ pub use regex_error::RegexError;
 pub use schema_error::{SchemaError, SchemaErrorKind};
 pub use structural_tag_error::StructuralTagError;
 
-/// Legacy structural-tag item (`begin` / `schema` / `end`) from the C++ public header.
+/// Legacy structural-tag item (`begin` / `schema` / `end`).
 ///
 /// Prefer the JSON structural-tag document + [`Grammar::from_structural_tag`]; this exists
 /// for API parity with `xgrammar::StructuralTagItem`.

@@ -1,4 +1,4 @@
-//! One inclusive range of a character class — a port of
+//! One inclusive range of a character class.
 //! `GrammarBuilder::CharacterClassElement`.
 
 use serde::{Deserialize, Serialize};

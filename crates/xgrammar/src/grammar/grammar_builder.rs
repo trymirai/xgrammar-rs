@@ -1,4 +1,4 @@
-//! Builder for the BNF AST — a port of `cpp/grammar_builder.{h,cc}`.
+//! Builder for the BNF AST.
 
 use std::collections::HashMap;
 

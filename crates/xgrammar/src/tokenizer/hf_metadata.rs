@@ -1,5 +1,4 @@
-//! Hugging Face `tokenizer.json` metadata detection — a port of `HFTokenizerAnalyzer` in
-//! `cpp/tokenizer_info.cc`.
+//! Hugging Face `tokenizer.json` metadata detection.
 
 use serde_json::Value;
 

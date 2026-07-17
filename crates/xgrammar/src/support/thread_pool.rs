@@ -1,4 +1,4 @@
-//! Fixed-size worker pool — a port of `cpp/support/thread_pool.h`.
+//! Fixed-size worker pool.
 
 use std::{
     sync::{

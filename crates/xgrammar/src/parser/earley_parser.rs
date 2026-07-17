@@ -1,4 +1,4 @@
-//! The Earley parser — a port of `EarleyParser` in `cpp/earley_parser.cc`.
+//! The Earley parser.
 //!
 //! The parser walks the per-rule FSMs of an optimized [`Grammar`]: most live
 //! [`ParserState`] values have `rule_id >= 0` and scan FSM byte/token edges. Lookahead

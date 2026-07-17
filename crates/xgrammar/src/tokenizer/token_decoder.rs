@@ -1,5 +1,4 @@
-//! Decodes raw vocabulary tokens into their byte strings — a port of `TokenDecoder` in
-//! `cpp/tokenizer_info.cc`.
+//! Decodes raw vocabulary tokens into their byte strings.
 
 use super::vocab_type::VocabType;
 use crate::support::parse_utf8;
@@ -38,7 +37,7 @@ fn byte_fallback_decoder(token: &[u8]) -> Vec<u8> {
     token.to_vec()
 }
 
-/// Hex digit value, accepting `0-9` and uppercase `A-F` (matching the C++).
+/// Hex digit value, accepting `0-9` and uppercase `A-F`.
 fn hex_val(c: u8) -> Option<u32> {
     match c {
         b'0'..=b'9' => Some(u32::from(c - b'0')),

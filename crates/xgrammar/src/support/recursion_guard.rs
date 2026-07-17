@@ -1,4 +1,4 @@
-//! Recursion-depth guard — a port of `cpp/support/recursion_guard.{h,cc}`.
+//! Recursion-depth guard.
 //!
 //! A process-global maximum depth (configurable, env-overridable) bounds recursion in
 //! the parser and grammar functors; a per-thread counter tracks the live depth via an

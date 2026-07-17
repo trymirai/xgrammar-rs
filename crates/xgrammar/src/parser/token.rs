@@ -1,9 +1,9 @@
-//! A lexical token and its processed value — a port of `EBNFLexer::Token` in
-//! `cpp/grammar_parser.h` (the C++ `std::any` value becomes a typed [`TokenValue`]).
+//! A lexical token and its processed value.
+//! `cpp/grammar_parser.h` (value becomes a typed [`TokenValue`]).
 
 use super::token_type::TokenType;
 
-/// The processed payload attached to a token (the C++ `std::any`).
+/// The processed payload attached to a token .
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TokenValue {
     /// No payload (punctuation, EOF, …).

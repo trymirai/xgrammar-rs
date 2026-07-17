@@ -1,9 +1,14 @@
-//! Tokenizer metadata for grammar-guided masking — a port of `TokenizerInfo` in
-//! `cpp/tokenizer_info.cc`.
+//! The tokenizer info class to handle tokenizer information for grammar-guided generation.
 //!
-//! Decodes the raw vocabulary to byte strings, classifies stop/special tokens, and builds the
-//! sorted-vocabulary pseudo-trie (`sorted_decoded_vocab` + `trie_subtree_nodes_range`) the
-//! matcher walks when computing token bitmasks.
+//! Although some tokenizers encode tokens in a special format (e.g. `"<0x1B>"` for `"\u001b"`
+//! in the byte-fallback tokenizer, and `"Ġ"` for `" "` in the byte-level BPE tokenizer),
+//! [`TokenizerInfo`] always decodes the vocabulary to the original format (e.g. `"\u001b"` and
+//! `" "`).
+//!
+//! Some models (e.g. Phi-3 and Deepseek-V2) may pad the vocabulary to a multiple of 32. In this
+//! case, the model's `vocab_size` is larger than the tokenizer's vocabulary size. Pass the
+//! model's `vocab_size` to the constructor, because this information is used to determine the
+//! size of the token mask.
 
 use serde_json::{Value, json};
 
@@ -22,7 +27,8 @@ const DETECTION_STOP_TOKENS: [&str; 8] = [
     "<｜end▁of▁sentence｜>",
 ];
 
-/// Decoded vocabulary plus the derived structures used during constrained decoding.
+/// The tokenizer info contains the vocabulary, the type of the vocabulary, and necessary
+/// information for grammar-guided generation.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TokenizerInfo {
     vocab_type: VocabType,
@@ -37,10 +43,14 @@ pub struct TokenizerInfo {
 }
 
 impl TokenizerInfo {
-    /// Builds tokenizer info from an encoded vocabulary.
+    /// Constructs the tokenizer info.
     ///
-    /// `vocab_size` defaults to the vocabulary length; ids past the end are padding (special)
-    /// tokens. `stop_token_ids`, when `None`, are auto-detected from [`DETECTION_STOP_TOKENS`].
+    /// `encoded_vocab` is the encoded vocabulary of the tokenizer.
+    /// `vocab_type` is the type of the vocabulary; see [`VocabType`].
+    /// `vocab_size`, if not provided, defaults to `encoded_vocab.len()`.
+    /// `stop_token_ids`, if not provided, are auto-detected (but may not be correct).
+    /// `add_prefix_space` indicates whether the tokenizer prepends a space before text during
+    /// tokenization.
     #[must_use]
     pub fn new(
         encoded_vocab: &[String],

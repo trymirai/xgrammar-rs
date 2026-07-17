@@ -1,4 +1,4 @@
-//! Error raised by the EBNF parser — the Rust equivalent of the C++ `ReportParseError`
+//! Error raised by the EBNF parser —
 //! fatal.
 
 /// A parsing failure, with the 1-based source position where it occurred.

@@ -1,9 +1,8 @@
-//! Intermediate representation for a parsed structural tag — a port of the `Format`
-//! variant family in `cpp/structural_tag.{h,cc}`.
+//! Intermediate representation for a parsed structural tag.
 //!
 //! The full struct (including the resolver/analyzer-filled `resolved_*`/`detected_*`
 //! fields) participates in equality/hashing so the converter can de-duplicate identical
-//! sub-formats, matching the C++ JSON-fingerprint cache.
+//! sub-formats.
 
 /// A token reference: a literal id or a vocabulary string (resolved to an id later).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -12,13 +11,13 @@ pub(crate) enum IntOrString {
     Str(String),
 }
 
-/// `{"type":"const_string","value":...}`.
+/// `{"type":"const_string","value":.}`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct ConstStringFormat {
     pub value: String,
 }
 
-/// `{"type":"json_schema","json_schema":...,"style":...}` (json schema stored serialized).
+/// `{"type":"json_schema","json_schema":.,"style":.}` (json schema stored serialized).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct JsonSchemaFormat {
     pub json_schema: String,
@@ -27,7 +26,7 @@ pub(crate) struct JsonSchemaFormat {
     pub max_whitespace_cnt: Option<i32>,
 }
 
-/// `{"type":"any_text","excludes":[...]}`; `detected_end_strs` is filled by the analyzer.
+/// `{"type":"any_text","excludes":[.]}`; `detected_end_strs` is filled by the analyzer.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
 pub(crate) struct AnyTextFormat {
     pub excludes: Vec<String>,
@@ -46,14 +45,14 @@ pub(crate) struct RegexFormat {
     pub pattern: String,
 }
 
-/// `{"type":"sequence","elements":[...]}`.
+/// `{"type":"sequence","elements":[.]}`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct SequenceFormat {
     pub elements: Vec<Format>,
     pub is_unlimited: bool,
 }
 
-/// `{"type":"or","elements":[...]}`.
+/// `{"type":"or","elements":[.]}`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct OrFormat {
     pub elements: Vec<Format>,
@@ -74,7 +73,7 @@ pub(crate) enum TagEnd {
     Token(TokenFormat),
 }
 
-/// `{"type":"tag","begin":...,"content":...,"end":...}`.
+/// `{"type":"tag","begin":.,"content":.,"end":.}`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct TagFormat {
     pub begin: TagBegin,
@@ -82,7 +81,7 @@ pub(crate) struct TagFormat {
     pub end: TagEnd,
 }
 
-/// `{"type":"triggered_tags",...}`; `detected_end_strs` is filled by the analyzer.
+/// `{"type":"triggered_tags",.}`; `detected_end_strs` is filled by the analyzer.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct TriggeredTagsFormat {
     pub triggers: Vec<String>,
@@ -93,7 +92,7 @@ pub(crate) struct TriggeredTagsFormat {
     pub detected_end_strs: Vec<String>,
 }
 
-/// `{"type":"tags_with_separator",...}`.
+/// `{"type":"tags_with_separator",.}`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct TagsWithSeparatorFormat {
     pub tags: Vec<TagFormat>,
@@ -102,25 +101,25 @@ pub(crate) struct TagsWithSeparatorFormat {
     pub stop_after_first: bool,
 }
 
-/// `{"type":"optional","content":...}`.
+/// `{"type":"optional","content":.}`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct OptionalFormat {
     pub content: Box<Format>,
 }
 
-/// `{"type":"plus","content":...}`.
+/// `{"type":"plus","content":.}`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct PlusFormat {
     pub content: Box<Format>,
 }
 
-/// `{"type":"star","content":...}`.
+/// `{"type":"star","content":.}`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct StarFormat {
     pub content: Box<Format>,
 }
 
-/// `{"type":"repeat","min":...,"max":...,"content":...}` (`max == -1` is unbounded).
+/// `{"type":"repeat","min":.,"max":.,"content":.}` (`max == -1` is unbounded).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct RepeatFormat {
     pub min: i32,
@@ -149,7 +148,7 @@ impl TokenFormat {
     }
 }
 
-/// `{"type":"exclude_token","exclude_tokens":[...]}`.
+/// `{"type":"exclude_token","exclude_tokens":[.]}`.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
 pub(crate) struct ExcludeTokenFormat {
     pub exclude_tokens: Vec<IntOrString>,
@@ -157,7 +156,7 @@ pub(crate) struct ExcludeTokenFormat {
     pub detected_end_token_ids: Vec<i32>,
 }
 
-/// `{"type":"any_tokens","exclude_tokens":[...]}`.
+/// `{"type":"any_tokens","exclude_tokens":[.]}`.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
 pub(crate) struct AnyTokensFormat {
     pub exclude_tokens: Vec<IntOrString>,
@@ -165,7 +164,7 @@ pub(crate) struct AnyTokensFormat {
     pub detected_end_token_ids: Vec<i32>,
 }
 
-/// `{"type":"token_triggered_tags",...}`.
+/// `{"type":"token_triggered_tags",.}`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct TokenTriggeredTagsFormat {
     pub trigger_tokens: Vec<IntOrString>,
@@ -178,7 +177,7 @@ pub(crate) struct TokenTriggeredTagsFormat {
     pub detected_end_token_ids: Vec<i32>,
 }
 
-/// `{"type":"dispatch","rules":[[trigger, content], ...],"loop":...,"excludes":[...]}`.
+/// `{"type":"dispatch","rules":[[trigger, content], .],"loop":.,"excludes":[.]}`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct DispatchFormat {
     pub rules: Vec<(String, Box<Format>)>,
@@ -186,7 +185,7 @@ pub(crate) struct DispatchFormat {
     pub excludes: Vec<String>,
 }
 
-/// `{"type":"token_dispatch","rules":[[trigger, content], ...],...}`.
+/// `{"type":"token_dispatch","rules":[[trigger, content], .],.}`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct TokenDispatchFormat {
     pub rules: Vec<(IntOrString, Box<Format>)>,

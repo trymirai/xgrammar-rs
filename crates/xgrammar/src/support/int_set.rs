@@ -1,11 +1,11 @@
-//! Sorted integer-set operations — a port of `cpp/support/int_set.h`.
+//! Sorted integer-set operations.
 //!
 //! All inputs are assumed to be **sorted and duplicate-free**. Intersection and
 //! difference mutate the left operand in place (reusing its allocation); union rebuilds
 //! it via an O(n+m) merge.
 //!
 //! These power the adaptive token-mask computation, so correctness is paramount — the
-//! Rust port computes true set results (the C++ `IntsetUnion` back-merge mishandles some
+//! Computes true set results (historical IntsetUnion mishandled some
 //! inputs, e.g. `[3] ∪ [1, 3]`).
 
 use std::cmp::Ordering;

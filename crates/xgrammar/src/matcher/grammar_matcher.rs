@@ -1,9 +1,13 @@
-//! The grammar matcher — the string/token-accepting front end over the Earley parser.
+//! Stateful matcher to match tokens to a BNF grammar — the core logic of grammar-guided
+//! generation.
 //!
-//! This drives the parser to accept input strings and tokens and to compute the next-token
-//! bitmask. Ported from `cpp/grammar_matcher.cc`. When a compiled grammar provides a
-//! non-empty adaptive token-mask cache, bitmask generation uses that cache; otherwise it
-//! falls back to brute-force per-token checks.
+//! This module implements the non-deterministic pushdown automaton (NPDA) matching algorithm
+//! to match characters to a BNF grammar. It keeps track of the current state of the matching
+//! process by maintaining several stacks internally as possible paths in the NPDA. It also
+//! supports backtracking.
+//!
+//! It is particularly capable of finding the set of tokens that are acceptable for the next
+//! step and storing them in a bitmask. This aids in grammar-guided generation.
 
 use std::{sync::Arc, time::Instant};
 
@@ -17,7 +21,12 @@ use crate::{
     tokenizer::{TokenizerInfo, VocabType},
 };
 
-/// Matches input against a grammar by driving an [`EarleyParser`].
+/// A stateful matcher to match tokens to the specified BNF grammar.
+///
+/// This class is the core logic of grammar-guided generation. It implements the NPDA matching
+/// algorithm, maintains several internal stacks as possible paths in the NPDA, and supports
+/// backtracking. It can find the set of tokens acceptable for the next step and store them in
+/// a bitmask.
 #[derive(Debug, Clone)]
 pub struct GrammarMatcher {
     parser: EarleyParser,
@@ -55,7 +64,10 @@ impl GrammarMatcher {
         Self::build(grammar, tokenizer_info, false)
     }
 
-    /// Creates a matcher over a [`CompiledGrammar`](crate::compiler::CompiledGrammar).
+    /// Constructs a [`GrammarMatcher`] from the preprocessing result of type
+    /// [`CompiledGrammar`](crate::compiler::CompiledGrammar).
+    ///
+    /// `compiled` is obtained through preprocessing the grammar and tokenizer.
     #[must_use]
     pub fn from_compiled_grammar(
         compiled: &crate::compiler::CompiledGrammar,
@@ -64,10 +76,10 @@ impl GrammarMatcher {
         Self::from_compiled_grammar_with_options(compiled, None, terminate_without_stop_token)
     }
 
-    /// Creates a matcher over a compiled grammar with optional stop-token override.
+    /// Constructs a [`GrammarMatcher`] from a compiled grammar with optional stop-token override.
     ///
-    /// `override_stop_tokens`, when set, must be non-empty (matching the C++ check).
-    /// `max_rollback_tokens` is accepted for API parity but unused (C++ always reports `-1`).
+    /// `override_stop_tokens`, when set, must be non-empty.
+    /// `max_rollback_tokens` is accepted for API parity but unused (always reports `-1`).
     ///
     /// # Panics
     /// Panics if `override_stop_tokens` is `Some` and empty.
@@ -125,7 +137,10 @@ impl GrammarMatcher {
         }
     }
 
-    /// Accepts `input` byte by byte (see [`Self::accept_bytes`]).
+    /// Accepts a string and updates the state of the matcher.
+    ///
+    /// The whole string is considered as one step in rollback. This complements
+    /// [`Self::accept_token`]; [`Self::accept_token`] should always be used to accept tokens.
     pub fn accept_string(
         &mut self,
         input: &str,
@@ -152,9 +167,14 @@ impl GrammarMatcher {
         true
     }
 
-    /// Accepts the token with id `token_id` (its decoded string and/or atomic-token edges).
+    /// Accepts one token and updates the state of the matcher.
     ///
-    /// Stop tokens terminate the matcher; special and out-of-range tokens are rejected.
+    /// # Termination state
+    ///
+    /// When the end of the root rule is reached, the matcher can only accept the stop token.
+    /// The matcher is terminated after accepting the stop token, i.e. no [`Self::accept_token`]
+    /// or [`Self::fill_next_token_bitmask`] operations can be performed. The termination state
+    /// can be canceled using [`Self::rollback`].
     pub fn accept_token(
         &mut self,
         token_id: i32,
@@ -235,10 +255,11 @@ impl GrammarMatcher {
         true
     }
 
-    /// Fills `bitmask` (a `1 × get_bitmask_size(vocab)` row at `index`) with the set of tokens
-    /// acceptable in the current state: bit set = allowed.
+    /// Gets the set of tokens that are acceptable for the next step and stores them in a
+    /// bitmask.
     ///
-    /// Returns whether any token is masked out (some token is rejected).
+    /// The bitmask must be pre-allocated with shape `(get_bitmask_size(vocab_size),)` and dtype
+    /// `i32`. Returns whether the bitmask needs to be applied (not all-true).
     ///
     /// # Errors
     /// Returns [`MatcherTerminatedError`] after the stop token has been accepted.
@@ -469,7 +490,9 @@ impl GrammarMatcher {
         true
     }
 
-    /// Whether the matcher has terminated.
+    /// Checks if the matcher has accepted the stop token and terminated.
+    ///
+    /// See [`Self::accept_token`].
     #[must_use]
     pub fn is_terminated(&self) -> bool {
         if self.terminate_without_stop_token {
@@ -478,7 +501,10 @@ impl GrammarMatcher {
         self.is_stop_token_accepted()
     }
 
-    /// Whether the grammar is currently in a completed (acceptable-stop) state.
+    /// Checks if the grammar's root rule has been fully matched by the input accepted so far.
+    ///
+    /// Unlike [`Self::is_terminated`], this does not require the stop token to have been accepted.
+    /// See [`Self::is_terminated`] and [`Self::accept_token`].
     #[must_use]
     pub fn is_completed(&self) -> bool {
         self.parser.is_completed()
@@ -496,7 +522,10 @@ impl GrammarMatcher {
         self.token_length_history.clear();
     }
 
-    /// Rolls the matcher back by `num_tokens` accepted tokens/strings.
+    /// Rolls the matcher back to a previous state.
+    ///
+    /// `num_tokens` cannot exceed the current number of steps, nor can it exceed the specified
+    /// maximum number of rollback tokens.
     ///
     /// # Panics
     /// Panics if `num_tokens` exceeds the saved history.
@@ -514,14 +543,16 @@ impl GrammarMatcher {
         }
     }
 
-    /// The maximum number of tokens that can be rolled back (always `-1`, i.e. unbounded —
-    /// matching the C++).
+    /// Returns the maximum number of rollback tokens allowed (`-1` means unbounded).
     #[must_use]
     pub fn max_rollback_tokens(&self) -> i32 {
         -1
     }
 
-    /// Returns a deep copy of the matcher with independent state.
+    /// Forks the matcher.
+    ///
+    /// Returns a new [`GrammarMatcher`] with a deep copy of all state except the compiled
+    /// grammar and tokenizer info, which are shared with this matcher.
     #[must_use]
     pub fn fork(&self) -> GrammarMatcher {
         self.clone()
@@ -676,8 +707,11 @@ impl GrammarMatcher {
         Ok(true)
     }
 
-    /// Finds the longest string of forced (uniquely-determined) next characters from the
-    /// current state, without advancing the matcher (jump-forward decoding).
+    /// Finds the jump-forward string for jump-forward decoding.
+    ///
+    /// This is the longest string that will be valid according to the current syntax.
+    ///
+    /// This method does not change the grammar state.
     ///
     /// # Errors
     /// Returns [`MatcherTerminatedError`] after the stop token has been accepted.

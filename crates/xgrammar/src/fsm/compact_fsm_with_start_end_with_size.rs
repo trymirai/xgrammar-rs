@@ -1,4 +1,4 @@
-//! A [`CompactFsmWithStartEnd`] bundled with its pre-merge edge/node counts — a port of
+//! A [`CompactFsmWithStartEnd`] bundled with its pre-merge edge/node counts.
 //! `CompactFSMWithStartEndWithSize` in `cpp/fsm.h`. This is the per-rule FSM stored on a
 //! compiled grammar.
 

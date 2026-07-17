@@ -1,5 +1,4 @@
-//! XML-style function-call schema converters (Qwen, MiniMax, DeepSeek, GLM) — a port of
-//! `XMLToolCallingConverter` in `cpp/json_schema_converter_ext.{h,cc}`.
+//! XML-style function-call schema converters (Qwen, MiniMax, DeepSeek, GLM).
 
 use super::{json_schema_converter::json_schema_to_ebnf_xml, schema_error::SchemaError};
 

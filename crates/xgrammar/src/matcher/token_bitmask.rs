@@ -1,14 +1,18 @@
-//! Token-bitmask allocation and CPU application — a port of the bitmask helpers in
-//! `cpp/grammar_matcher.cc`.
+//! Token bitmasks for grammar-guided generation.
 //!
-//! A bitmask is a row-major `[batch, get_bitmask_size(vocab)]` buffer of `i32` words; bit `i`
-//! (word `i / 32`, bit `i % 32`) set means token `i` is allowed. These functions operate on
-//! the raw buffer directly — the DLTensor/tensor wrapping lives in the bindings layer.
+//! A token bitmask is a row-major `[batch, get_bitmask_size(vocab)]` buffer of `i32` words.
+//! Bit `i` (word `i / 32`, bit `i % 32`) set means token `i` is **allowed**; cleared bits
+//! mark rejected tokens. Matchers fill bitmasks via
+//! [`GrammarMatcher::fill_next_token_bitmask`](super::grammar_matcher::GrammarMatcher::fill_next_token_bitmask);
+//! inference engines apply them to logits to mask out invalid tokens.
+//!
+//! These functions operate on the raw buffer directly — DLTensor/tensor wrapping lives in the
+//! bindings layer.
 
 /// Bits per bitmask word.
 const BITS_PER_WORD: i32 = 32;
 
-/// DLPack-compatible int32 type descriptor for token bitmasks (the C++ `GetBitmaskDLType`).
+/// DLPack-compatible int32 type descriptor for token bitmasks.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BitmaskDlType {
     /// DLDataType code: `kDLInt` = 0.
@@ -19,7 +23,7 @@ pub struct BitmaskDlType {
     pub lanes: u16,
 }
 
-/// The bitmask DLPack dtype: signed 32-bit integer, one lane.
+/// Returns the DLPack dtype for token bitmasks: signed 32-bit integer, one lane.
 #[must_use]
 pub fn get_bitmask_dl_type() -> BitmaskDlType {
     BitmaskDlType {
@@ -71,8 +75,7 @@ fn row(
     &bitmask[start..start + size]
 }
 
-/// The ids of the rejected (zero-bit) tokens in batch entry `index` — the C++
-/// `_DebugGetMaskedTokensFromBitmask`.
+/// Returns the ids of rejected (zero-bit) tokens in batch entry `index`.
 #[must_use]
 pub fn get_masked_tokens_from_bitmask(
     bitmask: &[i32],
@@ -84,7 +87,7 @@ pub fn get_masked_tokens_from_bitmask(
 }
 
 /// If exactly one token is allowed in batch entry `index`, returns `(true, token_id)`;
-/// otherwise `(false, -1)` — the C++ `_IsSingleTokenBitmask`.
+/// otherwise `(false, -1)`.
 #[must_use]
 pub fn is_single_token_bitmask(
     bitmask: &[i32],
@@ -111,7 +114,7 @@ pub fn is_single_token_bitmask(
 }
 
 /// Applies a single-row bitmask to `logits` in place, setting every rejected token's logit to
-/// negative infinity — the CPU `ApplyTokenBitmaskInplaceCPU` for one float32 row.
+/// negative infinity.
 ///
 /// # Panics
 /// Panics if `logits` is shorter than `vocab_size`.
@@ -126,8 +129,8 @@ pub fn apply_token_bitmask_inplace_cpu(
 /// Applies bitmask rows to a batched float32 logits buffer in place.
 ///
 /// Both `logits` and `bitmask` are row-major. When `indices` is `None`, every batch row
-/// `0..batch_size` is masked (batch sizes must match). When `indices` is `Some`, each
-/// index selects the same row in both tensors (matching C++ `ApplyTokenBitmaskInplaceCPU`).
+/// `0.batch_size` is masked (batch sizes must match). When `indices` is `Some`, each
+/// index selects the same row in both tensors.
 ///
 /// # Panics
 /// Panics if shapes are inconsistent with `vocab_size` / `batch_size` / `indices`.

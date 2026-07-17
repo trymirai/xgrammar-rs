@@ -1,4 +1,4 @@
-//! The EBNF parser — a port of `EBNFParser` in `cpp/grammar_parser.cc`.
+//! The EBNF parser.
 //!
 //! Produces the raw (un-normalized) BNF AST, including the four macros (`TagDispatch`,
 //! `Token`, `ExcludeToken`, `TokenTagDispatch`).

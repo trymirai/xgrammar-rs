@@ -1,5 +1,4 @@
-//! A [`CompactFsm`] paired with a start state and accepting-state set — a port of
-//! `CompactFSMWithStartEnd` in `cpp/fsm.{h,cc}`.
+//! A [`CompactFsm`] paired with a start state and accepting-state set.
 
 use std::collections::HashSet;
 

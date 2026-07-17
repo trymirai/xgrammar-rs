@@ -1,5 +1,4 @@
-//! Builds an NFA from a (byte-oriented) regex — a port of `RegexIR` and `RegexFSMBuilder`
-//! in `cpp/fsm_builder.cc`.
+//! Builds an NFA from a (byte-oriented) regex.
 //!
 //! The regex is parsed onto a stack into a [`RegexNode`] tree (Thompson construction), then
 //! lowered into an [`FsmWithStartEnd`] via the `concat`/`union`/`star`/`plus`/`optional`

@@ -1,5 +1,4 @@
-//! Computes structural hashes for per-rule FSMs — a port of `GrammarFSMHasher` in
-//! `cpp/grammar_functor.cc`.
+//! Computes structural hashes for per-rule FSMs.
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 

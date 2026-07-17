@@ -1,4 +1,4 @@
-//! Hash combining — a port of the boost-derived helpers in `cpp/support/utils.h`.
+//! Hash combining.
 
 /// The boost `hash_combine` golden-ratio mixing constant.
 const HASH_MIX: u64 = 0x9e37_79b9_7f4a_7c15;

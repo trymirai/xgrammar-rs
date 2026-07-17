@@ -1,5 +1,4 @@
-//! The grammar optimization pipeline run before parsing — a port of `GrammarOptimizer` in
-//! `cpp/grammar_functor.cc`.
+//! The grammar optimization pipeline run before parsing.
 //!
 //! Runs the byte-string fuser, rule inliner, repetition-range expander, dead-code eliminator,
 //! lookahead analyzer, empty-rule analysis, repetition normalizer, and finally the grammar

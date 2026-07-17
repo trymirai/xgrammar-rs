@@ -1,4 +1,4 @@
-//! A named grammar rule — a port of `Grammar::Impl::Rule` in `cpp/grammar_impl.h`.
+//! A named grammar rule.
 
 use serde::{Deserialize, Serialize};
 

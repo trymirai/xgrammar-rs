@@ -1,5 +1,4 @@
-//! Inlines references to simple rules — a port of `RuleInliner` in
-//! `cpp/grammar_functor.cc`.
+//! Inlines references to simple rules.
 //!
 //! When a choice is a sequence beginning with a reference to an *inlinable* rule (one whose
 //! body is a non-empty choices of sequences with no empty string and no rule references),

@@ -1,4 +1,4 @@
-//! The edge of a finite-state machine — a port of `FSMEdge` in `cpp/fsm.h`.
+//! The edge of a finite-state machine.
 //!
 //! An edge's kind is encoded in its `min` field: `min >= 0` is a character range `[min,
 //! max]`; a negative `min` is one of the special [`edge_type`] tags, where `max` carries a
@@ -179,7 +179,7 @@ impl RepeatEdgeRef<'_> {
     }
 }
 
-/// View into `edge_aux_data` for a token edge (`[count, ids...]`).
+/// View into `edge_aux_data` for a token edge (`[count, ids.]`).
 #[derive(Debug, Clone, Copy)]
 pub struct TokenEdgeRef<'a> {
     /// The backing `[count, ids...]` slice.
@@ -202,7 +202,7 @@ impl TokenEdgeRef<'_> {
     }
 }
 
-/// View into `edge_aux_data` for an exclude-token edge (`[count, ids...]`).
+/// View into `edge_aux_data` for an exclude-token edge (`[count, ids.]`).
 #[derive(Debug, Clone, Copy)]
 pub struct ExcludeTokenEdgeRef<'a> {
     /// The backing `[count, ids...]` slice.

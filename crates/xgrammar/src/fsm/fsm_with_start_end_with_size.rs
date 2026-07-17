@@ -1,5 +1,4 @@
-//! Per-rule FSM slice metadata after merging into a shared complete FSM — a port of
-//! `FSMWithStartEndWithSize` in `cpp/fsm.h`.
+//! Per-rule FSM slice metadata after merging into a shared complete FSM.
 //!
 //! When each rule's FSM is folded into one shared `complete_fsm`, what the compiler needs to
 //! keep per rule is its start state, accepting-state set (indexed into the complete FSM), and

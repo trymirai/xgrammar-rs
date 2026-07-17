@@ -1,15 +1,30 @@
-//! The vocabulary encoding type — a port of `VocabType` in `cpp/include/xgrammar/tokenizer_info.h`.
+//! The type of the vocabulary. Used in [`TokenizerInfo`](super::TokenizerInfo).
+//!
+//! XGrammar supports three types of vocabularies: [`Raw`](VocabType::Raw),
+//! [`ByteFallback`](VocabType::ByteFallback), and [`ByteLevel`](VocabType::ByteLevel).
 
 use serde::{Deserialize, Serialize};
 
 /// How a tokenizer's raw vocabulary strings are encoded (and thus how they decode to bytes).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum VocabType {
-    /// Tokens are used verbatim.
+    /// The vocabulary is in the raw format.
+    ///
+    /// The tokens in the vocabulary are kept in their original form without any processing. This
+    /// kind of tokenizer includes the tiktoken tokenizer, e.g. `microsoft/Phi-3-small-8k-instruct`,
+    /// `Qwen/Qwen-7B-Chat`, etc.
     Raw = 0,
-    /// SentencePiece-style: `<0xNN>` byte tokens and `▁` (U+2581) as space.
+    /// The vocabulary used in the byte fallback BPE tokenizer.
+    ///
+    /// The tokens are encoded through the byte-fallback conversion. E.g. `"\u001b"` → `"<0x1B>"`,
+    /// `" apple"` → `"▁apple"`. This kind of tokenizer includes `meta-llama/Llama-2-7b-chat`,
+    /// `microsoft/Phi-3.5-mini-instruct`, etc.
     ByteFallback = 1,
-    /// GPT-2-style byte-to-unicode remapping.
+    /// The vocabulary used in the byte level BPE tokenizer.
+    ///
+    /// The tokens are encoded through the byte-to-unicode conversion, as in the GPT-2
+    /// tokenization scheme. This kind of tokenizer includes `meta-llama/Meta-Llama-3-8B-Instruct`,
+    /// `meta-llama/Meta-Llama-3.1-8B-Instruct`, etc.
     ByteLevel = 2,
 }
 

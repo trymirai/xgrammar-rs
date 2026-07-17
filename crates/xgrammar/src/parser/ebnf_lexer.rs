@@ -1,4 +1,4 @@
-//! The EBNF lexer — a port of `EBNFLexer` in `cpp/grammar_parser.cc`.
+//! The EBNF lexer.
 
 use super::{
     lexer_error::LexerError,

@@ -1,5 +1,4 @@
-//! Error raised by the structural-tag converter — a port of the `StructuralTagError`
-//! variant family in `cpp/include/xgrammar/exception.h`.
+//! Error raised by the structural-tag converter.
 
 /// A structural-tag conversion failure.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]

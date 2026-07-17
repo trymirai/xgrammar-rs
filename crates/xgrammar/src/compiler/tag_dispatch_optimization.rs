@@ -1,5 +1,4 @@
-//! Precomputes tag-dispatch second-slicing bitsets — a port of
-//! `GrammarCompilerSub::TagDispatchOptimization` in `cpp/grammar_compiler.cc`.
+//! Precomputes tag-dispatch second-slicing bitsets.
 
 use std::collections::HashMap;
 

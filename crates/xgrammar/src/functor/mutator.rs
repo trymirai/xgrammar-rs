@@ -1,5 +1,4 @@
-//! The grammar visitor/mutator framework — a port of `GrammarFunctor` in
-//! `cpp/grammar_functor.h`.
+//! The grammar visitor/mutator framework.
 //!
 //! A mutator walks every rule and rebuilds the grammar into a fresh [`GrammarBuilder`],
 //! dispatching on each expression's type. The defaults form an identity transform; a pass

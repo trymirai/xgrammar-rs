@@ -1,4 +1,4 @@
-//! EBNF printing for [`Grammar`] — a port of `cpp/grammar_printer.cc`.
+//! EBNF printing for [`Grammar`].
 
 use std::fmt::{self, Write as _};
 

@@ -1,5 +1,4 @@
-//! Manages indentation and separators while emitting JSON-shaped EBNF — a port of
-//! `IndentManager` in `cpp/json_schema_converter.*`.
+//! Manages indentation and separators while emitting JSON-shaped EBNF.
 //!
 //! Depending on the whitespace mode it emits either flexible whitespace char-classes
 //! (`any_whitespace`), fixed separators, or newline-plus-indent strings.

@@ -1,7 +1,6 @@
-//! The compiled grammar — a port of `CompiledGrammar` in `cpp/compiled_grammar.cc`.
+//! The compiled grammar: preprocessing results of a [`GrammarMatcher`](crate::matcher::GrammarMatcher).
 //!
-//! Bundles an optimized [`Grammar`] with the [`TokenizerInfo`] it was compiled against and a
-//! per-state [`AdaptiveTokenMask`] cache that accelerates [`GrammarMatcher::fill_next_token_bitmask`].
+//! Contains the preprocessing results of the grammar and tokenizer.
 
 use std::sync::Arc;
 
@@ -20,8 +19,9 @@ use crate::{
     tokenizer::TokenizerInfo,
 };
 
-/// The preprocessing result that a [`GrammarMatcher`](crate::matcher::GrammarMatcher) runs on:
-/// an optimized grammar plus its tokenizer and adaptive token-mask cache.
+/// The compiled grammar of a [`GrammarMatcher`](crate::matcher::GrammarMatcher).
+///
+/// It contains the preprocessing results of the grammar and tokenizer.
 #[derive(Debug, Clone)]
 pub struct CompiledGrammar {
     grammar: Grammar,
@@ -44,13 +44,13 @@ impl CompiledGrammar {
         }
     }
 
-    /// The associated (optimized) grammar.
+    /// Gets the associated grammar.
     #[must_use]
     pub fn grammar(&self) -> &Grammar {
         &self.grammar
     }
 
-    /// The associated tokenizer info.
+    /// Gets the associated tokenizer info.
     #[must_use]
     pub fn tokenizer_info(&self) -> &TokenizerInfo {
         &self.tokenizer_info
@@ -93,7 +93,7 @@ impl CompiledGrammar {
         }
     }
 
-    /// An approximate memory footprint of the compiled grammar, in bytes.
+    /// Returns the approximate memory usage of the grammar in bytes.
     #[must_use]
     pub fn memory_size_bytes(&self) -> usize {
         let exprs = self.grammar.num_exprs() as usize * 4;
@@ -103,7 +103,7 @@ impl CompiledGrammar {
         exprs + rules + vocab + cache
     }
 
-    /// Serializes the compiled grammar without embedding the full tokenizer info.
+    /// Returns the serialized JSON string of the compiled grammar.
     #[must_use]
     pub fn serialize_json(&self) -> String {
         serde_json::to_string(&self.serialize_json_value()).expect("compiled grammar JSON serialization never fails")

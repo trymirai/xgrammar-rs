@@ -1,5 +1,5 @@
-//! Adaptive token-mask cache — a port of `AdaptiveTokenMask` in `cpp/compiled_grammar_impl.h`
-//! and the compile-time cache builder in `cpp/grammar_compiler.cc`.
+//! Adaptive token-mask cache.
+//!.
 
 use std::{
     collections::HashMap,

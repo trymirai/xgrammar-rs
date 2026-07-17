@@ -1,5 +1,4 @@
-//! Decoded form of a [`GrammarExprType::TokenTagDispatch`] expression — a port of
-//! `Grammar::Impl::TokenTagDispatch` and `GetTokenTagDispatch` in `cpp/grammar_impl.h`.
+//! Decoded form of a [`GrammarExprType::TokenTagDispatch`] expression.
 
 use super::{grammar::Grammar, grammar_expr_type::GrammarExprType};
 

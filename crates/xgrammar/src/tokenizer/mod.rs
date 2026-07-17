@@ -1,7 +1,7 @@
-//! Tokenizer metadata: vocabulary decoding, stop/special-token detection, and the
-//! sorted-vocabulary pseudo-trie used for token masking. Ported from `cpp/tokenizer_info.cc`.
+//! Tokenizer metadata for grammar-guided generation.
 //!
-//! One dedicated type per file; re-exported here.
+//! [`TokenizerInfo`] contains the vocabulary, the type of the vocabulary, and the information
+//! needed for grammar-guided generation.
 
 mod hf_metadata;
 mod token_decoder;

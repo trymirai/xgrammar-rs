@@ -1,6 +1,5 @@
 //! Resolves, analyzes, and converts a structural-tag [`Format`] tree into a [`Grammar`] —
 //! a port of `StructuralTagTokenResolver`, `StructuralTagAnalyzer`, and
-//! `StructuralTagGrammarConverter` in `cpp/structural_tag.cc`.
 
 use std::collections::HashMap;
 
@@ -23,7 +22,7 @@ use crate::{
 type Ist = StructuralTagError;
 
 impl Grammar {
-    /// Builds a grammar from a structural-tag JSON document.
+    /// Constructs a grammar from a structural tag string.
     ///
     /// String-keyed token references require a tokenizer; use
     /// [`Grammar::from_structural_tag_with_tokenizer`] for those (integer token ids work
@@ -35,9 +34,9 @@ impl Grammar {
         build_structural_tag(json, None)
     }
 
-    /// Builds a grammar from a structural-tag JSON document, resolving string token
-    /// references against `tokenizer_info`'s decoded vocabulary (the C++
-    /// `Grammar::FromStructuralTag(json, tokenizer_info)`).
+    /// Constructs a grammar from a structural tag string.
+    ///
+    /// `tokenizer_info` is used for resolving string token references.
     ///
     /// # Errors
     /// Returns a [`StructuralTagError`] if the document is invalid, unsatisfiable, or refers

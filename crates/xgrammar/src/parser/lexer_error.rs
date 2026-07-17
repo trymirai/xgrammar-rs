@@ -1,4 +1,4 @@
-//! Error raised by the EBNF lexer — the Rust equivalent of the C++ `ReportLexerError`
+//! Error raised by the EBNF lexer —
 //! fatal (which aborts); here it is a recoverable [`Result`] error.
 
 /// A lexing failure, with the 1-based source position where it occurred.

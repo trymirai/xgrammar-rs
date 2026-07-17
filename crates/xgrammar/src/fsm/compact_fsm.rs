@@ -1,5 +1,4 @@
-//! A finite-state machine in compressed-sparse-row form — a port of `CompactFSM` in
-//! `cpp/fsm.{h,cc}`.
+//! A finite-state machine in compressed-sparse-row form.
 //!
 //! Same semantics as [`Fsm`](super::fsm::Fsm) but with the per-state edge lists packed into
 //! one [`Compact2dArray`], which is cheaper to store/serialize and to scan. Build one with

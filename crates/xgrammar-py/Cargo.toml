@@ -31,7 +31,6 @@ bindings-pyo3 = [
     "dep:pyo3",
     "dep:pyo3-build-config",
     "dep:pyo3-async-runtimes",
-    "dep:pyo3-stub-gen",
     "dep:inventory",
 ]
 bindings-wasm = [
@@ -55,7 +54,6 @@ napi = { workspace = true, optional = true }
 napi-derive = { workspace = true, optional = true }
 pyo3 = { workspace = true, optional = true }
 pyo3-async-runtimes = { workspace = true, optional = true }
-pyo3-stub-gen = { workspace = true, optional = true }
 inventory = { workspace = true, optional = true }
 wasm-bindgen = { workspace = true, optional = true }
 serde-wasm-bindgen = { workspace = true, optional = true }

@@ -124,18 +124,20 @@ impl GrammarCompiler {
         separator_kv: Option<String>,
         strict_mode: bool,
         max_whitespace_cnt: Option<i32>,
+        any_order: bool,
     ) -> CompiledGrammar {
         let seps = match (&separator_item, &separator_kv) {
             (Some(a), Some(b)) => Some((a.as_str(), b.as_str())),
             _ => None,
         };
-        CompiledGrammar::wrap(self.inner.compile_json_schema(
+        CompiledGrammar::wrap(self.inner.compile_json_schema_with_any_order(
             &schema,
             any_whitespace,
             indent,
             seps,
             strict_mode,
             max_whitespace_cnt,
+            any_order,
         ))
     }
 

@@ -1,5 +1,7 @@
 //! `GrammarMatcher` binding.
 
+use std::sync::{Arc, Mutex, MutexGuard};
+
 // Used by the `new` constructor signature. Only PyO3 emits a constructor companion; the other
 // backends drop the (extracted) constructor, leaving this import unused there.
 #[cfg_attr(not(feature = "bindings-pyo3"), allow(unused_imports))]
@@ -9,7 +11,15 @@ use crate::compiler::CompiledGrammar;
 #[bindings::export(Class)]
 #[derive(Debug, Clone)]
 pub struct GrammarMatcher {
-    pub(crate) inner: xgrammar::matcher::GrammarMatcher,
+    pub(crate) inner: Arc<Mutex<xgrammar::matcher::GrammarMatcher>>,
+}
+
+impl GrammarMatcher {
+    pub(crate) fn lock(
+        &self
+    ) -> MutexGuard<'_, xgrammar::matcher::GrammarMatcher> {
+        self.inner.lock().expect("grammar matcher mutex poisoned")
+    }
 }
 
 #[bindings::export(Implementation)]
@@ -26,99 +36,109 @@ impl GrammarMatcher {
         _max_rollback_tokens: i32,
     ) -> GrammarMatcher {
         GrammarMatcher {
-            inner: xgrammar::matcher::GrammarMatcher::from_compiled_grammar(
-                &compiled_grammar.inner,
-                terminate_without_stop_token,
-            ),
+            inner: Arc::new(Mutex::new(
+                xgrammar::matcher::GrammarMatcher::from_compiled_grammar(
+                    &compiled_grammar.inner,
+                    terminate_without_stop_token,
+                ),
+            )),
         }
     }
 
     /// Accepts a single token id, advancing the matcher. Returns whether it was accepted.
     #[bindings::export(Method)]
     pub fn accept_token(
-        &mut self,
+        &self,
         token_id: i32,
         _debug_print: bool,
     ) -> bool {
-        self.inner.accept_token(token_id)
+        self.lock().accept_token(token_id)
+    }
+
+    /// Accepts a UTF-8 string, advancing the matcher. Returns whether it was accepted.
+    #[bindings::export(Method)]
+    pub fn accept_string(
+        &self,
+        input: String,
+        _debug_print: bool,
+    ) -> bool {
+        self.lock().accept_string(&input)
+    }
+
+    /// Accepts raw bytes, advancing the matcher. Returns whether it was accepted.
+    #[bindings::export(Method)]
+    pub fn accept_bytes(
+        &self,
+        input: Vec<u8>,
+        _debug_print: bool,
+    ) -> bool {
+        self.lock().accept_bytes(&input)
     }
 
     /// Whether the matcher has reached an accepting terminal state.
     #[bindings::export(Method)]
     pub fn is_terminated(&self) -> bool {
-        self.inner.is_terminated()
+        self.lock().is_terminated()
     }
 
     /// Whether the grammar is fully matched (root completed).
     #[bindings::export(Method)]
     pub fn is_completed(&self) -> bool {
-        self.inner.is_completed()
+        self.lock().is_completed()
     }
 
     /// Resets the matcher to its initial state.
     #[bindings::export(Method)]
-    pub fn reset(&mut self) {
-        self.inner.reset();
+    pub fn reset(&self) {
+        self.lock().reset();
     }
 
     /// Rolls back the last `num_tokens` accepted tokens.
     #[bindings::export(Method)]
     pub fn rollback(
-        &mut self,
+        &self,
         num_tokens: i32,
     ) {
-        self.inner.rollback(num_tokens);
+        self.lock().rollback(num_tokens);
     }
 
     /// Returns a deep copy of the matcher at its current state.
     #[bindings::export(Method)]
     pub fn fork(&self) -> GrammarMatcher {
         GrammarMatcher {
-            inner: self.inner.fork(),
+            inner: Arc::new(Mutex::new(self.lock().fork())),
         }
     }
 
     /// The stop token ids the matcher accepts as terminators.
     #[bindings::export(Method)]
     pub fn stop_token_ids(&self) -> Vec<i32> {
-        self.inner.stop_token_ids().to_vec()
+        self.lock().stop_token_ids().to_vec()
     }
 }
 
 #[cfg(feature = "bindings-pyo3")]
 mod matcher_pyo3_ext {
-    use pyo3::{exceptions::PyNotImplementedError, prelude::*};
+    use pyo3::{exceptions::PyRuntimeError, prelude::*};
 
     use super::GrammarMatcher;
     use crate::{
-        bitmask_util::with_writable_i32_buffer, tokenizer_info::TokenizerInfo,
+        bitmask_util::{i32_shape_2d, read_i64_1d, with_writable_i32_buffer},
+        tokenizer_info::TokenizerInfo,
     };
 
     #[pyo3::pymethods]
     impl GrammarMatcher {
-        #[pyo3(name = "accept_string")]
-        fn accept_string_py(
-            &mut self,
-            input: &Bound<'_, PyAny>,
-            _debug_print: bool,
-        ) -> PyResult<bool> {
-            if input.is_instance_of::<pyo3::types::PyBytes>() {
-                Ok(self.inner.accept_bytes(&input.extract::<Vec<u8>>()?))
-            } else {
-                Ok(self.inner.accept_string(&input.extract::<String>()?))
-            }
-        }
-
         #[pyo3(name = "fill_next_token_bitmask")]
         fn fill_next_token_bitmask_py(
-            &mut self,
+            &self,
             py: Python<'_>,
             bitmask: &Bound<'_, PyAny>,
             index: i32,
             _debug_print: bool,
         ) -> PyResult<bool> {
             with_writable_i32_buffer(py, bitmask, |buf| {
-                self.inner.fill_next_token_bitmask(buf, index).map_err(
+                self.lock().fill_next_token_bitmask(buf, index).map_err(
                     |error| {
                         pyo3::exceptions::PyRuntimeError::new_err(
                             error.to_string(),
@@ -130,23 +150,23 @@ mod matcher_pyo3_ext {
 
         #[pyo3(name = "tokenizer_info")]
         fn tokenizer_info_py(&self) -> TokenizerInfo {
-            TokenizerInfo::wrap(self.inner.tokenizer_info().clone())
+            TokenizerInfo::wrap(self.lock().tokenizer_info().clone())
         }
 
         #[pyo3(name = "accept_stop_token")]
-        fn accept_stop_token_py(&mut self) -> bool {
-            self.inner.accept_stop_token()
+        fn accept_stop_token_py(&self) -> bool {
+            self.lock().accept_stop_token()
         }
 
         #[pyo3(name = "_debug_print_internal_state")]
         fn debug_print_internal_state_py(&self) -> String {
-            self.inner.debug_print_internal_state()
+            self.lock().debug_print_internal_state()
         }
 
         #[pyo3(name = "find_jump_forward_string")]
-        fn find_jump_forward_string_py(&mut self) -> PyResult<String> {
+        fn find_jump_forward_string_py(&self) -> PyResult<String> {
             let bytes =
-                self.inner.find_jump_forward_string().map_err(|error| {
+                self.lock().find_jump_forward_string().map_err(|error| {
                     pyo3::exceptions::PyRuntimeError::new_err(error.to_string())
                 })?;
             String::from_utf8(bytes).map_err(|error| {
@@ -157,16 +177,39 @@ mod matcher_pyo3_ext {
         #[pyo3(name = "traverse_draft_tree")]
         #[allow(clippy::too_many_arguments)]
         fn traverse_draft_tree_py(
-            &mut self,
-            _retrieve_next_token: &Bound<'_, PyAny>,
-            _retrieve_next_sibling: &Bound<'_, PyAny>,
-            _draft_tokens: &Bound<'_, PyAny>,
-            _token_bitmask: &Bound<'_, PyAny>,
-            _time_threshold: f64,
+            &self,
+            py: Python<'_>,
+            retrieve_next_token: &Bound<'_, PyAny>,
+            retrieve_next_sibling: &Bound<'_, PyAny>,
+            draft_tokens: &Bound<'_, PyAny>,
+            token_bitmask: &Bound<'_, PyAny>,
+            time_threshold: f64,
         ) -> PyResult<bool> {
-            Err(PyNotImplementedError::new_err(
-                "traverse_draft_tree is not yet implemented in the pure-Rust core",
-            ))
+            let next_token =
+                read_i64_1d(py, retrieve_next_token, "retrieve_next_token")?;
+            let next_sibling = read_i64_1d(
+                py,
+                retrieve_next_sibling,
+                "retrieve_next_sibling",
+            )?;
+            let tokens = read_i64_1d(py, draft_tokens, "draft_tokens")?;
+            let shape = i32_shape_2d(py, token_bitmask, "token_bitmask")?;
+            if shape[0] != next_token.len() as i64 {
+                return Err(PyRuntimeError::new_err(
+                    "the token_bitmask batch size must match the number of nodes in the tree",
+                ));
+            }
+            with_writable_i32_buffer(py, token_bitmask, |bitmask| {
+                self.lock()
+                    .traverse_draft_tree(
+                        &next_token,
+                        &next_sibling,
+                        &tokens,
+                        bitmask,
+                        time_threshold,
+                    )
+                    .map_err(PyRuntimeError::new_err)
+            })
         }
     }
 }

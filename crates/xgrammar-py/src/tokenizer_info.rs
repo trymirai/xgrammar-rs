@@ -2,6 +2,39 @@
 
 use crate::{error::map_error, vocab_type::VocabType};
 
+const BYTE_TOKEN_PREFIX: &str = "\u{e000}xgrammar-bytes:";
+
+fn decode_vocab_transport(
+    encoded_vocab: Vec<String>
+) -> Result<Vec<Vec<u8>>, crate::error::BindingError> {
+    encoded_vocab
+        .into_iter()
+        .map(|token| {
+            let Some(hex) = token.strip_prefix(BYTE_TOKEN_PREFIX) else {
+                return Ok(token.into_bytes());
+            };
+            if hex.len() % 2 != 0 {
+                return Err(map_error(
+                    "invalid encoded vocabulary byte transport",
+                ));
+            }
+            hex.as_bytes()
+                .chunks_exact(2)
+                .map(|pair| {
+                    std::str::from_utf8(pair)
+                        .ok()
+                        .and_then(|pair| u8::from_str_radix(pair, 16).ok())
+                        .ok_or_else(|| {
+                            map_error(
+                                "invalid encoded vocabulary byte transport",
+                            )
+                        })
+                })
+                .collect()
+        })
+        .collect()
+}
+
 /// A thin opaque wrapper over [`xgrammar::tokenizer::TokenizerInfo`].
 #[bindings::export(Class)]
 #[derive(Debug, Clone)]
@@ -37,13 +70,16 @@ impl TokenizerInfo {
         add_prefix_space: bool,
     ) -> Result<TokenizerInfo, crate::error::BindingError> {
         let vt = parse_vocab_type(vocab_type)?;
-        Ok(TokenizerInfo::wrap(xgrammar::tokenizer::TokenizerInfo::new(
-            &encoded_vocab,
-            vt,
-            vocab_size,
-            stop_token_ids,
-            add_prefix_space,
-        )))
+        let encoded_vocab = decode_vocab_transport(encoded_vocab)?;
+        Ok(TokenizerInfo::wrap(
+            xgrammar::tokenizer::TokenizerInfo::new_from_bytes(
+                &encoded_vocab,
+                vt,
+                vocab_size,
+                stop_token_ids,
+                add_prefix_space,
+            ),
+        ))
     }
 
     /// Builds tokenizer info from an encoded vocabulary and a JSON metadata string.
@@ -52,7 +88,8 @@ impl TokenizerInfo {
         encoded_vocab: Vec<String>,
         metadata: String,
     ) -> Result<TokenizerInfo, crate::error::BindingError> {
-        xgrammar::tokenizer::TokenizerInfo::from_vocab_and_metadata(
+        let encoded_vocab = decode_vocab_transport(encoded_vocab)?;
+        xgrammar::tokenizer::TokenizerInfo::from_vocab_and_metadata_bytes(
             &encoded_vocab,
             &metadata,
         )
@@ -100,13 +137,13 @@ impl TokenizerInfo {
         self.inner.special_token_ids().to_vec()
     }
 
-    /// Serializes the tokenizer info to its `"v11"` JSON form.
+    /// Serializes the tokenizer info to its `"v14"` JSON form.
     #[bindings::export(Method)]
     pub fn serialize_json(&self) -> String {
         self.inner.serialize_json()
     }
 
-    /// Deserializes tokenizer info from its `"v11"` JSON form.
+    /// Deserializes tokenizer info from its `"v14"` JSON form.
     #[bindings::export(Method(Factory))]
     pub fn deserialize_json(
         json_string: String

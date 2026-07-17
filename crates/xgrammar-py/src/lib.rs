@@ -15,11 +15,8 @@ mod grammar;
 mod tokenizer_info;
 mod vocab_type;
 
-// The `GrammarMatcher` drives constrained decoding through `&mut self` methods. UniFFI
-// exposes objects as `Arc<T>` and cannot borrow them mutably, so the matcher is omitted from
-// the UniFFI surface (a working UniFFI matcher would need interior mutability — a follow-up).
-// PyO3 / NAPI / wasm all support `&mut self` and keep the matcher.
-#[cfg(not(feature = "bindings-uniffi"))]
+// The binding wrapper stores matcher state behind a mutex. This gives UniFFI's `Arc<T>` model
+// the same stateful matcher API as PyO3, NAPI, and wasm without putting locks in the Rust core.
 mod matcher;
 
 // PyO3-only surface: the torch/DLPack bitmask helpers, the `testing`/`config`/`kernels`
@@ -75,6 +72,3 @@ fn xgrammar_rs(
 
     Ok(())
 }
-
-#[cfg(feature = "bindings-pyo3")]
-pyo3_stub_gen::define_stub_info_gatherer!(pyo3_bindings_annotations);

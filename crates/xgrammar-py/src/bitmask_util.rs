@@ -1,6 +1,10 @@
 //! Helpers for reading/writing int32 bitmask buffers from Python array-likes.
 
-use pyo3::{buffer::PyBuffer, exceptions::PyRuntimeError, prelude::*};
+use pyo3::{
+    exceptions::PyRuntimeError,
+    prelude::*,
+    types::{PyAnyMethods, PyEllipsis},
+};
 
 /// Invokes `f` with a mutable view of the int32 data backing `obj`.
 ///
@@ -13,30 +17,62 @@ pub fn with_writable_i32_buffer<R>(
     let arr = resolve_i32_array(py, obj)?;
     ensure_writeable(&arr)?;
     let flat = arr.call_method0("ravel")?;
-    let buffer = PyBuffer::<i32>::get(&flat)?;
-    let cells = buffer.as_mut_slice(py).ok_or_else(|| {
-        PyRuntimeError::new_err("bitmask must be C-contiguous int32")
-    })?;
-    let mut scratch: Vec<i32> = cells.iter().map(|cell| cell.get()).collect();
+    let mut scratch = flat.call_method0("tolist")?.extract::<Vec<i32>>()?;
     let result = f(&mut scratch)?;
-    for (cell, value) in cells.iter().zip(scratch.iter()) {
-        cell.set(*value);
-    }
+    flat.set_item(PyEllipsis::get(py), scratch)?;
     Ok(result)
 }
 
-/// Reads int32 data from a tensor or numpy array.
-pub fn read_i32_buffer(
+/// Reads a one-dimensional CPU int64 tensor or array.
+pub fn read_i64_1d(
     py: Python<'_>,
     obj: &Bound<'_, PyAny>,
-) -> PyResult<Vec<i32>> {
+    name: &str,
+) -> PyResult<Vec<i64>> {
+    let np = py.import("numpy")?;
+    let arr = if obj.hasattr("numpy")? {
+        let device = obj.getattr("device")?;
+        let device_type = device.getattr("type")?.extract::<String>()?;
+        if device_type != "cpu" {
+            return Err(PyRuntimeError::new_err(format!(
+                "{name} must be on CPU"
+            )));
+        }
+        obj.call_method0("contiguous")?.call_method0("numpy")?
+    } else {
+        np.call_method1("asarray", (obj,))?
+    };
+    let shape = arr.getattr("shape")?.extract::<Vec<i64>>()?;
+    if shape.len() != 1 {
+        return Err(PyRuntimeError::new_err(format!(
+            "{name} must be a 1D int64 tensor"
+        )));
+    }
+    let dtype = arr.getattr("dtype")?;
+    let kind = dtype.getattr("kind")?.extract::<String>()?;
+    let itemsize = dtype.getattr("itemsize")?.extract::<i32>()?;
+    if kind != "i" || itemsize != 8 {
+        return Err(PyRuntimeError::new_err(format!(
+            "{name} must be a 1D int64 tensor"
+        )));
+    }
+    arr.call_method0("tolist")?.extract::<Vec<i64>>()
+}
+
+/// Returns the shape of a two-dimensional CPU int32 tensor or array.
+pub fn i32_shape_2d(
+    py: Python<'_>,
+    obj: &Bound<'_, PyAny>,
+    name: &str,
+) -> PyResult<Vec<i64>> {
     let arr = resolve_i32_array(py, obj)?;
-    let flat = arr.call_method0("ravel")?;
-    let buffer = PyBuffer::<i32>::get(&flat)?;
-    let cells = buffer.as_slice(py).ok_or_else(|| {
-        PyRuntimeError::new_err("bitmask must be C-contiguous int32")
-    })?;
-    Ok(cells.iter().map(|cell| cell.get()).collect())
+    let shape = arr.getattr("shape")?.extract::<Vec<i64>>()?;
+    if shape.len() != 2 {
+        return Err(PyRuntimeError::new_err(format!(
+            "{name} must be a 2D int32 tensor"
+        )));
+    }
+    Ok(shape)
 }
 
 fn resolve_i32_array<'py>(
@@ -83,24 +119,4 @@ fn ensure_writeable(arr: &Bound<'_, PyAny>) -> PyResult<()> {
         return Err(PyRuntimeError::new_err("bitmask buffer is read-only"));
     }
     Ok(())
-}
-
-/// Returns a slice of one batch row within a flattened 2-D bitmask buffer.
-pub fn bitmask_row_slice<'a>(
-    data: &'a [i32],
-    shape: &[i64],
-    index: i32,
-) -> PyResult<&'a [i32]> {
-    if shape.len() != 2 {
-        return Err(PyRuntimeError::new_err("bitmask must be 2-dimensional"));
-    }
-    let row_words = shape[1] as usize;
-    let idx = index as usize;
-    let start = idx * row_words;
-    let end = start + row_words;
-    data.get(start..end).ok_or_else(|| {
-        PyRuntimeError::new_err(format!(
-            "bitmask index {index} out of range for shape {shape:?}"
-        ))
-    })
 }

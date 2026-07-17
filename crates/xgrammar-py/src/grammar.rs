@@ -42,18 +42,20 @@ impl Grammar {
         strict_mode: bool,
         max_whitespace_cnt: Option<i32>,
         print_converted_ebnf: bool,
+        any_order: bool,
     ) -> Result<Grammar, crate::error::BindingError> {
         let seps = match (&separator_item, &separator_kv) {
             (Some(a), Some(b)) => Some((a.as_str(), b.as_str())),
             _ => None,
         };
-        let g = xgrammar::grammar::Grammar::from_json_schema(
+        let g = xgrammar::grammar::Grammar::from_json_schema_with_any_order(
             &schema,
             any_whitespace,
             indent,
             seps,
             strict_mode,
             max_whitespace_cnt,
+            any_order,
         )
         .map_err(map_error)?;
         if print_converted_ebnf {
@@ -123,13 +125,13 @@ impl Grammar {
         Ok(Grammar::wrap(xgrammar::grammar::Grammar::concat(&gs)))
     }
 
-    /// Serializes the grammar to its `"v11"` JSON form.
+    /// Serializes the grammar to its `"v14"` JSON form.
     #[bindings::export(Method)]
     pub fn serialize_json(&self) -> String {
         self.inner.serialize_json()
     }
 
-    /// Deserializes a grammar from its `"v11"` JSON form.
+    /// Deserializes a grammar from its `"v14"` JSON form.
     #[bindings::export(Method(Factory))]
     pub fn deserialize_json(
         json_string: String

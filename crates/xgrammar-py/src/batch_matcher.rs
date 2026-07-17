@@ -25,7 +25,7 @@ impl BatchGrammarMatcher {
     fn batch_fill_next_token_bitmask(
         &self,
         py: Python<'_>,
-        mut matchers: Vec<PyRefMut<'_, GrammarMatcher>>,
+        matchers: Vec<PyRefMut<'_, GrammarMatcher>>,
         bitmask: &Bound<'_, PyAny>,
         indices: Option<Vec<i32>>,
         _debug_print: bool,
@@ -33,34 +33,31 @@ impl BatchGrammarMatcher {
         let n_threads = self.max_threads as usize;
 
         with_writable_i32_buffer(py, bitmask, |buf| {
-            // Collect (raw_matcher_ptr, bitmask_row_index) pairs.
-            // SAFETY invariants maintained throughout:
-            //  1. Each pointer is unique — they come from distinct `PyRefMut`
-            //     borrows, which are exclusive references.
-            //  2. Each matcher writes to a distinct row of `buf` (unique index).
-            //  3. `buf` lives for the entire duration of this closure.
+            // Collect matcher handles and bitmask row indices. The matcher locks are independent,
+            // and each task writes to its own bitmask row.
             struct Work {
-                matcher: *mut xgrammar::matcher::GrammarMatcher,
+                matcher: std::sync::Arc<
+                    std::sync::Mutex<xgrammar::matcher::GrammarMatcher>,
+                >,
                 buf: *mut i32,
                 buf_len: usize,
                 index: i32,
             }
 
-            // SAFETY: GrammarMatcher contains only Rust types (Arc<Grammar>,
-            // per-matcher parser state). It is Send. The buf pointer is also
-            // only accessed through non-overlapping ranges.
+            // SAFETY: the only raw pointer is the shared buffer, and each work item writes to a
+            // distinct row. Matcher state is protected by its own mutex.
             unsafe impl Send for Work {}
 
             let buf_ptr = buf.as_mut_ptr();
             let buf_len = buf.len();
 
             let work: Vec<Work> = matchers
-                .iter_mut()
+                .iter()
                 .enumerate()
                 .map(|(i, m)| {
                     let index = indices.as_ref().map_or(i as i32, |idx| idx[i]);
                     Work {
-                        matcher: &mut m.inner as *mut _,
+                        matcher: m.inner.clone(),
                         buf: buf_ptr,
                         buf_len,
                         index,
@@ -85,14 +82,15 @@ impl BatchGrammarMatcher {
 
                 pool.install(|| {
                     work.into_par_iter().for_each(|w| {
-                        // SAFETY: no two Work items share the same matcher ptr
-                        // or the same bitmask row (index is unique per item).
+                        // SAFETY: no two Work items share the same bitmask row.
                         unsafe {
-                            let matcher = &mut *w.matcher;
                             let buf_slice = std::slice::from_raw_parts_mut(
                                 w.buf, w.buf_len,
                             );
-                            let _ = matcher
+                            let _ = w
+                                .matcher
+                                .lock()
+                                .expect("grammar matcher mutex poisoned")
                                 .fill_next_token_bitmask(buf_slice, w.index);
                         }
                     });
@@ -106,7 +104,7 @@ impl BatchGrammarMatcher {
     #[staticmethod]
     #[pyo3(name = "batch_accept_token")]
     fn batch_accept_token(
-        mut matchers: Vec<PyRefMut<'_, GrammarMatcher>>,
+        matchers: Vec<PyRefMut<'_, GrammarMatcher>>,
         tokens: Vec<i32>,
         _debug_print: bool,
     ) -> PyResult<Vec<bool>> {
@@ -116,16 +114,16 @@ impl BatchGrammarMatcher {
             ));
         }
         Ok(matchers
-            .iter_mut()
+            .iter()
             .zip(tokens)
-            .map(|(m, token)| m.inner.accept_token(token))
+            .map(|(m, token)| m.lock().accept_token(token))
             .collect())
     }
 
     #[staticmethod]
     #[pyo3(name = "batch_accept_string")]
     fn batch_accept_string(
-        mut matchers: Vec<PyRefMut<'_, GrammarMatcher>>,
+        matchers: Vec<PyRefMut<'_, GrammarMatcher>>,
         strings: Vec<Bound<'_, PyAny>>,
         _debug_print: bool,
     ) -> PyResult<Vec<bool>> {
@@ -135,11 +133,11 @@ impl BatchGrammarMatcher {
             ));
         }
         let mut results = Vec::with_capacity(matchers.len());
-        for (m, s) in matchers.iter_mut().zip(strings) {
+        for (m, s) in matchers.iter().zip(strings) {
             let ok = if let Ok(text) = s.extract::<String>() {
-                m.inner.accept_string(&text)
+                m.lock().accept_string(&text)
             } else {
-                m.inner.accept_bytes(&s.extract::<Vec<u8>>()?)
+                m.lock().accept_bytes(&s.extract::<Vec<u8>>()?)
             };
             results.push(ok);
         }
@@ -149,7 +147,7 @@ impl BatchGrammarMatcher {
     #[staticmethod]
     #[pyo3(name = "batch_rollback")]
     fn batch_rollback(
-        mut matchers: Vec<PyRefMut<'_, GrammarMatcher>>,
+        matchers: Vec<PyRefMut<'_, GrammarMatcher>>,
         num_tokens: Vec<i32>,
     ) -> PyResult<()> {
         if matchers.len() != num_tokens.len() {
@@ -157,8 +155,8 @@ impl BatchGrammarMatcher {
                 "matchers and num_tokens length mismatch",
             ));
         }
-        for (m, &n) in matchers.iter_mut().zip(&num_tokens) {
-            m.inner.rollback(n);
+        for (m, &n) in matchers.iter().zip(&num_tokens) {
+            m.lock().rollback(n);
         }
         Ok(())
     }

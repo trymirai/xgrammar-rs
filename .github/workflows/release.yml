@@ -31,24 +31,20 @@ jobs:
           enable-cache: true
       - name: Build Python package
         run: uv sync --project bindings/python --extra test
-      - name: Upstream Python suite (non-HF)
-        env:
-          HF_HUB_DOWNLOAD_TIMEOUT: 60
-        run: >-
-          uv run --project bindings/python python -m pytest external/xgrammar/tests/python
-          -m "not hf_token_required"
-      - name: Upstream Python suite (HF-gated, if token present)
+      - name: Upstream Python suite (same gate as CI / upstream)
+        shell: bash
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           HUGGING_FACE_HUB_TOKEN: ${{ secrets.HF_TOKEN }}
-          HF_HUB_DOWNLOAD_TIMEOUT: 120
+          HF_HUB_DOWNLOAD_TIMEOUT: 60
         run: |
-          if [ -z "$HF_TOKEN" ]; then
-            echo "HF_TOKEN unset; skipping HF-gated suite"
-            exit 0
+          set -euo pipefail
+          if [ -n "${HF_TOKEN:-}" ]; then
+            uv run --project bindings/python python -m pytest external/xgrammar/tests/python
+          else
+            uv run --project bindings/python python -m pytest external/xgrammar/tests/python \
+              -m "not hf_token_required"
           fi
-          uv run --project bindings/python python -m pytest external/xgrammar/tests/python \
-            -m hf_token_required --tb=line
 
   publish-rust:
     name: Publish xgrammar-rs

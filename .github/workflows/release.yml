@@ -9,48 +9,111 @@ env:
 
 jobs:
   test:
-    name: Test before publish
-    runs-on: macos-latest
-    
+    name: Test release inputs
+    runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
-      with:
-        submodules: recursive
-    
-    - name: Install Rust
-      uses: dtolnay/rust-toolchain@stable
-    
-    - name: Install CMake
-      run: brew install cmake
-    
-    - name: Run tests (without HF feature)
-      run: cargo test --verbose
-    
-    - name: Run tests (with HF feature)
-      env:
-        HF_TOKEN: ${{ secrets.HF_TOKEN }}
-      run: cargo test --features hf --verbose
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@1.85.0
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test -p xgrammar-rs --locked
+      - run: cargo test -p xgrammar-rs --locked --features tokenizers --test rust_api
+      - run: cargo publish -p xgrammar-rs --dry-run --locked
+      - uses: astral-sh/setup-uv@v4
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - name: Build Python package
+        run: uv sync --project bindings/python --extra test
+      - name: Upstream Python suite (non-HF)
+        env:
+          HF_HUB_DOWNLOAD_TIMEOUT: 60
+        run: >-
+          uv run --project bindings/python python -m pytest xgrammar/tests/python
+          -m "not hf_token_required"
+      - name: Upstream Python suite (HF-gated, if token present)
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HUGGING_FACE_HUB_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_HUB_DOWNLOAD_TIMEOUT: 120
+        run: |
+          if [ -z "$HF_TOKEN" ]; then
+            echo "HF_TOKEN unset; skipping HF-gated suite"
+            exit 0
+          fi
+          uv run --project bindings/python python -m pytest xgrammar/tests/python \
+            -m hf_token_required --tb=line
 
-  publish:
-    name: Publish to crates.io
-    runs-on: macos-latest
+  publish-rust:
+    name: Publish xgrammar-rs
+    runs-on: ubuntu-latest
     needs: test
-    
     steps:
-    - uses: actions/checkout@v4
-      with:
-        submodules: recursive
-    
-    - name: Install Rust
-      uses: dtolnay/rust-toolchain@stable
-    
-    - name: Install CMake
-      run: brew install cmake
-    
-    - name: Verify package
-      run: cargo publish --dry-run --allow-dirty
-    
-    - name: Publish to crates.io
-      env:
-        CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-      run: cargo publish --allow-dirty
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.85.0
+      - name: Publish to crates.io
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish -p xgrammar-rs --locked
+
+  python-distributions:
+    name: Python (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+          - os: macos-14
+            target: aarch64-apple-darwin
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: astral-sh/setup-uv@v4
+      - name: Build ABI3 wheel
+        working-directory: bindings/python
+        run: uvx maturin build --release --out ../../dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: python-${{ matrix.target }}
+          path: dist/*.whl
+
+  python-sdist:
+    name: Python source distribution
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: astral-sh/setup-uv@v4
+      - name: Build source distribution
+        working-directory: bindings/python
+        run: uvx maturin sdist --out ../../dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: python-sdist
+          path: dist/*.tar.gz
+
+  publish-python:
+    name: Publish xgrammar Python package
+    runs-on: ubuntu-latest
+    needs: [python-distributions, python-sdist]
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: python-*
+          path: dist
+          merge-multiple: true
+      - uses: pypa/gh-action-pypi-publish@release/v1

@@ -1,3 +1,4 @@
-// XGrammar Swift bindings — generated from `crates/xgrammar-py` via UniFFI.
-// Run `cargo swift package` (via platforms.toml + cli-tools) to regenerate.
-@_exported import xgrammar_rs
+// Public Swift entry for XGrammar.
+// UniFFI-generated API is in `xgrammar_rs.swift` (same module).
+// Rebuild: `cd crates/xgrammar-py && cargo swift package -y --platforms macos --features bindings-uniffi`
+// then copy `xgrammar_rs/xgrammar_rsFFI.xcframework` to `bindings/swift/xgrammar_rs.xcframework`.

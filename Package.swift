@@ -9,19 +9,29 @@ let package = Package(
     ],
     products: [
         .library(name: "XGrammar", targets: ["XGrammar"]),
+        .executable(name: "examples", targets: ["Examples"]),
+    ],
+    dependencies: [
+        .package(url: "https://github.com/apple/swift-argument-parser", from: "1.3.0"),
     ],
     targets: [
-        // The UniFFI-generated XCFramework (built with `cargo swift` via platforms.toml).
-        // Replace the placeholder URL/checksum with the actual release artifact.
         .binaryTarget(
-            name: "xgrammar_rs",
-            url: "https://placeholder.example.com/xgrammar-swift/releases/0.3.0.zip",
-            checksum: "0000000000000000000000000000000000000000000000000000000000000000"
+            name: "xgrammar_rsFFI",
+            path: "bindings/swift/xgrammar_rs.xcframework"
         ),
         .target(
             name: "XGrammar",
-            dependencies: ["xgrammar_rs"],
+            dependencies: ["xgrammar_rsFFI"],
             path: "bindings/swift/Sources/XGrammar"
+        ),
+        .executableTarget(
+            name: "Examples",
+            dependencies: [
+                "XGrammar",
+                .product(name: "ArgumentParser", package: "swift-argument-parser"),
+            ],
+            path: "bindings/swift/Sources/Examples",
+            exclude: ["README.md"]
         ),
         .testTarget(
             name: "XGrammarTests",

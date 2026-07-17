@@ -68,10 +68,7 @@ pub(crate) fn add_sub_grammar(
         } else {
             copy_expr(builder, sub, &new_rule_ids, lookahead)
         };
-        builder.update_lookahead_assertion(
-            new_rule_ids[i as usize],
-            new_lookahead,
-        );
+        builder.update_lookahead_assertion(new_rule_ids[i as usize], new_lookahead);
     }
     new_rule_ids[sub.root_rule_id() as usize]
 }
@@ -103,12 +100,8 @@ fn copy_expr(
             }
             builder.add_choices(&ids)
         },
-        GrammarExprType::RuleRef => {
-            builder.add_rule_ref(new_rule_ids[data[0] as usize])
-        },
-        GrammarExprType::Repeat => {
-            builder.add_repeat(new_rule_ids[data[0] as usize], data[1], data[2])
-        },
+        GrammarExprType::RuleRef => builder.add_rule_ref(new_rule_ids[data[0] as usize]),
+        GrammarExprType::Repeat => builder.add_repeat(new_rule_ids[data[0] as usize], data[1], data[2]),
         // Tag-dispatch payloads embed rule ids, which must be remapped into the new grammar.
         GrammarExprType::TagDispatch => {
             let mut td = sub.decode_tag_dispatch_data(&data);

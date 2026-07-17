@@ -65,11 +65,7 @@ fn int_same_len(
         if start_first == b'0' && end_first == b'9' {
             return vec![exact_digits(len)];
         }
-        return vec![format!(
-            "{}{}",
-            digit_class(start_first, end_first),
-            exact_digits(len - 1)
-        )];
+        return vec![format!("{}{}", digit_class(start_first, end_first), exact_digits(len - 1))];
     }
 
     let nines = "9".repeat(len - 1);
@@ -79,16 +75,10 @@ fn int_same_len(
         .map(|pattern| format!("{}{pattern}", char::from(start_first)))
         .collect::<Vec<_>>();
     if end_first - start_first >= 2 {
-        result.push(format!(
-            "{}{}",
-            digit_class(start_first + 1, end_first - 1),
-            exact_digits(len - 1)
-        ));
+        result.push(format!("{}{}", digit_class(start_first + 1, end_first - 1), exact_digits(len - 1)));
     }
     result.extend(
-        int_same_len(&zeros, end_suffix)
-            .into_iter()
-            .map(|pattern| format!("{}{pattern}", char::from(end_first))),
+        int_same_len(&zeros, end_suffix).into_iter().map(|pattern| format!("{}{pattern}", char::from(end_first))),
     );
     result
 }
@@ -157,10 +147,7 @@ pub fn generate_range_regex(
         (None, None) => return r"^-?\d+$".to_owned(),
         (Some(start), None) if start <= 0 => {
             if start < 0 {
-                parts.push(format!(
-                    "-{}",
-                    sub_range_regex_str("1", &abs_digits(start))
-                ));
+                parts.push(format!("-{}", sub_range_regex_str("1", &abs_digits(start))));
             }
             parts.push("0".to_owned());
             parts.push(r"[1-9]\d*".to_owned());
@@ -177,9 +164,7 @@ pub fn generate_range_regex(
         },
         (None, Some(end)) => {
             parts.extend(
-                at_least_positive_patterns_str(&abs_digits(end))
-                    .into_iter()
-                    .map(|pattern| format!("-{pattern}")),
+                at_least_positive_patterns_str(&abs_digits(end)).into_iter().map(|pattern| format!("-{pattern}")),
             );
         },
         (Some(start), Some(end)) => {
@@ -188,22 +173,13 @@ pub fn generate_range_regex(
             }
             if start < 0 {
                 let negative_end = end.min(-1);
-                parts.push(format!(
-                    "-{}",
-                    sub_range_regex_str(
-                        &abs_digits(negative_end),
-                        &abs_digits(start)
-                    )
-                ));
+                parts.push(format!("-{}", sub_range_regex_str(&abs_digits(negative_end), &abs_digits(start))));
             }
             if start <= 0 && end >= 0 {
                 parts.push("0".to_owned());
             }
             if end > 0 {
-                parts.push(sub_range_regex_str(
-                    &start.max(1).to_string(),
-                    &end.to_string(),
-                ));
+                parts.push(sub_range_regex_str(&start.max(1).to_string(), &end.to_string()));
             }
         },
     }
@@ -215,10 +191,7 @@ fn format_float(
     value: f64,
     precision: usize,
 ) -> String {
-    if (-9_223_372_036_854_775_808.0..9_223_372_036_854_775_808.0)
-        .contains(&value)
-        && value == (value as i64) as f64
-    {
+    if (-9_223_372_036_854_775_808.0..9_223_372_036_854_775_808.0).contains(&value) && value == (value as i64) as f64 {
         return (value as i64).to_string();
     }
 
@@ -238,9 +211,7 @@ fn format_float(
 }
 
 fn split_decimal(value: &str) -> (&str, &str) {
-    value
-        .split_once('.')
-        .map_or((value, ""), |(integer, fraction)| (integer, fraction))
+    value.split_once('.').map_or((value, ""), |(integer, fraction)| (integer, fraction))
 }
 
 fn adjust_grid(
@@ -249,11 +220,9 @@ fn adjust_grid(
     increment: bool,
 ) -> String {
     let (integer_part, fraction_part) = split_decimal(value);
-    let mut number = format!(
-        "{integer_part}{fraction_part}{}",
-        "0".repeat(precision.saturating_sub(fraction_part.len()))
-    )
-    .into_bytes();
+    let mut number =
+        format!("{integer_part}{fraction_part}{}", "0".repeat(precision.saturating_sub(fraction_part.len())))
+            .into_bytes();
 
     if increment {
         let mut index = number.len();
@@ -283,15 +252,10 @@ fn adjust_grid(
         number.insert(0, b'0');
     }
     let split = number.len() - precision;
-    let mut new_integer =
-        String::from_utf8(number[..split].to_vec()).expect("digits are UTF-8");
-    let mut new_fraction =
-        String::from_utf8(number[split..].to_vec()).expect("digits are UTF-8");
+    let mut new_integer = String::from_utf8(number[..split].to_vec()).expect("digits are UTF-8");
+    let mut new_fraction = String::from_utf8(number[split..].to_vec()).expect("digits are UTF-8");
     let first_non_zero = new_integer.find(|character| character != '0');
-    new_integer = first_non_zero.map_or_else(
-        || "0".to_owned(),
-        |index| new_integer[index..].to_owned(),
-    );
+    new_integer = first_non_zero.map_or_else(|| "0".to_owned(), |index| new_integer[index..].to_owned());
     new_fraction.truncate(new_fraction.trim_end_matches('0').len());
     if new_fraction.is_empty() {
         new_integer
@@ -375,9 +339,7 @@ fn fraction_greater_patterns(
     }
     if !strict {
         if len > 0 {
-            result
-                .parts
-                .push(format!("{start}{}", optional_zeros(max_len - len)));
+            result.parts.push(format!("{start}{}", optional_zeros(max_len - len)));
         } else {
             result.include_empty = true;
             if max_len >= 1 {
@@ -411,18 +373,12 @@ fn fraction_less_patterns(
                 result.parts.push(some_zeros(max_len));
             }
         } else {
-            result.parts.push(format!(
-                "{}{}",
-                &end[..index],
-                optional_zeros(max_len - index)
-            ));
+            result.parts.push(format!("{}{}", &end[..index], optional_zeros(max_len - index)));
         }
     }
     if !strict {
         if len > 0 {
-            result
-                .parts
-                .push(format!("{end}{}", optional_zeros(max_len - len)));
+            result.parts.push(format!("{end}{}", optional_zeros(max_len - len)));
         } else if max_len >= 1 {
             result.parts.push(some_zeros(max_len));
         }
@@ -441,8 +397,7 @@ fn fraction_between_patterns(
     let mut result = FractionPatterns::default();
     let mut common_len = 0;
     while common_len < end.len()
-        && start.as_bytes().get(common_len).copied().unwrap_or(b'0')
-            == end.as_bytes()[common_len]
+        && start.as_bytes().get(common_len).copied().unwrap_or(b'0') == end.as_bytes()[common_len]
     {
         common_len += 1;
     }
@@ -458,33 +413,17 @@ fn fraction_between_patterns(
         ));
     }
     if common_len < start.len() {
-        let lower = fraction_greater_patterns(
-            &start[common_len + 1..],
-            strict_start,
-            max_len - common_len - 1,
-        );
-        result.parts.extend(
-            lower.parts.into_iter().map(|part| {
-                format!("{common}{}{part}", char::from(start_digit))
-            }),
-        );
+        let lower = fraction_greater_patterns(&start[common_len + 1..], strict_start, max_len - common_len - 1);
+        result.parts.extend(lower.parts.into_iter().map(|part| format!("{common}{}{part}", char::from(start_digit))));
         if lower.include_empty {
             result.parts.push(format!("{common}{}", char::from(start_digit)));
         }
     } else {
-        let lower =
-            fraction_greater_patterns("", true, max_len - common_len - 1);
-        result.parts.extend(
-            lower.parts.into_iter().map(|part| {
-                format!("{common}{}{part}", char::from(start_digit))
-            }),
-        );
+        let lower = fraction_greater_patterns("", true, max_len - common_len - 1);
+        result.parts.extend(lower.parts.into_iter().map(|part| format!("{common}{}{part}", char::from(start_digit))));
         if !strict_start {
             if !start.is_empty() {
-                result.parts.push(format!(
-                    "{start}{}",
-                    optional_zeros(max_len - start.len())
-                ));
+                result.parts.push(format!("{start}{}", optional_zeros(max_len - start.len())));
             } else {
                 result.include_empty = true;
                 if max_len >= 1 {
@@ -494,17 +433,8 @@ fn fraction_between_patterns(
         }
     }
 
-    let upper = fraction_less_patterns(
-        &end[common_len + 1..],
-        strict_end,
-        max_len - common_len - 1,
-    );
-    result.parts.extend(
-        upper
-            .parts
-            .into_iter()
-            .map(|part| format!("{common}{}{part}", char::from(end_digit))),
-    );
+    let upper = fraction_less_patterns(&end[common_len + 1..], strict_end, max_len - common_len - 1);
+    result.parts.extend(upper.parts.into_iter().map(|part| format!("{common}{}{part}", char::from(end_digit))));
     if upper.include_empty {
         result.parts.push(format!("{common}{}", char::from(end_digit)));
     }
@@ -524,8 +454,7 @@ fn compare_decimal(
     let max_fraction = left_fraction.len().max(right_fraction.len());
     for index in 0..max_fraction {
         let left = left_fraction.as_bytes().get(index).copied().unwrap_or(b'0');
-        let right =
-            right_fraction.as_bytes().get(index).copied().unwrap_or(b'0');
+        let right = right_fraction.as_bytes().get(index).copied().unwrap_or(b'0');
         if left != right {
             return left.cmp(&right);
         }
@@ -546,12 +475,7 @@ fn add_with_integer_part(
     integer: &str,
     fraction_set: FractionPatterns,
 ) {
-    parts.extend(
-        fraction_set
-            .parts
-            .into_iter()
-            .map(|fraction| format!(r"{integer}\.{fraction}")),
-    );
+    parts.extend(fraction_set.parts.into_iter().map(|fraction| format!(r"{integer}\.{fraction}")));
     if fraction_set.include_empty {
         parts.push(integer.to_owned());
     }
@@ -573,18 +497,11 @@ fn positive_range_parts(
     let optional_any_fraction = format!(r"(\.\d{{1,{precision}}})?");
 
     let Some(high) = high else {
-        add_with_integer_part(
-            &mut parts,
-            integer_low,
-            fraction_greater_patterns(fraction_low, strict_low, precision),
-        );
+        add_with_integer_part(&mut parts, integer_low, fraction_greater_patterns(fraction_low, strict_low, precision));
         if integer_low_value < i64::MAX {
             parts.push(format!(
                 "{}{}",
-                strip_anchors(&generate_range_regex(
-                    Some(integer_low_value + 1),
-                    None
-                )),
+                strip_anchors(&generate_range_regex(Some(integer_low_value + 1), None)),
                 optional_any_fraction
             ));
         }
@@ -593,20 +510,15 @@ fn positive_range_parts(
 
     let (integer_high, fraction_high) = split_decimal(high);
     let integer_high_value = parse_int_capped(integer_high);
-    let comparison =
-        compare_decimal(integer_low, fraction_low, integer_high, fraction_high);
-    if comparison.is_gt() || (comparison.is_eq() && (strict_low || strict_high))
-    {
+    let comparison = compare_decimal(integer_low, fraction_low, integer_high, fraction_high);
+    if comparison.is_gt() || (comparison.is_eq() && (strict_low || strict_high)) {
         return parts;
     }
     if comparison.is_eq() {
         if fraction_low.is_empty() {
             parts.push(format!(r"{integer_low}(\.{})?", some_zeros(precision)));
         } else {
-            parts.push(format!(
-                r"{integer_low}\.{fraction_low}{}",
-                optional_zeros(precision - fraction_low.len())
-            ));
+            parts.push(format!(r"{integer_low}\.{fraction_low}{}", optional_zeros(precision - fraction_low.len())));
         }
         return parts;
     }
@@ -614,35 +526,18 @@ fn positive_range_parts(
         add_with_integer_part(
             &mut parts,
             integer_low,
-            fraction_between_patterns(
-                fraction_low,
-                strict_low,
-                fraction_high,
-                strict_high,
-                precision,
-            ),
+            fraction_between_patterns(fraction_low, strict_low, fraction_high, strict_high, precision),
         );
     } else {
-        add_with_integer_part(
-            &mut parts,
-            integer_low,
-            fraction_greater_patterns(fraction_low, strict_low, precision),
-        );
+        add_with_integer_part(&mut parts, integer_low, fraction_greater_patterns(fraction_low, strict_low, precision));
         if integer_high_value - integer_low_value >= 2 {
             parts.push(format!(
                 "{}{}",
-                strip_anchors(&generate_range_regex(
-                    Some(integer_low_value + 1),
-                    Some(integer_high_value - 1)
-                )),
+                strip_anchors(&generate_range_regex(Some(integer_low_value + 1), Some(integer_high_value - 1))),
                 optional_any_fraction
             ));
         }
-        add_with_integer_part(
-            &mut parts,
-            integer_high,
-            fraction_less_patterns(fraction_high, strict_high, precision),
-        );
+        add_with_integer_part(&mut parts, integer_high, fraction_less_patterns(fraction_high, strict_high, precision));
     }
     parts
 }
@@ -670,31 +565,21 @@ pub fn generate_float_range_regex_with_options(
     let negatives_in_range = start.is_none_or(|start| start < 0.0);
     if negatives_in_range {
         let (low, strict_low) = match end {
-            Some(end) if end < 0.0 => {
-                round_bound_to_grid(-end, precision, true, exclusive_end)
-            },
+            Some(end) if end < 0.0 => round_bound_to_grid(-end, precision, true, exclusive_end),
             _ => ("0".to_owned(), true),
         };
         let (high, strict_high) = start.map_or((None, false), |start| {
-            let (high, strict) =
-                round_bound_to_grid(-start, precision, false, exclusive_start);
+            let (high, strict) = round_bound_to_grid(-start, precision, false, exclusive_start);
             (Some(high), strict)
         });
         parts.extend(
-            positive_range_parts(
-                &low,
-                strict_low,
-                high.as_deref(),
-                strict_high,
-                precision,
-            )
-            .into_iter()
-            .map(|part| format!("-{part}")),
+            positive_range_parts(&low, strict_low, high.as_deref(), strict_high, precision)
+                .into_iter()
+                .map(|part| format!("-{part}")),
         );
     }
 
-    let zero_allowed = start
-        .is_none_or(|start| start < 0.0 || (start == 0.0 && !exclusive_start))
+    let zero_allowed = start.is_none_or(|start| start < 0.0 || (start == 0.0 && !exclusive_start))
         && end.is_none_or(|end| end > 0.0 || (end == 0.0 && !exclusive_end));
     if zero_allowed {
         parts.push(format!(r"0(\.{})?", some_zeros(precision)));
@@ -705,23 +590,14 @@ pub fn generate_float_range_regex_with_options(
 
     if end.is_none_or(|end| end > 0.0) {
         let (low, strict_low) = match start {
-            Some(start) if start > 0.0 => {
-                round_bound_to_grid(start, precision, true, exclusive_start)
-            },
+            Some(start) if start > 0.0 => round_bound_to_grid(start, precision, true, exclusive_start),
             _ => ("0".to_owned(), true),
         };
         let (high, strict_high) = end.map_or((None, false), |end| {
-            let (high, strict) =
-                round_bound_to_grid(end, precision, false, exclusive_end);
+            let (high, strict) = round_bound_to_grid(end, precision, false, exclusive_end);
             (Some(high), strict)
         });
-        parts.extend(positive_range_parts(
-            &low,
-            strict_low,
-            high.as_deref(),
-            strict_high,
-            precision,
-        ));
+        parts.extend(positive_range_parts(&low, strict_low, high.as_deref(), strict_high, precision));
     }
 
     format!("^({})$", parts.join("|"))

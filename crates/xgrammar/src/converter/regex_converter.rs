@@ -16,7 +16,21 @@ impl Grammar {
     /// # Errors
     /// Returns a [`RegexError`] if the regex is malformed or uses an unsupported feature.
     pub fn from_regex(regex: &str) -> Result<Grammar, RegexError> {
+        Self::from_regex_with_options(regex, false)
+    }
+
+    /// Builds a grammar from a regular expression, optionally printing the converted EBNF.
+    ///
+    /// # Errors
+    /// Returns a [`RegexError`] if the regex is malformed or uses an unsupported feature.
+    pub fn from_regex_with_options(
+        regex: &str,
+        print_converted_ebnf: bool,
+    ) -> Result<Grammar, RegexError> {
         let ebnf = regex_to_ebnf(regex, true)?;
+        if print_converted_ebnf {
+            println!("{ebnf}");
+        }
         Grammar::from_ebnf(&ebnf, "root").map_err(|e| RegexError {
             position: 0,
             message: e.to_string(),
@@ -126,9 +140,7 @@ impl RegexConverter {
         let mut char_class = String::from("[");
         self.cur += 1;
         if self.cur_char() == ']' {
-            return Err(
-                self.error("Empty character class is not allowed in regex.")
-            );
+            return Err(self.error("Empty character class is not allowed in regex."));
         }
         while self.cur_char() != ']' && self.cur != self.end {
             if self.cur_char() == '\\' {
@@ -198,11 +210,7 @@ impl RegexConverter {
     fn handle_char_escape(&mut self) -> Result<String, RegexError> {
         let c1 = self.peek(1);
         let rem = self.remaining();
-        if rem < 2
-            || (c1 == 'u' && rem < 5)
-            || (c1 == 'x' && rem < 4)
-            || (c1 == 'c' && rem < 3)
-        {
+        if rem < 2 || (c1 == 'u' && rem < 5) || (c1 == 'x' && rem < 4) || (c1 == 'c' && rem < 3) {
             return Err(self.error("Escape sequence is not finished."));
         }
 
@@ -230,9 +238,7 @@ impl RegexConverter {
         } else if c1 == 'c' {
             self.cur += 2;
             if !self.cur_char().is_ascii_alphabetic() {
-                return Err(
-                    self.error("Invalid control character escape sequence.")
-                );
+                return Err(self.error("Invalid control character escape sequence."));
             }
             self.cur += 1;
             Ok(escape_codepoint((self.peek(-1) as Codepoint) % 32, &[]))
@@ -262,8 +268,7 @@ impl RegexConverter {
             },
             'W' => {
                 self.cur += 2;
-                Ok("\\x00-\\x2F\\x3A-\\x40\\x5B-\\x5E\\x60\\x7B-\\U0010FFFF"
-                    .to_owned())
+                Ok("\\x00-\\x2F\\x3A-\\x40\\x5B-\\x5E\\x60\\x7B-\\U0010FFFF".to_owned())
             },
             's' => {
                 self.cur += 2;
@@ -271,8 +276,7 @@ impl RegexConverter {
             },
             'S' => {
                 self.cur += 2;
-                Ok("\\x00-\\x08\\x0E-\\x1F\\x21-\\x9F\\xA1-\\U0010FFFF"
-                    .to_owned())
+                Ok("\\x00-\\x08\\x0E-\\x1F\\x21-\\x9F\\xA1-\\U0010FFFF".to_owned())
             },
             _ => {
                 let res = self.handle_char_escape()?;
@@ -314,12 +318,8 @@ impl RegexConverter {
                 self.cur += 2;
                 Ok("[^\\f\\n\\r\\t\\v\\u0020\\u00a0]".to_owned())
             },
-            c if ('1'..='9').contains(&c) || c == 'k' => {
-                Err(self.error("Backreference is not supported yet."))
-            },
-            'p' | 'P' => Err(self.error(
-                "Unicode character class escape sequence is not supported yet.",
-            )),
+            c if ('1'..='9').contains(&c) || c == 'k' => Err(self.error("Backreference is not supported yet.")),
+            'p' | 'P' => Err(self.error("Unicode character class escape sequence is not supported yet.")),
             'b' | 'B' => Err(self.error("Word boundary is not supported yet.")),
             _ => Ok(format!("\"{}\"", self.handle_char_escape()?)),
         }
@@ -336,16 +336,12 @@ impl RegexConverter {
             '=' | '!' => {
                 return Err(self.error("Lookahead is not supported yet."));
             },
-            '<' if self.cur + 1 != self.end
-                && matches!(self.peek(1), '=' | '!') =>
-            {
+            '<' if self.cur + 1 != self.end && matches!(self.peek(1), '=' | '!') => {
                 return Err(self.error("Lookbehind is not supported yet."));
             },
             '<' => {
                 self.cur += 1;
-                while self.cur != self.end
-                    && self.cur_char().is_ascii_alphabetic()
-                {
+                while self.cur != self.end && self.cur_char().is_ascii_alphabetic() {
                     self.cur += 1;
                 }
                 if self.cur == self.end || self.cur_char() != '>' {
@@ -354,9 +350,7 @@ impl RegexConverter {
                 self.cur += 1;
             },
             _ => {
-                return Err(
-                    self.error("Group modifier flag is not supported yet.")
-                );
+                return Err(self.error("Group modifier flag is not supported yet."));
             },
         }
         Ok(())
@@ -411,9 +405,7 @@ impl RegexConverter {
                         // Ignore the non-greedy modifier; repetition is non-deterministic.
                         self.cur += 1;
                     }
-                    if self.cur != self.end
-                        && matches!(self.cur_char(), '{' | '*' | '+' | '?')
-                    {
+                    if self.cur != self.end && matches!(self.cur_char(), '{' | '*' | '+' | '?') {
                         return Err(self.error("Two consecutive repetition modifiers are not allowed."));
                     }
                 },
@@ -424,9 +416,7 @@ impl RegexConverter {
                     if self.cur != self.end && self.cur_char() == '?' {
                         self.cur += 1;
                     }
-                    if self.cur != self.end
-                        && matches!(self.cur_char(), '{' | '*' | '+' | '?')
-                    {
+                    if self.cur != self.end && matches!(self.cur_char(), '{' | '*' | '+' | '?') {
                         return Err(self.error("Two consecutive repetition modifiers are not allowed."));
                     }
                 },
@@ -434,10 +424,7 @@ impl RegexConverter {
                     is_empty = false;
                     // A leading, consecutive, or group-leading `|` has an empty left-hand
                     // alternative. EBNF needs that alternative to be explicit.
-                    if self.result.is_empty()
-                        || self.result.ends_with('|')
-                        || self.result.ends_with('(')
-                    {
+                    if self.result.is_empty() || self.result.ends_with('|') || self.result.ends_with('(') {
                         self.add_segment("\"\"");
                     }
                     self.add_segment("|");
@@ -455,10 +442,7 @@ impl RegexConverter {
                 },
                 c => {
                     is_empty = false;
-                    let segment = format!(
-                        "\"{}\"",
-                        escape_codepoint(c as Codepoint, &[])
-                    );
+                    let segment = format!("\"{}\"", escape_codepoint(c as Codepoint, &[]));
                     self.add_segment(&segment);
                     self.cur += 1;
                 },

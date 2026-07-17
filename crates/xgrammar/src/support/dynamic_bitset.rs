@@ -3,6 +3,7 @@
 //! This is the owned form; the matcher's external-buffer (DLTensor) view lands in M6.
 
 use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
 
 /// Bits packed per backing word.
 pub const BITS_PER_BLOCK: usize = 32;
@@ -139,10 +140,7 @@ impl DynamicBitset {
         &mut self,
         other: &DynamicBitset,
     ) {
-        assert!(
-            self.data.len() <= other.data.len(),
-            "or_assign target buffer must not exceed the source buffer"
-        );
+        assert!(self.data.len() <= other.data.len(), "or_assign target buffer must not exceed the source buffer");
         for (dst, src) in self.data.iter_mut().zip(&other.data) {
             *dst |= *src;
         }
@@ -231,8 +229,7 @@ impl DynamicBitset {
         &self,
         first_block: usize,
     ) -> Option<usize> {
-        let pos = self.data[first_block..].iter().position(|&w| w != 0)?
-            + first_block;
+        let pos = self.data[first_block..].iter().position(|&w| w != 0)? + first_block;
         Some(pos * BITS_PER_BLOCK + self.data[pos].trailing_zeros() as usize)
     }
 
@@ -240,9 +237,61 @@ impl DynamicBitset {
         &self,
         first_block: usize,
     ) -> Option<usize> {
-        let pos =
-            self.data[first_block..].iter().position(|&w| w != u32::MAX)?
-                + first_block;
+        let pos = self.data[first_block..].iter().position(|&w| w != u32::MAX)? + first_block;
         Some(pos * BITS_PER_BLOCK + (!self.data[pos]).trailing_zeros() as usize)
+    }
+
+    /// Serializes in the C++ JSON format: `[size, buffer_size, ...u32 words]`.
+    #[must_use]
+    pub fn serialize_json_value_cpp(&self) -> Value {
+        let mut arr = vec![json!(self.size), json!(Self::buffer_size(self.size))];
+        for &word in &self.data {
+            arr.push(json!(word));
+        }
+        Value::Array(arr)
+    }
+
+    /// Deserializes the C++ JSON array format.
+    ///
+    /// # Errors
+    /// Returns an error string when the JSON shape is invalid.
+    pub fn deserialize_json_value_cpp(value: &Value) -> Result<Self, String> {
+        let arr = value.as_array().ok_or_else(|| "dynamic bitset expects a JSON array".to_owned())?;
+        if arr.len() < 2 {
+            return Err("dynamic bitset array must have at least 2 elements".to_owned());
+        }
+        let size = arr[0].as_i64().ok_or_else(|| "dynamic bitset size must be an integer".to_owned())?;
+        if size < 0 {
+            return Err("dynamic bitset size must be non-negative".to_owned());
+        }
+        let size = size as usize;
+        let buffer_size = arr[1].as_i64().ok_or_else(|| "dynamic bitset buffer_size must be an integer".to_owned())?;
+        if buffer_size < 0 {
+            return Err("dynamic bitset buffer_size must be non-negative".to_owned());
+        }
+        let buffer_size = buffer_size as usize;
+        let expected = Self::buffer_size(size);
+        if buffer_size != expected {
+            return Err(format!("dynamic bitset buffer_size {buffer_size} does not match ceil(size/32) = {expected}"));
+        }
+        if arr.len() != 2 + buffer_size {
+            return Err(format!(
+                "dynamic bitset array length {} does not match 2 + buffer_size = {}",
+                arr.len(),
+                2 + buffer_size
+            ));
+        }
+        let mut data = Vec::with_capacity(buffer_size);
+        for item in &arr[2..] {
+            let word = item.as_u64().ok_or_else(|| "dynamic bitset word must be a non-negative integer".to_owned())?;
+            if word > u32::MAX as u64 {
+                return Err(format!("dynamic bitset word {word} is out of u32 range"));
+            }
+            data.push(word as u32);
+        }
+        Ok(Self {
+            size,
+            data,
+        })
     }
 }

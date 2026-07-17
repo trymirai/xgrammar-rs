@@ -40,8 +40,7 @@ impl CompactFsm {
     /// Expands back into an adjacency-list [`Fsm`].
     #[must_use]
     pub fn to_fsm(&self) -> Fsm {
-        let rows: Vec<Vec<FsmEdge>> =
-            self.edges.iter().map(<[FsmEdge]>::to_vec).collect();
+        let rows: Vec<Vec<FsmEdge>> = self.edges.iter().map(<[FsmEdge]>::to_vec).collect();
         Fsm::from_edges(rows, self.edge_aux_data.clone())
     }
 
@@ -153,5 +152,23 @@ impl CompactFsm {
             }
         }
         self.epsilon_closure(result);
+    }
+
+    /// All states reachable from `from` (following every edge as a plain transition).
+    #[must_use]
+    pub fn reachable_states(
+        &self,
+        from: &[i32],
+    ) -> HashSet<i32> {
+        let mut result: HashSet<i32> = from.iter().copied().collect();
+        let mut queue: VecDeque<i32> = from.iter().copied().collect();
+        while let Some(current) = queue.pop_front() {
+            for e in self.state_edges(current) {
+                if result.insert(e.target) {
+                    queue.push_back(e.target);
+                }
+            }
+        }
+        result
     }
 }

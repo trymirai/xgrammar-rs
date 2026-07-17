@@ -5,15 +5,11 @@
 use std::collections::HashMap;
 
 use super::{
-    json_schema_converter::{
-        json_schema_to_ebnf_with_any_order,
-        json_schema_to_ebnf_xml_with_options,
-    },
+    json_schema_converter::{json_schema_to_ebnf_with_any_order, json_schema_to_ebnf_xml_with_options},
     structural_tag_error::StructuralTagError,
     structural_tag_format::{
-        Format, IntOrString, TagBegin, TagEnd, TagFormat,
-        TagsWithSeparatorFormat, TokenFormat, TokenTriggeredTagsFormat,
-        TriggeredTagsFormat,
+        Format, IntOrString, TagBegin, TagEnd, TagFormat, TagsWithSeparatorFormat, TokenFormat,
+        TokenTriggeredTagsFormat, TriggeredTagsFormat,
     },
     structural_tag_parser::parse_structural_tag,
     xml_tool_calling_converter::xml_format_from_style,
@@ -35,9 +31,7 @@ impl Grammar {
     ///
     /// # Errors
     /// Returns a [`StructuralTagError`] if the document is invalid or unsatisfiable.
-    pub fn from_structural_tag(
-        json: &str
-    ) -> Result<Grammar, StructuralTagError> {
+    pub fn from_structural_tag(json: &str) -> Result<Grammar, StructuralTagError> {
         build_structural_tag(json, None)
     }
 
@@ -80,18 +74,14 @@ fn resolve_token(
         return Ok(());
     };
     let Some(vocab) = vocab else {
-        return Err(Ist::invalid(
-            "Token string resolution requires tokenizer_info",
-        ));
+        return Err(Ist::invalid("Token string resolution requires tokenizer_info"));
     };
     match vocab.iter().position(|v| v.as_slice() == s.as_bytes()) {
         Some(i) => {
             tf.resolved_token_id = i as i32;
             Ok(())
         },
-        None => Err(Ist::invalid(format!(
-            "Token string \"{s}\" not found in vocabulary"
-        ))),
+        None => Err(Ist::invalid(format!("Token string \"{s}\" not found in vocabulary"))),
     }
 }
 
@@ -105,16 +95,12 @@ fn resolve_vec(
             IntOrString::Int(i) => out.push(*i),
             IntOrString::Str(s) => {
                 let Some(vocab) = vocab else {
-                    return Err(Ist::invalid(
-                        "Token string resolution requires tokenizer_info",
-                    ));
+                    return Err(Ist::invalid("Token string resolution requires tokenizer_info"));
                 };
                 match vocab.iter().position(|v| v.as_slice() == s.as_bytes()) {
                     Some(i) => out.push(i as i32),
                     None => {
-                        return Err(Ist::invalid(format!(
-                            "Token string \"{s}\" not found in vocabulary"
-                        )));
+                        return Err(Ist::invalid(format!("Token string \"{s}\" not found in vocabulary")));
                     },
                 }
             },
@@ -147,26 +133,21 @@ fn resolve_format(
             Ok(())
         },
         Format::AnyTokens(f) => {
-            f.resolved_exclude_token_ids =
-                resolve_vec(&f.exclude_tokens, vocab)?;
+            f.resolved_exclude_token_ids = resolve_vec(&f.exclude_tokens, vocab)?;
             Ok(())
         },
         Format::TokenTriggeredTags(f) => {
-            f.resolved_trigger_token_ids =
-                resolve_vec(&f.trigger_tokens, vocab)?;
-            f.resolved_exclude_token_ids =
-                resolve_vec(&f.exclude_tokens, vocab)?;
+            f.resolved_trigger_token_ids = resolve_vec(&f.trigger_tokens, vocab)?;
+            f.resolved_exclude_token_ids = resolve_vec(&f.exclude_tokens, vocab)?;
             for tag in &mut f.tags {
                 resolve_tag(tag, vocab)?;
             }
             Ok(())
         },
         Format::TokenDispatch(f) => {
-            let triggers: Vec<IntOrString> =
-                f.rules.iter().map(|(t, _)| t.clone()).collect();
+            let triggers: Vec<IntOrString> = f.rules.iter().map(|(t, _)| t.clone()).collect();
             f.resolved_trigger_token_ids = resolve_vec(&triggers, vocab)?;
-            f.resolved_exclude_token_ids =
-                resolve_vec(&f.exclude_tokens, vocab)?;
+            f.resolved_exclude_token_ids = resolve_vec(&f.exclude_tokens, vocab)?;
             for (_, content) in &mut f.rules {
                 resolve_format(content, vocab)?;
             }
@@ -207,11 +188,9 @@ fn resolve_format(
         Format::Plus(f) => resolve_format(&mut f.content, vocab),
         Format::Star(f) => resolve_format(&mut f.content, vocab),
         Format::Repeat(f) => resolve_format(&mut f.content, vocab),
-        Format::ConstString(_)
-        | Format::JsonSchema(_)
-        | Format::AnyText(_)
-        | Format::Grammar(_)
-        | Format::Regex(_) => Ok(()),
+        Format::ConstString(_) | Format::JsonSchema(_) | Format::AnyText(_) | Format::Grammar(_) | Format::Regex(_) => {
+            Ok(())
+        },
     }
 }
 
@@ -245,9 +224,7 @@ fn is_unlimited(format: &Format) -> bool {
         Format::Sequence(f) => f.is_unlimited,
         Format::Or(f) => f.is_unlimited,
         Format::Optional(f) => is_unlimited(&f.content),
-        Format::Repeat(f) => {
-            f.max == -1 || (f.max != 0 && is_unlimited(&f.content))
-        },
+        Format::Repeat(f) => f.max == -1 || (f.max != 0 && is_unlimited(&f.content)),
         _ => false,
     }
 }
@@ -271,9 +248,7 @@ fn analyze_tag(tag: &mut TagFormat) -> Result<(), Ist> {
         if let TagEnd::Strings(ends) = &tag.end {
             let has_non_empty = ends.iter().any(|s| !s.is_empty());
             if !has_non_empty && !is_excluded(&tag.content) {
-                return Err(Ist::invalid(
-                    "When the content is unlimited, at least one end string must be non-empty",
-                ));
+                return Err(Ist::invalid("When the content is unlimited, at least one end string must be non-empty"));
             }
         }
     }
@@ -352,11 +327,9 @@ fn analyze(
             }
             Ok(())
         },
-        Format::ConstString(_)
-        | Format::JsonSchema(_)
-        | Format::Grammar(_)
-        | Format::Regex(_)
-        | Format::Token(_) => Ok(()),
+        Format::ConstString(_) | Format::JsonSchema(_) | Format::Grammar(_) | Format::Regex(_) | Format::Token(_) => {
+            Ok(())
+        },
     }
 }
 
@@ -405,9 +378,7 @@ impl StructuralTagConverter {
     ) -> i32 {
         match &tag.begin {
             TagBegin::Str(s) => self.builder.add_byte_string(s),
-            TagBegin::Token(tf) => {
-                self.builder.add_token_set(&[tf.resolved_token_id])
-            },
+            TagBegin::Token(tf) => self.builder.add_token_set(&[tf.resolved_token_id]),
         }
     }
 
@@ -416,9 +387,7 @@ impl StructuralTagConverter {
         tag: &TagFormat,
     ) -> i32 {
         match &tag.end {
-            TagEnd::Token(tf) => {
-                self.builder.add_token_set(&[tf.resolved_token_id])
-            },
+            TagEnd::Token(tf) => self.builder.add_token_set(&[tf.resolved_token_id]),
             TagEnd::Strings(ends) => {
                 if ends.len() == 1 {
                     if ends[0].is_empty() {
@@ -437,8 +406,7 @@ impl StructuralTagConverter {
                         end_seq_ids.push(self.builder.add_sequence(&[e]));
                     }
                     let choice = self.builder.add_choices(&end_seq_ids);
-                    let rule =
-                        self.builder.add_rule_with_hint("tag_end", choice);
+                    let rule = self.builder.add_rule_with_hint("tag_end", choice);
                     self.builder.add_rule_ref(rule)
                 }
             },
@@ -452,10 +420,7 @@ impl StructuralTagConverter {
         excludes: Vec<String>,
     ) -> i32 {
         let td = TagDispatch {
-            tag_rule_pairs: tag_rule_pairs
-                .into_iter()
-                .map(|(s, id)| (s.into_bytes(), id))
-                .collect(),
+            tag_rule_pairs: tag_rule_pairs.into_iter().map(|(s, id)| (s.into_bytes(), id)).collect(),
             loop_after_dispatch,
             excludes: excludes.into_iter().map(String::into_bytes).collect(),
         };
@@ -507,52 +472,35 @@ impl StructuralTagConverter {
                 } else {
                     json_schema_to_ebnf_xml_with_options(
                         &f.json_schema,
-                        xml_format_from_style(&f.style).map_err(|e| {
-                            Ist::InvalidJsonSchema(e.to_string())
-                        })?,
+                        xml_format_from_style(&f.style).map_err(|e| Ist::InvalidJsonSchema(e.to_string()))?,
                         f.max_whitespace_cnt,
                         f.any_order,
                     )
                     .map_err(|e| Ist::InvalidJsonSchema(e.to_string()))?
                 };
-                let sub = Grammar::from_ebnf(&ebnf, "root")
-                    .map_err(|e| Ist::InvalidJsonSchema(e.to_string()))?;
+                let sub = Grammar::from_ebnf(&ebnf, "root").map_err(|e| Ist::InvalidJsonSchema(e.to_string()))?;
                 Ok(add_sub_grammar(&mut self.builder, &sub))
             },
             Format::Grammar(f) => {
-                let sub = Grammar::from_ebnf(&f.grammar, "root")
-                    .map_err(|e| Ist::invalid(e.to_string()))?;
+                let sub = Grammar::from_ebnf(&f.grammar, "root").map_err(|e| Ist::invalid(e.to_string()))?;
                 Ok(add_sub_grammar(&mut self.builder, &sub))
             },
             Format::Regex(f) => {
-                let sub = Grammar::from_regex(&f.pattern)
-                    .map_err(|e| Ist::invalid(e.to_string()))?;
+                let sub = Grammar::from_regex(&f.pattern).map_err(|e| Ist::invalid(e.to_string()))?;
                 Ok(add_sub_grammar(&mut self.builder, &sub))
             },
             Format::AnyText(f) => {
                 let mut all_excludes = f.excludes.clone();
-                all_excludes.extend(
-                    f.detected_end_strs
-                        .iter()
-                        .filter(|s| !s.is_empty())
-                        .cloned(),
-                );
+                all_excludes.extend(f.detected_end_strs.iter().filter(|s| !s.is_empty()).cloned());
                 if all_excludes.is_empty() {
-                    let any = self.builder.add_character_class_star(
-                        &[crate::grammar::CharacterClassElement::new(
-                            0, 0x10_FFFF,
-                        )],
-                        false,
-                    );
+                    let any = self
+                        .builder
+                        .add_character_class_star(&[crate::grammar::CharacterClassElement::new(0, 0x10_FFFF)], false);
                     let seq = self.builder.add_sequence(&[any]);
                     let choices = self.builder.add_choices(&[seq]);
                     Ok(self.builder.add_rule_with_hint("any_text", choices))
                 } else {
-                    let td = self.add_tag_dispatch_rule(
-                        Vec::new(),
-                        false,
-                        all_excludes,
-                    );
+                    let td = self.add_tag_dispatch_rule(Vec::new(), false, all_excludes);
                     Ok(self.builder.add_rule_with_hint("any_text", td))
                 }
             },
@@ -598,8 +546,7 @@ impl StructuralTagConverter {
             Format::Plus(f) => {
                 let content_id = self.visit(&f.content)?;
                 let content_ref = self.builder.add_rule_ref(content_id);
-                let star_rule =
-                    self.builder.add_empty_rule_with_hint("plus_star");
+                let star_rule = self.builder.add_empty_rule_with_hint("plus_star");
                 let star_ref = self.builder.add_rule_ref(star_rule);
                 let empty = self.builder.add_empty_str();
                 let inner = self.builder.add_sequence(&[content_ref, star_ref]);
@@ -625,8 +572,7 @@ impl StructuralTagConverter {
                 Ok(self.builder.add_rule_with_hint("repeat", repeat))
             },
             Format::Token(f) => {
-                let token_set =
-                    self.builder.add_token_set(&[f.resolved_token_id]);
+                let token_set = self.builder.add_token_set(&[f.resolved_token_id]);
                 let seq = self.builder.add_sequence(&[token_set]);
                 let choices = self.builder.add_choices(&[seq]);
                 Ok(self.builder.add_rule_with_hint("token", choices))
@@ -645,12 +591,9 @@ impl StructuralTagConverter {
                 let expr = self.builder.add_exclude_token_set(&all);
                 let seq = self.builder.add_sequence(&[expr]);
                 let choices = self.builder.add_choices(&[seq]);
-                let inner_rule = self
-                    .builder
-                    .add_rule_with_hint("any_tokens_inner", choices);
+                let inner_rule = self.builder.add_rule_with_hint("any_tokens_inner", choices);
                 let inner_ref = self.builder.add_rule_ref(inner_rule);
-                let star_rule =
-                    self.builder.add_empty_rule_with_hint("any_tokens");
+                let star_rule = self.builder.add_empty_rule_with_hint("any_tokens");
                 let star_ref = self.builder.add_rule_ref(star_rule);
                 let empty = self.builder.add_empty_str();
                 let seq2 = self.builder.add_sequence(&[inner_ref, star_ref]);
@@ -665,11 +608,7 @@ impl StructuralTagConverter {
                     let id = self.visit(content)?;
                     pairs.push((trigger.clone(), id));
                 }
-                let expr = self.add_tag_dispatch_rule(
-                    pairs,
-                    f.loop_after_dispatch,
-                    f.excludes.clone(),
-                );
+                let expr = self.add_tag_dispatch_rule(pairs, f.loop_after_dispatch, f.excludes.clone());
                 Ok(self.builder.add_rule_with_hint("tag_dispatch", expr))
             },
             Format::TokenDispatch(f) => {
@@ -692,31 +631,24 @@ impl StructuralTagConverter {
         &mut self,
         f: &TriggeredTagsFormat,
     ) -> Result<i32, Ist> {
-        let mut trigger_to_tag_ids: Vec<Vec<usize>> =
-            vec![Vec::new(); f.triggers.len()];
+        let mut trigger_to_tag_ids: Vec<Vec<usize>> = vec![Vec::new(); f.triggers.len()];
         let mut tag_content_rule_ids = Vec::with_capacity(f.tags.len());
 
         for (it_tag, tag) in f.tags.iter().enumerate() {
             let TagBegin::Str(tag_begin) = &tag.begin else {
-                return Err(Ist::invalid(
-                    "Tags in triggered_tags must have a string begin, not a token format",
-                ));
+                return Err(Ist::invalid("Tags in triggered_tags must have a string begin, not a token format"));
             };
             let mut matched: Option<usize> = None;
             for (it_trigger, trigger) in f.triggers.iter().enumerate() {
                 if tag_begin.starts_with(trigger) {
                     if matched.is_some() {
-                        return Err(Ist::invalid(
-                            "One tag matches multiple triggers in a triggered tags format",
-                        ));
+                        return Err(Ist::invalid("One tag matches multiple triggers in a triggered tags format"));
                     }
                     matched = Some(it_trigger);
                 }
             }
             let Some(matched) = matched else {
-                return Err(Ist::invalid(
-                    "One tag does not match any trigger in a triggered tags format",
-                ));
+                return Err(Ist::invalid("One tag does not match any trigger in a triggered tags format"));
             };
             trigger_to_tag_ids[matched].push(it_tag);
             tag_content_rule_ids.push(self.visit(&tag.content)?);
@@ -732,9 +664,7 @@ impl StructuralTagConverter {
                 choices.push(self.builder.add_sequence(&[begin, r, end]));
             }
             let choice = self.builder.add_choices(&choices);
-            return Ok(self
-                .builder
-                .add_rule_with_hint("triggered_tags", choice));
+            return Ok(self.builder.add_rule_with_hint("triggered_tags", choice));
         }
 
         // Normal case.
@@ -746,27 +676,19 @@ impl StructuralTagConverter {
                 let TagBegin::Str(tag_begin) = &tag.begin else {
                     unreachable!("checked above");
                 };
-                let begin =
-                    self.builder.add_byte_string(&tag_begin[trigger.len()..]);
+                let begin = self.builder.add_byte_string(&tag_begin[trigger.len()..]);
                 let r = self.builder.add_rule_ref(tag_content_rule_ids[tag_id]);
                 let end = self.build_end_expr(tag);
                 choices.push(self.builder.add_sequence(&[begin, r, end]));
             }
             let choice = self.builder.add_choices(&choices);
-            let sub_rule =
-                self.builder.add_rule_with_hint("triggered_tags_group", choice);
+            let sub_rule = self.builder.add_rule_with_hint("triggered_tags_group", choice);
             tag_rule_pairs.push((trigger.clone(), sub_rule));
         }
 
         let mut all_excludes = f.excludes.clone();
-        all_excludes.extend(
-            f.detected_end_strs.iter().filter(|s| !s.is_empty()).cloned(),
-        );
-        let mut rule_expr_id = self.add_tag_dispatch_rule(
-            tag_rule_pairs,
-            !f.stop_after_first,
-            all_excludes,
-        );
+        all_excludes.extend(f.detected_end_strs.iter().filter(|s| !s.is_empty()).cloned());
+        let mut rule_expr_id = self.add_tag_dispatch_rule(tag_rule_pairs, !f.stop_after_first, all_excludes);
 
         if f.at_least_one {
             let mut first_choices = Vec::new();
@@ -777,12 +699,8 @@ impl StructuralTagConverter {
                 first_choices.push(self.builder.add_sequence(&[begin, r, end]));
             }
             let first_choice = self.builder.add_choices(&first_choices);
-            let first_rule = self
-                .builder
-                .add_rule_with_hint("triggered_tags_first", first_choice);
-            let dispatch_rule = self
-                .builder
-                .add_rule_with_hint("triggered_tags_sub", rule_expr_id);
+            let first_rule = self.builder.add_rule_with_hint("triggered_tags_first", first_choice);
+            let dispatch_rule = self.builder.add_rule_with_hint("triggered_tags_sub", rule_expr_id);
             let ref_first = self.builder.add_rule_ref(first_rule);
             let ref_dispatch = self.builder.add_rule_ref(dispatch_rule);
             let seq = self.builder.add_sequence(&[ref_first, ref_dispatch]);
@@ -803,8 +721,7 @@ impl StructuralTagConverter {
             choice_ids.push(self.builder.add_sequence(&[tag_ref]));
         }
         let choice = self.builder.add_choices(&choice_ids);
-        let all_tags_rule =
-            self.builder.add_rule_with_hint("tags_with_separator_tags", choice);
+        let all_tags_rule = self.builder.add_rule_with_hint("tags_with_separator_tags", choice);
         let all_tags_ref = self.builder.add_rule_ref(all_tags_rule);
 
         if f.stop_after_first {
@@ -816,13 +733,10 @@ impl StructuralTagConverter {
                 let empty = self.builder.add_empty_str();
                 self.builder.add_choices(&[seq, empty])
             };
-            return Ok(self
-                .builder
-                .add_rule_with_hint("tags_with_separator", body));
+            return Ok(self.builder.add_rule_with_hint("tags_with_separator", body));
         }
 
-        let sub_rule =
-            self.builder.add_empty_rule_with_hint("tags_with_separator_sub");
+        let sub_rule = self.builder.add_empty_rule_with_hint("tags_with_separator_sub");
         let end_str_seq = self.builder.add_empty_str();
         let mut sub_seq = Vec::new();
         if !f.separator.is_empty() {
@@ -849,24 +763,19 @@ impl StructuralTagConverter {
         &mut self,
         f: &TokenTriggeredTagsFormat,
     ) -> Result<i32, Ist> {
-        let mut trigger_to_tag_ids: Vec<Vec<usize>> =
-            vec![Vec::new(); f.trigger_tokens.len()];
+        let mut trigger_to_tag_ids: Vec<Vec<usize>> = vec![Vec::new(); f.trigger_tokens.len()];
         let mut tag_content_rule_ids = Vec::with_capacity(f.tags.len());
 
         for (it_tag, tag) in f.tags.iter().enumerate() {
             let TagBegin::Token(tf) = &tag.begin else {
-                return Err(Ist::invalid(
-                    "Tags in token_triggered_tags must have a token format begin, not a string",
-                ));
+                return Err(Ist::invalid("Tags in token_triggered_tags must have a token format begin, not a string"));
             };
             let begin_token_id = tf.resolved_token_id;
             let mut matched: Option<usize> = None;
             for (it, &tid) in f.resolved_trigger_token_ids.iter().enumerate() {
                 if tid == begin_token_id {
                     if matched.is_some() {
-                        return Err(Ist::invalid(
-                            "Tag matches multiple triggers",
-                        ));
+                        return Err(Ist::invalid("Tag matches multiple triggers"));
                     }
                     matched = Some(it);
                 }
@@ -887,14 +796,11 @@ impl StructuralTagConverter {
                 choices.push(self.builder.add_sequence(&[begin, r, end]));
             }
             let choice = self.builder.add_choices(&choices);
-            return Ok(self
-                .builder
-                .add_rule_with_hint("token_triggered_tags", choice));
+            return Ok(self.builder.add_rule_with_hint("token_triggered_tags", choice));
         }
 
         let mut trigger_rule_pairs = Vec::new();
-        for (it, &trigger_id) in f.resolved_trigger_token_ids.iter().enumerate()
-        {
+        for (it, &trigger_id) in f.resolved_trigger_token_ids.iter().enumerate() {
             let mut choices = Vec::new();
             for &tag_id in &trigger_to_tag_ids[it] {
                 let tag = &f.tags[tag_id];
@@ -903,19 +809,13 @@ impl StructuralTagConverter {
                 choices.push(self.builder.add_sequence(&[r, end]));
             }
             let choice = self.builder.add_choices(&choices);
-            let sub_rule = self
-                .builder
-                .add_rule_with_hint("token_triggered_tags_group", choice);
+            let sub_rule = self.builder.add_rule_with_hint("token_triggered_tags_group", choice);
             trigger_rule_pairs.push((trigger_id, sub_rule));
         }
 
         let mut all_excludes = f.resolved_exclude_token_ids.clone();
         all_excludes.extend_from_slice(&f.detected_end_token_ids);
-        let mut rule_expr_id = self.add_token_tag_dispatch_rule(
-            trigger_rule_pairs,
-            !f.stop_after_first,
-            all_excludes,
-        );
+        let mut rule_expr_id = self.add_token_tag_dispatch_rule(trigger_rule_pairs, !f.stop_after_first, all_excludes);
 
         if f.at_least_one {
             let mut first_choices = Vec::new();
@@ -926,20 +826,14 @@ impl StructuralTagConverter {
                 first_choices.push(self.builder.add_sequence(&[begin, r, end]));
             }
             let first_choice = self.builder.add_choices(&first_choices);
-            let first_rule = self
-                .builder
-                .add_rule_with_hint("token_triggered_tags_first", first_choice);
-            let dispatch_rule = self
-                .builder
-                .add_rule_with_hint("token_triggered_tags_sub", rule_expr_id);
+            let first_rule = self.builder.add_rule_with_hint("token_triggered_tags_first", first_choice);
+            let dispatch_rule = self.builder.add_rule_with_hint("token_triggered_tags_sub", rule_expr_id);
             let ref_first = self.builder.add_rule_ref(first_rule);
             let ref_dispatch = self.builder.add_rule_ref(dispatch_rule);
             let seq = self.builder.add_sequence(&[ref_first, ref_dispatch]);
             rule_expr_id = self.builder.add_choices(&[seq]);
         }
 
-        Ok(self
-            .builder
-            .add_rule_with_hint("token_triggered_tags", rule_expr_id))
+        Ok(self.builder.add_rule_with_hint("token_triggered_tags", rule_expr_id))
     }
 }

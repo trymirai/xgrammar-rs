@@ -2,14 +2,11 @@
 
 use std::fmt::{self, Write as _};
 
-use super::{
-    grammar::Grammar, grammar_expr_type::GrammarExprType, rule::NO_EXPR,
-};
+use super::{grammar::Grammar, grammar_expr_type::GrammarExprType, rule::NO_EXPR};
 use crate::support::{Codepoint, escape_bytes, escape_codepoint};
 
 /// Custom escapes used inside character classes: `-` and `]` are backslash-escaped.
-const CHAR_CLASS_ESCAPES: &[(Codepoint, &str)] =
-    &[(0x2D, "\\-"), (0x5D, "\\]")];
+const CHAR_CLASS_ESCAPES: &[(Codepoint, &str)] = &[(0x2D, "\\-"), (0x5D, "\\]")];
 
 impl Grammar {
     /// Renders the grammar back to its normalized EBNF text (one rule per line).
@@ -28,14 +25,9 @@ impl Grammar {
         rule_id: i32,
     ) -> String {
         let rule = self.rule(rule_id);
-        let mut res =
-            format!("{} ::= {}", rule.name, self.print_expr(rule.body_expr_id));
+        let mut res = format!("{} ::= {}", rule.name, self.print_expr(rule.body_expr_id));
         if rule.lookahead_assertion_id != NO_EXPR {
-            let _ = write!(
-                res,
-                " (={})",
-                self.print_expr(rule.lookahead_assertion_id)
-            );
+            let _ = write!(res, " (={})", self.print_expr(rule.lookahead_assertion_id));
         }
         res
     }
@@ -49,16 +41,10 @@ impl Grammar {
             GrammarExprType::ByteString => {
                 format!("\"{}\"", escape_bytes(&expr.byte_string()))
             },
-            GrammarExprType::CharacterClass => {
-                self.print_character_class(expr_id, false)
-            },
-            GrammarExprType::CharacterClassStar => {
-                self.print_character_class(expr_id, true)
-            },
+            GrammarExprType::CharacterClass => self.print_character_class(expr_id, false),
+            GrammarExprType::CharacterClassStar => self.print_character_class(expr_id, true),
             GrammarExprType::EmptyStr => "\"\"".to_owned(),
-            GrammarExprType::RuleRef => {
-                self.rule(expr.rule_ref_id()).name.clone()
-            },
+            GrammarExprType::RuleRef => self.rule(expr.rule_ref_id()).name.clone(),
             GrammarExprType::Sequence => self.print_joined(expr.data, " "),
             GrammarExprType::Choices => self.print_joined(expr.data, " | "),
             GrammarExprType::TagDispatch => self.print_tag_dispatch(expr_id),
@@ -66,15 +52,9 @@ impl Grammar {
                 let (rule_id, lower, upper) = expr.repeat();
                 format!("{}{{{lower}, {upper}}}", self.rule(rule_id).name)
             },
-            GrammarExprType::Token => {
-                Self::print_token_list("Token", expr.data)
-            },
-            GrammarExprType::ExcludeToken => {
-                Self::print_token_list("ExcludeToken", expr.data)
-            },
-            GrammarExprType::TokenTagDispatch => {
-                self.print_token_tag_dispatch(expr_id)
-            },
+            GrammarExprType::Token => Self::print_token_list("Token", expr.data),
+            GrammarExprType::ExcludeToken => Self::print_token_list("ExcludeToken", expr.data),
+            GrammarExprType::TokenTagDispatch => self.print_token_tag_dispatch(expr_id),
         }
     }
 
@@ -108,10 +88,7 @@ impl Grammar {
             out.push_str(&escape_codepoint(range.lower, CHAR_CLASS_ESCAPES));
             if range.lower != range.upper {
                 out.push('-');
-                out.push_str(&escape_codepoint(
-                    range.upper,
-                    CHAR_CLASS_ESCAPES,
-                ));
+                out.push_str(&escape_codepoint(range.upper, CHAR_CLASS_ESCAPES));
             }
         }
         out.push(']');
@@ -147,15 +124,9 @@ impl Grammar {
         let td = self.tag_dispatch(expr_id);
         let mut out = String::from("TagDispatch(\n");
         for (tag, rule_id) in &td.tag_rule_pairs {
-            let _ = writeln!(
-                out,
-                "  ({}, {}),",
-                Self::print_quoted(tag),
-                self.rule(*rule_id).name
-            );
+            let _ = writeln!(out, "  ({}, {}),", Self::print_quoted(tag), self.rule(*rule_id).name);
         }
-        let _ =
-            writeln!(out, "  loop_after_dispatch={},", td.loop_after_dispatch);
+        let _ = writeln!(out, "  loop_after_dispatch={},", td.loop_after_dispatch);
         out.push_str("  excludes=(");
         for (i, ex) in td.excludes.iter().enumerate() {
             if i > 0 {
@@ -174,11 +145,9 @@ impl Grammar {
         let ttd = self.token_tag_dispatch(expr_id);
         let mut out = String::from("TokenTagDispatch(\n");
         for (token_id, rule_id) in &ttd.trigger_rule_pairs {
-            let _ =
-                writeln!(out, "  ({token_id}, {}),", self.rule(*rule_id).name);
+            let _ = writeln!(out, "  ({token_id}, {}),", self.rule(*rule_id).name);
         }
-        let _ =
-            writeln!(out, "  loop_after_dispatch={},", ttd.loop_after_dispatch);
+        let _ = writeln!(out, "  loop_after_dispatch={},", ttd.loop_after_dispatch);
         out.push_str("  excludes=(");
         for (i, id) in ttd.excludes.iter().enumerate() {
             if i > 0 {

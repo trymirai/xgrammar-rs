@@ -50,10 +50,7 @@ impl GrammarMutator for SingleElementExprEliminator {
     ) -> i32 {
         // `[c]` (a single, non-negated codepoint) becomes the byte string of that codepoint.
         if data.len() == 3 && data[0] == 0 && data[1] == data[2] {
-            let bytes: Vec<i32> = char_to_utf8_bytes(data[1])
-                .iter()
-                .map(|&b| i32::from(b))
-                .collect();
+            let bytes: Vec<i32> = char_to_utf8_bytes(data[1]).iter().map(|&b| i32::from(b)).collect();
             state.builder.add_byte_string_bytes(&bytes)
         } else {
             state.builder.add_grammar_expr(ty, data)

@@ -1,19 +1,19 @@
 //! The grammar matcher — the string/token-accepting front end over the Earley parser.
 //!
 //! This drives the parser to accept input strings and tokens and to compute the next-token
-//! bitmask. Ported from `cpp/grammar_matcher.cc`. The token-mask computation here is the
-//! from-scratch variant (checking each candidate token against the parser); the precomputed
-//! adaptive-mask cache is a performance optimization deferred to a later milestone.
+//! bitmask. Ported from `cpp/grammar_matcher.cc`. When a compiled grammar provides a
+//! non-empty adaptive token-mask cache, bitmask generation uses that cache; otherwise it
+//! falls back to brute-force per-token checks.
 
 use std::{sync::Arc, time::Instant};
 
-use super::{
-    matcher_error::MatcherTerminatedError, token_bitmask::get_bitmask_size,
-};
+use super::{matcher_error::MatcherTerminatedError, token_bitmask::get_bitmask_size};
 use crate::{
+    compiler::{AdaptiveTokenMaskCache, AdaptiveTokenMaskStoreType},
     functor::grammar_optimizer,
     grammar::Grammar,
     parser::{EarleyParser, ParserState},
+    support::{DynamicBitset, common_prefix_len, intset_intersection, intset_union},
     tokenizer::{TokenizerInfo, VocabType},
 };
 
@@ -21,10 +21,15 @@ use crate::{
 #[derive(Debug, Clone)]
 pub struct GrammarMatcher {
     parser: EarleyParser,
-    tokenizer_info: TokenizerInfo,
+    tokenizer_info: Arc<TokenizerInfo>,
+    adaptive_token_mask_cache: Option<Arc<AdaptiveTokenMaskCache>>,
+    /// Stop token ids used for termination (tokenizer defaults, or an override).
+    stop_token_ids: Vec<i32>,
     terminate_without_stop_token: bool,
     /// Lengths of accepted strings/tokens, for rollback.
     token_length_history: Vec<i32>,
+    /// Scratch bitset reused by the adaptive-cache fill path.
+    tmp_accepted_bitset: DynamicBitset,
 }
 
 impl GrammarMatcher {
@@ -56,9 +61,27 @@ impl GrammarMatcher {
         compiled: &crate::compiler::CompiledGrammar,
         terminate_without_stop_token: bool,
     ) -> Self {
-        Self::build(
+        Self::from_compiled_grammar_with_options(compiled, None, terminate_without_stop_token)
+    }
+
+    /// Creates a matcher over a compiled grammar with optional stop-token override.
+    ///
+    /// `override_stop_tokens`, when set, must be non-empty (matching the C++ check).
+    /// `max_rollback_tokens` is accepted for API parity but unused (C++ always reports `-1`).
+    ///
+    /// # Panics
+    /// Panics if `override_stop_tokens` is `Some` and empty.
+    #[must_use]
+    pub fn from_compiled_grammar_with_options(
+        compiled: &crate::compiler::CompiledGrammar,
+        override_stop_tokens: Option<Vec<i32>>,
+        terminate_without_stop_token: bool,
+    ) -> Self {
+        Self::build_with_cache(
             compiled.grammar(),
-            compiled.tokenizer_info().clone(),
+            compiled.tokenizer_info_arc(),
+            Some(compiled.adaptive_token_mask_cache_arc()),
+            override_stop_tokens,
             terminate_without_stop_token,
         )
     }
@@ -68,21 +91,37 @@ impl GrammarMatcher {
         tokenizer_info: TokenizerInfo,
         terminate_without_stop_token: bool,
     ) -> Self {
+        Self::build_with_cache(grammar, Arc::new(tokenizer_info), None, None, terminate_without_stop_token)
+    }
+
+    fn build_with_cache(
+        grammar: &Grammar,
+        tokenizer_info: Arc<TokenizerInfo>,
+        adaptive_token_mask_cache: Option<Arc<AdaptiveTokenMaskCache>>,
+        override_stop_tokens: Option<Vec<i32>>,
+        terminate_without_stop_token: bool,
+    ) -> Self {
         let optimized = if grammar.is_optimized() {
             grammar.clone()
         } else {
             grammar_optimizer(grammar)
         };
-        let parser = EarleyParser::new(
-            Arc::new(optimized),
-            ParserState::invalid(),
-            true,
-        );
+        let parser = EarleyParser::new(Arc::new(optimized), ParserState::invalid(), true);
+        let stop_token_ids = match override_stop_tokens {
+            Some(ids) => {
+                assert!(!ids.is_empty(), "The override_stop_tokens should not be empty");
+                ids
+            },
+            None => tokenizer_info.stop_token_ids().to_vec(),
+        };
         Self {
             parser,
             tokenizer_info,
+            adaptive_token_mask_cache,
+            stop_token_ids,
             terminate_without_stop_token,
             token_length_history: Vec::new(),
+            tmp_accepted_bitset: DynamicBitset::new(0),
         }
     }
 
@@ -126,32 +165,32 @@ impl GrammarMatcher {
         if token_id < 0 || token_id >= self.tokenizer_info.vocab_size() {
             return false;
         }
-        if self.tokenizer_info.stop_token_ids().contains(&token_id) {
+        if self.stop_token_ids.contains(&token_id) {
             return self.accept_stop_token();
         }
         if self.tokenizer_info.special_token_ids().contains(&token_id) {
             return false;
         }
-        let decoded =
-            self.tokenizer_info.decoded_vocab()[token_id as usize].clone();
+        // Clone the Arc so decoded bytes can be borrowed across `&mut self.parser` uses.
+        let tokenizer = Arc::clone(&self.tokenizer_info);
+        let decoded = &tokenizer.decoded_vocab()[token_id as usize];
 
         // Phase 1: the atomic-token path (token/exclude-token edges), captured then rolled back.
         let atomic_success = self.parser.advance_atomic_token(token_id);
-        let (atomic_states, atomic_completable, atomic_completed) =
-            if atomic_success {
-                let s = self.parser.latest_scanable_states();
-                let c = self.parser.latest_completable_states();
-                let done = self.parser.is_completed();
-                self.parser.pop_last_states(1);
-                (s, c, done)
-            } else {
-                (Vec::new(), Vec::new(), false)
-            };
+        let (atomic_states, atomic_completable, atomic_completed) = if atomic_success {
+            let s = self.parser.latest_scanable_states();
+            let c = self.parser.latest_completable_states();
+            let done = self.parser.is_completed();
+            self.parser.pop_last_states(1);
+            (s, c, done)
+        } else {
+            (Vec::new(), Vec::new(), false)
+        };
 
         // Phase 2: the byte-by-byte path from the same starting state.
         let mut pos = 0;
         let mut byte_ok = true;
-        for &byte in &decoded {
+        for &byte in decoded {
             if !self.parser.advance(byte) {
                 byte_ok = false;
                 break;
@@ -172,11 +211,7 @@ impl GrammarMatcher {
             self.token_length_history.push(decoded.len() as i32);
         } else if decoded.is_empty() {
             // Zero-length token: the byte path created no position, so push the atomic one.
-            self.parser.push_position(
-                &atomic_states,
-                &atomic_completable,
-                atomic_completed,
-            );
+            self.parser.push_position(&atomic_states, &atomic_completable, atomic_completed);
             self.token_length_history.push(1);
         } else {
             // Both paths succeeded: merge the atomic states into the final byte position.
@@ -194,11 +229,7 @@ impl GrammarMatcher {
                     merged_comp.push(*cs);
                 }
             }
-            self.parser.push_position(
-                &merged,
-                &merged_comp,
-                byte_completed || atomic_completed,
-            );
+            self.parser.push_position(&merged, &merged_comp, byte_completed || atomic_completed);
             self.token_length_history.push(decoded.len() as i32);
         }
         true
@@ -219,6 +250,159 @@ impl GrammarMatcher {
         if self.is_stop_token_accepted() {
             return Err(MatcherTerminatedError);
         }
+
+        // Prefer the adaptive token-mask cache (populated at compile time). Empty cache
+        // (e.g. zero-vocab tokenizer) falls back to brute-force.
+        if self.adaptive_token_mask_cache.as_ref().is_some_and(|cache| !cache.is_empty()) {
+            return Ok(self.fill_next_token_bitmask_with_cache(bitmask, index));
+        }
+
+        Ok(self.fill_next_token_bitmask_brute_force(bitmask, index))
+    }
+
+    fn fill_next_token_bitmask_with_cache(
+        &mut self,
+        bitmask: &mut [i32],
+        index: i32,
+    ) -> bool {
+        let cache = Arc::clone(self.adaptive_token_mask_cache.as_ref().expect("cache path requires a non-empty cache"));
+        let vocab_size = self.tokenizer_info.vocab_size() as usize;
+        let size = get_bitmask_size(self.tokenizer_info.vocab_size()) as usize;
+        let start = index as usize * size;
+        let row = &mut bitmask[start..start + size];
+        row.fill(0);
+
+        let tokenizer = Arc::clone(&self.tokenizer_info);
+        let sorted = tokenizer.sorted_decoded_vocab();
+        let subtree_range = tokenizer.trie_subtree_nodes_range();
+        let latest_states = self.parser.latest_scanable_states();
+
+        if self.tmp_accepted_bitset.len() != vocab_size {
+            self.tmp_accepted_bitset = DynamicBitset::new(vocab_size);
+        } else {
+            self.tmp_accepted_bitset.reset_all();
+        }
+        let mut tmp_rejected_indices = vec![-1];
+
+        struct StateMask<'a> {
+            state: ParserState,
+            mask: &'a crate::compiler::AdaptiveTokenMask,
+        }
+        let mut latest_states_with_masks: Vec<StateMask<'_>> = Vec::new();
+
+        for state in &latest_states {
+            let key = state.cache_key();
+            let mask = cache.get(&key).unwrap_or_else(|| panic!("adaptive token-mask cache missing entry for {state}"));
+            latest_states_with_masks.push(StateMask {
+                state: *state,
+                mask,
+            });
+            match mask.store_type {
+                AdaptiveTokenMaskStoreType::AcceptedBitset => {
+                    self.tmp_accepted_bitset.or_assign(&mask.accepted_bitset);
+                },
+                AdaptiveTokenMaskStoreType::Accepted => {
+                    for &idx in &mask.accepted_indices {
+                        let token_id = sorted[idx as usize].0 as usize;
+                        self.tmp_accepted_bitset.set(token_id, true);
+                    }
+                },
+                AdaptiveTokenMaskStoreType::Rejected => {},
+            }
+        }
+
+        let mut tmp_rejected_indices_delta = Vec::new();
+
+        for entry in &latest_states_with_masks {
+            let mask = entry.mask;
+            tmp_rejected_indices_delta.clear();
+            self.parser.push_one_state_to_check(entry.state);
+
+            let mut prev_token: Option<&[u8]> = None;
+            let mut prev_matched_size = 0;
+            let mut last_rejected_uncertain_range = 0;
+
+            for &cur_token_idx in &mask.uncertain_indices {
+                let token_id = sorted[cur_token_idx as usize].0 as usize;
+                if self.tmp_accepted_bitset.get(token_id) {
+                    continue;
+                }
+
+                if cur_token_idx < last_rejected_uncertain_range {
+                    if mask.store_type == AdaptiveTokenMaskStoreType::Rejected {
+                        tmp_rejected_indices_delta.push(cur_token_idx);
+                    }
+                    continue;
+                }
+
+                let cur_token = &sorted[cur_token_idx as usize].1;
+                let mut accepted = true;
+
+                if let Some(prev) = prev_token {
+                    let lcp_len = common_prefix_len(cur_token, prev);
+                    if lcp_len > prev_matched_size {
+                        last_rejected_uncertain_range = subtree_range[cur_token_idx as usize];
+                        accepted = false;
+                    } else if lcp_len < prev_matched_size {
+                        self.parser.pop_last_states(prev_matched_size - lcp_len);
+                    }
+                    prev_matched_size = prev_matched_size.min(lcp_len);
+                }
+
+                if accepted {
+                    for (j, &byte) in cur_token.iter().enumerate().skip(prev_matched_size as usize) {
+                        if !self.parser.advance(byte) {
+                            last_rejected_uncertain_range = subtree_range[cur_token_idx as usize];
+                            accepted = false;
+                            break;
+                        }
+                        prev_matched_size = j as i32 + 1;
+                    }
+                }
+
+                match mask.store_type {
+                    AdaptiveTokenMaskStoreType::AcceptedBitset | AdaptiveTokenMaskStoreType::Accepted => {
+                        if accepted {
+                            self.tmp_accepted_bitset.set(token_id, true);
+                        }
+                    },
+                    AdaptiveTokenMaskStoreType::Rejected => {
+                        if !accepted {
+                            tmp_rejected_indices_delta.push(cur_token_idx);
+                        }
+                    },
+                }
+
+                prev_token = Some(cur_token.as_slice());
+            }
+
+            self.parser.pop_last_states(prev_matched_size + 1);
+
+            if mask.store_type == AdaptiveTokenMaskStoreType::Rejected {
+                intset_union(&mut tmp_rejected_indices_delta, &mask.rejected_indices);
+                intset_intersection(&mut tmp_rejected_indices, &tmp_rejected_indices_delta);
+            }
+        }
+
+        let can_reach_end = self.parser.is_completed();
+        set_token_bitmask(
+            row,
+            &self.tmp_accepted_bitset,
+            &tmp_rejected_indices,
+            can_reach_end,
+            &self.tokenizer_info,
+            &self.stop_token_ids,
+            false,
+        );
+
+        (0..self.tokenizer_info.vocab_size()).any(|t| row[(t / 32) as usize] >> (t % 32) & 1 == 0)
+    }
+
+    fn fill_next_token_bitmask_brute_force(
+        &mut self,
+        bitmask: &mut [i32],
+        index: i32,
+    ) -> bool {
         let vocab_size = self.tokenizer_info.vocab_size();
         let size = get_bitmask_size(vocab_size) as usize;
         let start = index as usize * size;
@@ -226,22 +410,20 @@ impl GrammarMatcher {
         row.fill(0);
 
         let can_reach_end = self.parser.is_completed();
-        let sorted: Vec<(i32, Vec<u8>)> =
-            self.tokenizer_info.sorted_decoded_vocab().to_vec();
-        for (token_id, decoded) in &sorted {
+        let tokenizer = Arc::clone(&self.tokenizer_info);
+        for (token_id, decoded) in tokenizer.sorted_decoded_vocab() {
             if self.token_acceptable(*token_id, decoded) {
                 let id = *token_id as usize;
                 row[id / 32] |= 1 << (id % 32);
             }
         }
         if can_reach_end {
-            for &id in self.tokenizer_info.stop_token_ids() {
+            for &id in &self.stop_token_ids {
                 let id = id as usize;
                 row[id / 32] |= 1 << (id % 32);
             }
         }
-        // A token is masked unless its bit is set; report whether anything is masked.
-        Ok((0..vocab_size).any(|t| row[(t / 32) as usize] >> (t % 32) & 1 == 0))
+        (0..vocab_size).any(|t| row[(t / 32) as usize] >> (t % 32) & 1 == 0)
     }
 
     /// Whether `token_id` (with decoded bytes `decoded`) can be accepted from the current
@@ -327,8 +509,7 @@ impl GrammarMatcher {
             "cannot rollback more tokens than are in history"
         );
         for _ in 0..num_tokens {
-            let steps =
-                self.token_length_history.pop().expect("history non-empty");
+            let steps = self.token_length_history.pop().expect("history non-empty");
             self.parser.pop_last_states(steps);
         }
     }
@@ -346,10 +527,10 @@ impl GrammarMatcher {
         self.clone()
     }
 
-    /// The stop token ids of the bound tokenizer.
+    /// The stop token ids this matcher accepts as terminators.
     #[must_use]
     pub fn stop_token_ids(&self) -> &[i32] {
-        self.tokenizer_info.stop_token_ids()
+        &self.stop_token_ids
     }
 
     /// Traverses a speculative-decoding draft tree and fills one token-mask row per node.
@@ -372,31 +553,21 @@ impl GrammarMatcher {
         if node_count == 0 {
             return Err("the draft tree must not be empty".to_owned());
         }
-        if retrieve_next_sibling.len() != node_count
-            || draft_tokens.len() != node_count
-        {
+        if retrieve_next_sibling.len() != node_count || draft_tokens.len() != node_count {
             return Err(
-                "retrieve_next_token, retrieve_next_sibling, and draft_tokens must have the same length"
-                    .to_owned(),
+                "retrieve_next_token, retrieve_next_sibling, and draft_tokens must have the same length".to_owned()
             );
         }
         if retrieve_next_sibling[0] != -1 {
             return Err("the root node must not have siblings".to_owned());
         }
-        let bitmask_words =
-            get_bitmask_size(self.tokenizer_info.vocab_size()) as usize;
-        let expected_len = node_count
-            .checked_mul(bitmask_words)
-            .ok_or_else(|| "token bitmask shape overflow".to_owned())?;
+        let bitmask_words = get_bitmask_size(self.tokenizer_info.vocab_size()) as usize;
+        let expected_len =
+            node_count.checked_mul(bitmask_words).ok_or_else(|| "token bitmask shape overflow".to_owned())?;
         if token_bitmask.len() != expected_len {
-            return Err(
-                "the token_bitmask batch size and width must match the draft tree and vocabulary"
-                    .to_owned(),
-            );
+            return Err("the token_bitmask batch size and width must match the draft tree and vocabulary".to_owned());
         }
-        for &index in
-            retrieve_next_token.iter().chain(retrieve_next_sibling.iter())
-        {
+        for &index in retrieve_next_token.iter().chain(retrieve_next_sibling.iter()) {
             if index < -1 || index >= node_count as i64 {
                 return Err("draft tree node index is out of range".to_owned());
             }
@@ -431,40 +602,31 @@ impl GrammarMatcher {
         let accepted = if current == 0 {
             true
         } else {
-            let parent = parent.ok_or_else(|| {
-                "non-root draft tree nodes must have a parent".to_owned()
-            })?;
+            let parent = parent.ok_or_else(|| "non-root draft tree nodes must have a parent".to_owned())?;
             let token = draft_tokens[current];
             if token < 0 || token >= (bitmask_words * 32) as i64 {
                 false
             } else {
                 let token = token as usize;
-                let parent_row = &token_bitmask
-                    [parent * bitmask_words..(parent + 1) * bitmask_words];
+                let parent_row = &token_bitmask[parent * bitmask_words..(parent + 1) * bitmask_words];
                 (parent_row[token / 32] as u32 & (1_u32 << (token % 32))) != 0
             }
         };
 
-        if accepted
-            && current != 0
-            && time_threshold > 0.0
-            && start_time.elapsed().as_secs_f64() > time_threshold
-        {
+        if accepted && current != 0 && time_threshold > 0.0 && start_time.elapsed().as_secs_f64() > time_threshold {
             return Ok(false);
         }
 
         let row_start = current * bitmask_words;
         let row_end = row_start + bitmask_words;
         if accepted {
-            let token_accepted = current == 0
-                || i32::try_from(draft_tokens[current])
-                    .is_ok_and(|token| self.accept_token(token));
+            let token_accepted =
+                current == 0 || i32::try_from(draft_tokens[current]).is_ok_and(|token| self.accept_token(token));
             if token_accepted {
                 if self.is_terminated() {
                     token_bitmask[row_start..row_end].fill(0);
                 } else {
-                    self.fill_next_token_bitmask(token_bitmask, current as i32)
-                        .map_err(|error| error.to_string())?;
+                    self.fill_next_token_bitmask(token_bitmask, current as i32).map_err(|error| error.to_string())?;
                     let child = retrieve_next_token[current];
                     if child != -1
                         && !self.traverse_draft_tree_recursive(
@@ -519,9 +681,7 @@ impl GrammarMatcher {
     ///
     /// # Errors
     /// Returns [`MatcherTerminatedError`] after the stop token has been accepted.
-    pub fn find_jump_forward_string(
-        &mut self
-    ) -> Result<Vec<u8>, MatcherTerminatedError> {
+    pub fn find_jump_forward_string(&mut self) -> Result<Vec<u8>, MatcherTerminatedError> {
         if self.is_stop_token_accepted() {
             return Err(MatcherTerminatedError);
         }
@@ -535,11 +695,7 @@ impl GrammarMatcher {
             let mut next_char: i32 = -1;
             let mut can_continue = true;
             for state in &states {
-                let fsm = self
-                    .parser
-                    .grammar()
-                    .per_rule_fsm(state.rule_id)
-                    .expect("per-rule FSM");
+                let fsm = self.parser.grammar().per_rule_fsm(state.rule_id).expect("per-rule FSM");
                 for edge in fsm.fsm().fsm().state_edges(state.element_id) {
                     if !edge.is_char_range() {
                         continue;
@@ -589,5 +745,67 @@ impl GrammarMatcher {
     #[must_use]
     pub fn parser(&self) -> &EarleyParser {
         &self.parser
+    }
+}
+
+fn set_token_bitmask(
+    row: &mut [i32],
+    accepted_bitset: &DynamicBitset,
+    rejected_indices: &[i32],
+    can_reach_end: bool,
+    tokenizer_info: &TokenizerInfo,
+    stop_token_ids: &[i32],
+    allow_special_token: bool,
+) {
+    let vocab_size = tokenizer_info.vocab_size() as usize;
+    let sorted = tokenizer_info.sorted_decoded_vocab();
+
+    if rejected_indices.len() == 1 && rejected_indices[0] == -1 {
+        for token_id in 0..vocab_size {
+            if accepted_bitset.get(token_id) {
+                row[token_id / 32] |= 1 << (token_id % 32);
+            }
+        }
+        if allow_special_token {
+            for &id in tokenizer_info.special_token_ids() {
+                let id = id as usize;
+                row[id / 32] |= 1 << (id % 32);
+            }
+        }
+        if can_reach_end {
+            for &id in stop_token_ids {
+                let id = id as usize;
+                row[id / 32] |= 1 << (id % 32);
+            }
+        }
+        return;
+    }
+
+    for token_id in 0..vocab_size {
+        row[token_id / 32] = -1;
+    }
+    let last_word = vocab_size / 32;
+    let remaining = vocab_size % 32;
+    if remaining != 0 {
+        row[last_word] = ((1u32 << remaining) - 1) as i32;
+    }
+
+    for &idx in rejected_indices {
+        let token_id = sorted[idx as usize].0 as usize;
+        if !accepted_bitset.get(token_id) {
+            row[token_id / 32] &= !(1 << (token_id % 32));
+        }
+    }
+    if !allow_special_token {
+        for &id in tokenizer_info.special_token_ids() {
+            let id = id as usize;
+            row[id / 32] &= !(1 << (id % 32));
+        }
+    }
+    if !can_reach_end {
+        for &id in stop_token_ids {
+            let id = id as usize;
+            row[id / 32] &= !(1 << (id % 32));
+        }
     }
 }

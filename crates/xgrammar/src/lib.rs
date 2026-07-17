@@ -28,28 +28,22 @@ pub mod tokenizer;
 pub use compiler::{CompiledGrammar, GrammarCompiler};
 pub use config::{SERIALIZATION_VERSION, get_serialization_version};
 pub use converter::{
-    RegexError, SchemaError, SchemaErrorKind, StructuralTagError,
-    XmlJsonFormat, deepseek_xml_tool_calling_to_ebnf,
-    generate_float_range_regex, generate_float_range_regex_with_options,
-    generate_range_regex, glm_xml_tool_calling_to_ebnf, json_schema_to_ebnf,
-    json_schema_to_ebnf_with_any_order, json_schema_to_ebnf_xml_with_options,
-    minimax_xml_tool_calling_to_ebnf, qwen_xml_tool_calling_to_ebnf,
+    RegexError, SchemaError, SchemaErrorKind, StructuralTagError, StructuralTagItem, XmlJsonFormat,
+    deepseek_xml_tool_calling_to_ebnf, generate_float_range_regex, generate_float_range_regex_with_options,
+    generate_range_regex, glm_xml_tool_calling_to_ebnf, json_schema_to_ebnf, json_schema_to_ebnf_with_any_order,
+    json_schema_to_ebnf_xml_with_options, minimax_xml_tool_calling_to_ebnf, qwen_xml_tool_calling_to_ebnf,
     regex_to_ebnf, xml_tool_calling_to_ebnf,
 };
 pub use grammar::{DeserializeError, Grammar};
 pub use matcher::{
-    BatchGrammarMatcher, GrammarMatcher, MatcherTerminatedError,
-    allocate_token_bitmask, apply_token_bitmask_inplace_cpu, get_bitmask_size,
-    get_masked_tokens_from_bitmask, is_single_token_bitmask,
-    reset_token_bitmask,
+    BatchGrammarMatcher, BitmaskDlType, GrammarMatcher, MatcherTerminatedError, allocate_token_bitmask,
+    apply_token_bitmask_inplace_cpu, apply_token_bitmask_inplace_cpu_batch, get_bitmask_dl_type, get_bitmask_size,
+    get_masked_tokens_from_bitmask, is_single_token_bitmask, reset_token_bitmask,
 };
-pub use support::{
-    RecursionError, get_max_recursion_depth, reset_recursion_depth,
-    set_max_recursion_depth,
-};
+pub use support::{RecursionError, get_max_recursion_depth, reset_recursion_depth, set_max_recursion_depth};
+pub use testing::print_token_by_ids;
 pub use tokenizer::{
-    HfMetadata, TokenizerInfo, UnknownVocabType, VocabType, decode_token,
-    decode_token_bytes, detect_metadata_from_hf,
+    HfMetadata, TokenizerInfo, UnknownVocabType, VocabType, decode_token, decode_token_bytes, detect_metadata_from_hf,
 };
 
 /// The crate version, as declared in `Cargo.toml`.

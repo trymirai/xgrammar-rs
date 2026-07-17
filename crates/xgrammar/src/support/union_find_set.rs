@@ -48,11 +48,7 @@ impl<T: Copy + Eq + Hash + Ord> UnionFindSet<T> {
         &mut self,
         element: T,
     ) -> T {
-        let parent = self
-            .parent_and_size
-            .get(&element)
-            .expect("element not found in union-find set")
-            .0;
+        let parent = self.parent_and_size.get(&element).expect("element not found in union-find set").0;
         if parent != element {
             let root = self.find(parent);
             self.parent_and_size.get_mut(&element).expect("present").0 = root;
@@ -82,8 +78,7 @@ impl<T: Copy + Eq + Hash + Ord> UnionFindSet<T> {
             std::mem::swap(&mut root_a, &mut root_b);
         }
         self.parent_and_size.get_mut(&root_b).expect("present").0 = root_a;
-        self.parent_and_size.get_mut(&root_a).expect("present").1 =
-            size_a + size_b;
+        self.parent_and_size.get_mut(&root_a).expect("present").1 = size_a + size_b;
     }
 
     /// Whether `element` has been added (`1`) or not (`0`) — mirrors the C++ `Count`.

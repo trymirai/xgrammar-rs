@@ -18,11 +18,9 @@ pub use compact_fsm::CompactFsm;
 pub use compact_fsm_with_start_end::CompactFsmWithStartEnd;
 pub use compact_fsm_with_start_end_with_size::CompactFsmWithStartEndWithSize;
 pub use fsm::{EdgeKind, Fsm, NO_NEXT_STATE};
-pub use fsm_edge::{
-    ExcludeTokenEdgeRef, FsmEdge, MAX_CHAR, RepeatEdgeRef, TokenEdgeRef,
-    edge_type,
-};
+pub use fsm_edge::{ExcludeTokenEdgeRef, FsmEdge, MAX_CHAR, RepeatEdgeRef, TokenEdgeRef, edge_type};
 pub use fsm_with_start_end::FsmWithStartEnd;
 pub use fsm_with_start_end_with_size::FsmWithStartEndWithSize;
 pub use regex_fsm_builder::build_regex_fsm;
+pub use serialization::{deserialize_compact_2d_fsm_edges, serialize_compact_2d_fsm_edges};
 pub use trie_fsm_builder::TrieFsmBuilder;

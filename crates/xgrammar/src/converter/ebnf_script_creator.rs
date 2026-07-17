@@ -65,10 +65,7 @@ impl EbnfScriptCreator {
         rule_name: &str,
         rule_body: &str,
     ) -> String {
-        assert!(
-            self.rule_names.contains(rule_name),
-            "rule name {rule_name} is not allocated"
-        );
+        assert!(self.rule_names.contains(rule_name), "rule name {rule_name} is not allocated");
         self.rules.push((rule_name.to_owned(), rule_body.to_owned()));
         rule_name.to_owned()
     }
@@ -79,10 +76,7 @@ impl EbnfScriptCreator {
         &self,
         rule_name: &str,
     ) -> Option<&str> {
-        self.rules
-            .iter()
-            .find(|(name, _)| name == rule_name)
-            .map(|(_, body)| body.as_str())
+        self.rules.iter().find(|(name, _)| name == rule_name).map(|(_, body)| body.as_str())
     }
 
     /// The complete EBNF script (one `name ::= body` per line).

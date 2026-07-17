@@ -25,18 +25,13 @@ impl IntegerSpec {
         let mut start = self.minimum;
         if let Some(exclusive) = self.exclusive_minimum {
             let exclusive_start = exclusive + 1;
-            start =
-                Some(start.map_or(exclusive_start, |value| {
-                    value.max(exclusive_start)
-                }));
+            start = Some(start.map_or(exclusive_start, |value| value.max(exclusive_start)));
         }
 
         let mut end = self.maximum;
         if let Some(exclusive) = self.exclusive_maximum {
             let exclusive_end = exclusive - 1;
-            end = Some(
-                end.map_or(exclusive_end, |value| value.min(exclusive_end)),
-            );
+            end = Some(end.map_or(exclusive_end, |value| value.min(exclusive_end)));
         }
         (start, end)
     }

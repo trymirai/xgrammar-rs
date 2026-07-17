@@ -6,13 +6,8 @@
 //! tag-dispatch automata. Sequences concatenate and choices union (then simplify).
 
 use crate::{
-    fsm::{
-        CompactFsm, CompactFsmWithStartEnd, CompactFsmWithStartEndWithSize,
-        Fsm, FsmWithStartEnd, TrieFsmBuilder,
-    },
-    grammar::{
-        Grammar, GrammarExpr, GrammarExprType, TagDispatch, TokenTagDispatch,
-    },
+    fsm::{CompactFsm, CompactFsmWithStartEnd, CompactFsmWithStartEndWithSize, Fsm, FsmWithStartEnd, TrieFsmBuilder},
+    grammar::{Grammar, GrammarExpr, GrammarExprType, TagDispatch, TokenTagDispatch},
 };
 
 // Packed-UTF-8 range boundaries (a codepoint's UTF-8 bytes packed big-endian into a u32).
@@ -37,18 +32,13 @@ impl GrammarFsmBuilder {
     pub fn apply(grammar: &mut Grammar) {
         let mut complete = Fsm::new(0);
         let num_rules = grammar.num_rules();
-        let mut per_rule_meta: Vec<crate::fsm::FsmWithStartEndWithSize> =
-            Vec::with_capacity(num_rules as usize);
+        let mut per_rule_meta: Vec<crate::fsm::FsmWithStartEndWithSize> = Vec::with_capacity(num_rules as usize);
         for i in 0..num_rules {
             let body_id = grammar.rule(i).body_expr_id;
             let body = grammar.expr(body_id);
             let rule_fsm = match body.ty {
-                GrammarExprType::TagDispatch => {
-                    Self::tag_dispatch(&grammar.tag_dispatch(body_id))
-                },
-                GrammarExprType::TokenTagDispatch => Self::token_tag_dispatch(
-                    &grammar.token_tag_dispatch(body_id),
-                ),
+                GrammarExprType::TagDispatch => Self::tag_dispatch(&grammar.tag_dispatch(body_id)),
+                GrammarExprType::TokenTagDispatch => Self::token_tag_dispatch(&grammar.token_tag_dispatch(body_id)),
                 _ => Self::choices(&body, grammar),
             }
             .expect("rule body must build an FSM after optimization");
@@ -56,23 +46,13 @@ impl GrammarFsmBuilder {
         }
 
         let compact_complete = CompactFsm::from_fsm(&complete);
-        let per_rule_fsms: Vec<Option<CompactFsmWithStartEndWithSize>> =
-            per_rule_meta
-                .iter()
-                .map(|s| {
-                    let wse = CompactFsmWithStartEnd::new(
-                        compact_complete.clone(),
-                        s.start(),
-                        s.ends().to_vec(),
-                        false,
-                    );
-                    Some(CompactFsmWithStartEndWithSize::new(
-                        wse,
-                        s.edge_num(),
-                        s.node_num(),
-                    ))
-                })
-                .collect();
+        let per_rule_fsms: Vec<Option<CompactFsmWithStartEndWithSize>> = per_rule_meta
+            .iter()
+            .map(|s| {
+                let wse = CompactFsmWithStartEnd::new(compact_complete.clone(), s.start(), s.ends().to_vec(), false);
+                Some(CompactFsmWithStartEndWithSize::new(wse, s.edge_num(), s.node_num()))
+            })
+            .collect();
         grammar.set_fsms(compact_complete, per_rule_fsms);
     }
 
@@ -137,8 +117,7 @@ impl GrammarFsmBuilder {
     /// Builds the FSM for a `Repeat` expression (a single repeat-reference edge).
     #[must_use]
     pub fn repeat(expr: &GrammarExpr) -> FsmWithStartEnd {
-        let (rule_id, lower, upper) =
-            (expr.data[0], expr.data[1], expr.data[2]);
+        let (rule_id, lower, upper) = (expr.data[0], expr.data[1], expr.data[2]);
         let mut fsm = empty_fsm();
         fsm.add_state();
         fsm.add_state();
@@ -168,9 +147,7 @@ impl GrammarFsmBuilder {
 
     /// Builds the dispatch FSM for a token tag-dispatch.
     #[must_use]
-    pub fn token_tag_dispatch(
-        ttd: &TokenTagDispatch
-    ) -> Option<FsmWithStartEnd> {
+    pub fn token_tag_dispatch(ttd: &TokenTagDispatch) -> Option<FsmWithStartEnd> {
         let num_triggers = ttd.trigger_rule_pairs.len() as i32;
         let loop_after = ttd.loop_after_dispatch;
         let num_states = 1 + num_triggers + i32::from(!loop_after);
@@ -186,18 +163,12 @@ impl GrammarFsmBuilder {
             e
         };
 
-        let mut self_loop_exclude: Vec<i32> = ttd
-            .trigger_rule_pairs
-            .iter()
-            .map(|&(token_id, _)| token_id)
-            .collect();
+        let mut self_loop_exclude: Vec<i32> = ttd.trigger_rule_pairs.iter().map(|&(token_id, _)| token_id).collect();
         self_loop_exclude.extend_from_slice(&ttd.excludes);
         self_loop_exclude.sort_unstable();
         self_loop_exclude.dedup();
 
-        for (i, &(token_id, rule_id)) in
-            ttd.trigger_rule_pairs.iter().enumerate()
-        {
+        for (i, &(token_id, rule_id)) in ttd.trigger_rule_pairs.iter().enumerate() {
             let dispatch_state = 1 + i as i32;
             fsm.add_token_edge(start, dispatch_state, &[token_id]);
             let target = if loop_after {
@@ -223,8 +194,7 @@ impl GrammarFsmBuilder {
             let sub = match seq_expr.ty {
                 GrammarExprType::ByteString => Self::byte_string(&seq_expr),
                 GrammarExprType::RuleRef => Self::rule_ref(&seq_expr),
-                GrammarExprType::CharacterClass
-                | GrammarExprType::CharacterClassStar => {
+                GrammarExprType::CharacterClass | GrammarExprType::CharacterClassStar => {
                     Self::character_class(&seq_expr)
                 },
                 GrammarExprType::Repeat => Self::repeat(&seq_expr),
@@ -272,11 +242,7 @@ impl GrammarFsmBuilder {
     /// Builds the dispatch FSM for a string tag-dispatch.
     #[must_use]
     pub fn tag_dispatch(tag_dispatch: &TagDispatch) -> Option<FsmWithStartEnd> {
-        Self::build_tag_dispatch(
-            &tag_dispatch.tag_rule_pairs,
-            tag_dispatch.loop_after_dispatch,
-            &tag_dispatch.excludes,
-        )
+        Self::build_tag_dispatch(&tag_dispatch.tag_rule_pairs, tag_dispatch.loop_after_dispatch, &tag_dispatch.excludes)
     }
 
     fn build_tag_dispatch(
@@ -284,20 +250,10 @@ impl GrammarFsmBuilder {
         loop_after_dispatch: bool,
         excluded_strings: &[Vec<u8>],
     ) -> Option<FsmWithStartEnd> {
-        let tag_names: Vec<&[u8]> = string_trigger_rules
-            .iter()
-            .map(|(name, _)| name.as_slice())
-            .collect();
-        let excluded: Vec<&[u8]> =
-            excluded_strings.iter().map(Vec::as_slice).collect();
+        let tag_names: Vec<&[u8]> = string_trigger_rules.iter().map(|(name, _)| name.as_slice()).collect();
+        let excluded: Vec<&[u8]> = excluded_strings.iter().map(Vec::as_slice).collect();
         let mut end_states: Vec<i32> = Vec::new();
-        let trie = TrieFsmBuilder::build(
-            &tag_names,
-            &excluded,
-            Some(&mut end_states),
-            true,
-            true,
-        )?;
+        let trie = TrieFsmBuilder::build(&tag_names, &excluded, Some(&mut end_states), true, true)?;
         let mut trie_fsm = trie.fsm().clone();
         let start = trie.start();
 
@@ -322,11 +278,7 @@ impl GrammarFsmBuilder {
     }
 
     fn build_negative_character_class(expr: &GrammarExpr) -> FsmWithStartEnd {
-        debug_assert!(matches!(
-            expr.ty,
-            GrammarExprType::CharacterClass
-                | GrammarExprType::CharacterClassStar
-        ));
+        debug_assert!(matches!(expr.ty, GrammarExprType::CharacterClass | GrammarExprType::CharacterClassStar));
         debug_assert!(expr.data[0] != 0);
         let mut char_set = [false; 128];
         let mut i = 1;
@@ -360,12 +312,7 @@ impl GrammarFsmBuilder {
                 while right < 128 && !char_set[right] {
                     right += 1;
                 }
-                fsm.fsm_mut().add_edge(
-                    start,
-                    end,
-                    left as i32,
-                    (right - 1) as i32,
-                );
+                fsm.fsm_mut().add_edge(start, end, left as i32, (right - 1) as i32);
                 i = right;
             } else {
                 i += 1;
@@ -414,12 +361,7 @@ fn codepoint_to_packed_utf8(codepoint: u32) -> u32 {
 
 /// The four bytes of a packed-UTF-8 value, little end (`byte[0]` = least significant) first.
 fn packed_bytes(v: u32) -> [i32; 4] {
-    [
-        (v & 0xFF) as i32,
-        ((v >> 8) & 0xFF) as i32,
-        ((v >> 16) & 0xFF) as i32,
-        ((v >> 24) & 0xFF) as i32,
-    ]
+    [(v & 0xFF) as i32, ((v >> 8) & 0xFF) as i32, ((v >> 16) & 0xFF) as i32, ((v >> 24) & 0xFF) as i32]
 }
 
 /// Adds a range `[min, max]` of equal-byte-length packed-UTF-8 characters between `from` and
@@ -453,26 +395,14 @@ fn add_same_length_character_range(
         if (min & 0x00FF_FFFF) != 0x0080_8080 {
             let tmp_min = fsm.add_state();
             fsm.fsm_mut().add_edge(from, tmp_min, byte_min[3], byte_min[3]);
-            add_same_length_character_range(
-                fsm,
-                tmp_min,
-                to,
-                min & 0x00FF_FFFF,
-                0x00BF_BFBF,
-            );
+            add_same_length_character_range(fsm, tmp_min, to, min & 0x00FF_FFFF, 0x00BF_BFBF);
         } else {
             byte_min[3] -= 1;
         }
         if (max & 0x00FF_FFFF) != 0x00BF_BFBF {
             let tmp_max = fsm.add_state();
             fsm.fsm_mut().add_edge(from, tmp_max, byte_max[3], byte_max[3]);
-            add_same_length_character_range(
-                fsm,
-                tmp_max,
-                to,
-                0x0080_8080,
-                max & 0x00FF_FFFF,
-            );
+            add_same_length_character_range(fsm, tmp_max, to, 0x0080_8080, max & 0x00FF_FFFF);
         } else {
             byte_max[3] += 1;
         }
@@ -501,26 +431,14 @@ fn add_same_length_character_range(
         if (min & 0x00FFFF) != 0x8080 {
             let tmp_min = fsm.add_state();
             fsm.fsm_mut().add_edge(from, tmp_min, byte_min[2], byte_min[2]);
-            add_same_length_character_range(
-                fsm,
-                tmp_min,
-                to,
-                min & 0x00FFFF,
-                0x00BFBF,
-            );
+            add_same_length_character_range(fsm, tmp_min, to, min & 0x00FFFF, 0x00BFBF);
         } else {
             byte_min[2] -= 1;
         }
         if (max & 0x00FFFF) != 0xBFBF {
             let tmp_max = fsm.add_state();
             fsm.fsm_mut().add_edge(from, tmp_max, byte_max[2], byte_max[2]);
-            add_same_length_character_range(
-                fsm,
-                tmp_max,
-                to,
-                0x0080,
-                max & 0x00FFFF,
-            );
+            add_same_length_character_range(fsm, tmp_max, to, 0x0080, max & 0x00FFFF);
         } else {
             byte_max[2] += 1;
         }
@@ -621,13 +539,7 @@ fn add_character_range(
             add_same_length_character_range(fsm, from, to, MIN_3_BYTES, max);
         } else {
             add_same_length_character_range(fsm, from, to, min, MAX_1_BYTE);
-            add_same_length_character_range(
-                fsm,
-                from,
-                to,
-                MIN_2_BYTES,
-                MAX_2_BYTES,
-            );
+            add_same_length_character_range(fsm, from, to, MIN_2_BYTES, MAX_2_BYTES);
             add_same_length_character_range(fsm, from, to, MIN_3_BYTES, max);
         }
     } else {
@@ -639,30 +551,12 @@ fn add_character_range(
             add_same_length_character_range(fsm, from, to, MIN_4_BYTES, max);
         } else if min >= MIN_2_BYTES {
             add_same_length_character_range(fsm, from, to, min, MAX_2_BYTES);
-            add_same_length_character_range(
-                fsm,
-                from,
-                to,
-                MIN_3_BYTES,
-                MAX_3_BYTES,
-            );
+            add_same_length_character_range(fsm, from, to, MIN_3_BYTES, MAX_3_BYTES);
             add_same_length_character_range(fsm, from, to, MIN_4_BYTES, max);
         } else {
             add_same_length_character_range(fsm, from, to, min, MAX_1_BYTE);
-            add_same_length_character_range(
-                fsm,
-                from,
-                to,
-                MIN_2_BYTES,
-                MAX_2_BYTES,
-            );
-            add_same_length_character_range(
-                fsm,
-                from,
-                to,
-                MIN_3_BYTES,
-                MAX_3_BYTES,
-            );
+            add_same_length_character_range(fsm, from, to, MIN_2_BYTES, MAX_2_BYTES);
+            add_same_length_character_range(fsm, from, to, MIN_3_BYTES, MAX_3_BYTES);
             add_same_length_character_range(fsm, from, to, MIN_4_BYTES, max);
         }
     }

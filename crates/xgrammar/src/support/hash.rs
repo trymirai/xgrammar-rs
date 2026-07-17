@@ -9,10 +9,7 @@ pub fn hash_combine_binary(
     seed: &mut u64,
     value: u64,
 ) {
-    *seed ^= value
-        .wrapping_add(HASH_MIX)
-        .wrapping_add(*seed << 6)
-        .wrapping_add(*seed >> 2);
+    *seed ^= value.wrapping_add(HASH_MIX).wrapping_add(*seed << 6).wrapping_add(*seed >> 2);
 }
 
 /// Combines a sequence of (already-hashed) values into a single hash, starting from a

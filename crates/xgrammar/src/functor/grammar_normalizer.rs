@@ -1,10 +1,7 @@
 //! The normalization pipeline and the `Grammar::from_ebnf` constructor — a port of
 //! `GrammarNormalizer` and `Grammar::FromEBNF`.
 
-use super::{
-    root_rule_renamer::root_rule_renamer,
-    structure_normalizer::structure_normalizer,
-};
+use super::{root_rule_renamer::root_rule_renamer, structure_normalizer::structure_normalizer};
 use crate::{
     grammar::Grammar,
     parser::{EbnfError, ebnf_to_grammar_no_normalization},
@@ -25,14 +22,9 @@ impl Grammar {
         ebnf_string: &str,
         root_rule_name: &str,
     ) -> Result<Grammar, EbnfError> {
-        let parsed =
-            ebnf_to_grammar_no_normalization(ebnf_string, root_rule_name)?;
-        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            grammar_normalizer(&parsed)
-        }))
-        .map_err(|payload| {
-            let message = if let Some(message) = payload.downcast_ref::<&str>()
-            {
+        let parsed = ebnf_to_grammar_no_normalization(ebnf_string, root_rule_name)?;
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| grammar_normalizer(&parsed))).map_err(|payload| {
+            let message = if let Some(message) = payload.downcast_ref::<&str>() {
                 (*message).to_owned()
             } else if let Some(message) = payload.downcast_ref::<String>() {
                 message.clone()
@@ -49,8 +41,7 @@ impl Grammar {
     /// Never in practice — the embedded grammar is a valid constant.
     #[must_use]
     pub fn builtin_json_grammar() -> Grammar {
-        Grammar::from_ebnf(BUILTIN_JSON_GRAMMAR, "root")
-            .expect("the builtin JSON grammar is valid")
+        Grammar::from_ebnf(BUILTIN_JSON_GRAMMAR, "root").expect("the builtin JSON grammar is valid")
     }
 }
 

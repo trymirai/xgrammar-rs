@@ -4,6 +4,8 @@
 //! max]`; a negative `min` is one of the special [`edge_type`] tags, where `max` carries a
 //! type-specific payload (a rule id, or an index into the owning FSM's `edge_aux_data`).
 
+use serde_json::{Value, json};
+
 /// Special edge-type tags stored in [`FsmEdge::min`] when it is negative.
 pub mod edge_type {
     /// Character range `[min, max]` (`min >= 0`; not represented here).
@@ -48,10 +50,7 @@ impl FsmEdge {
         max: i32,
         target: i32,
     ) -> Self {
-        debug_assert!(
-            min < 0 || min <= max,
-            "invalid FsmEdge: min > max (min={min}, max={max})"
-        );
+        debug_assert!(min < 0 || min <= max, "invalid FsmEdge: min > max (min={min}, max={max})");
         Self {
             min,
             max,
@@ -131,6 +130,27 @@ impl FsmEdge {
     #[must_use]
     pub fn range_key(&self) -> (i32, i32) {
         (self.min, self.max)
+    }
+
+    /// Serializes as `[min, max, target]` (C++ `XGRAMMAR_MEMBER_ARRAY`).
+    #[must_use]
+    pub fn serialize_json_value(&self) -> Value {
+        json!([self.min, self.max, self.target])
+    }
+
+    /// Deserializes from `[min, max, target]`.
+    ///
+    /// # Errors
+    /// Returns an error string when the JSON shape is invalid.
+    pub fn deserialize_json_value(value: &Value) -> Result<Self, String> {
+        let arr = value.as_array().ok_or_else(|| "fsm edge expects a JSON array".to_owned())?;
+        if arr.len() != 3 {
+            return Err("fsm edge must have three elements".to_owned());
+        }
+        let min = arr[0].as_i64().ok_or_else(|| "fsm edge min must be an integer".to_owned())? as i32;
+        let max = arr[1].as_i64().ok_or_else(|| "fsm edge max must be an integer".to_owned())? as i32;
+        let target = arr[2].as_i64().ok_or_else(|| "fsm edge target must be an integer".to_owned())? as i32;
+        Ok(Self::new(min, max, target))
     }
 }
 

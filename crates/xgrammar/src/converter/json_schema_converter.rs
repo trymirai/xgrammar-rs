@@ -11,16 +11,13 @@ use serde_json::Value;
 use super::{
     ebnf_script_creator::EbnfScriptCreator,
     indent_manager::IndentManager,
-    range_regex::{
-        generate_float_range_regex_with_options, generate_range_regex,
-    },
+    range_regex::{generate_float_range_regex_with_options, generate_range_regex},
     regex_converter::regex_to_ebnf,
     schema_error::SchemaError,
     schema_parser::SchemaParser,
     schema_spec::{
-        AllOfSpec, AnyOfSpec, ArraySpec, ConstSpec, EnumSpec, IntegerSpec,
-        NumberSpec, ObjectSpec, Property, RefSpec, SchemaSpec, SchemaSpecPtr,
-        SchemaSpecVariant, StringSpec, TypeArraySpec,
+        AllOfSpec, AnyOfSpec, ArraySpec, ConstSpec, EnumSpec, IntegerSpec, NumberSpec, ObjectSpec, Property, RefSpec,
+        SchemaSpec, SchemaSpecPtr, SchemaSpecVariant, StringSpec, TypeArraySpec,
     },
     xml_tool_calling_converter::{XmlJsonFormat, xml_wrapper},
 };
@@ -39,13 +36,14 @@ impl Grammar {
         strict_mode: bool,
         max_whitespace_cnt: Option<i32>,
     ) -> Result<Grammar, SchemaError> {
-        Self::from_json_schema_with_any_order(
+        Self::from_json_schema_with_options(
             schema,
             any_whitespace,
             indent,
             separators,
             strict_mode,
             max_whitespace_cnt,
+            false,
             false,
         )
     }
@@ -64,6 +62,33 @@ impl Grammar {
         max_whitespace_cnt: Option<i32>,
         any_order: bool,
     ) -> Result<Grammar, SchemaError> {
+        Self::from_json_schema_with_options(
+            schema,
+            any_whitespace,
+            indent,
+            separators,
+            strict_mode,
+            max_whitespace_cnt,
+            false,
+            any_order,
+        )
+    }
+
+    /// Full `FromJSONSchema` options, including `print_converted_ebnf`.
+    ///
+    /// # Errors
+    /// Returns a [`SchemaError`] if the schema is invalid or unsatisfiable.
+    #[allow(clippy::too_many_arguments)]
+    pub fn from_json_schema_with_options(
+        schema: &str,
+        any_whitespace: bool,
+        indent: Option<i32>,
+        separators: Option<(&str, &str)>,
+        strict_mode: bool,
+        max_whitespace_cnt: Option<i32>,
+        print_converted_ebnf: bool,
+        any_order: bool,
+    ) -> Result<Grammar, SchemaError> {
         let ebnf = json_schema_to_ebnf_with_any_order(
             schema,
             any_whitespace,
@@ -73,8 +98,10 @@ impl Grammar {
             max_whitespace_cnt,
             any_order,
         )?;
-        Ok(Grammar::from_ebnf(&ebnf, "root")
-            .expect("json schema converter produced valid EBNF"))
+        if print_converted_ebnf {
+            println!("{ebnf}");
+        }
+        Ok(Grammar::from_ebnf(&ebnf, "root").expect("json schema converter produced valid EBNF"))
     }
 }
 
@@ -135,19 +162,12 @@ pub fn json_schema_to_ebnf_with_any_order(
     max_whitespace_cnt: Option<i32>,
     any_order: bool,
 ) -> Result<String, SchemaError> {
-    let root: Value = serde_json::from_str(schema).map_err(|e| {
-        SchemaError::invalid(format!("Failed to parse JSON: {e}"))
-    })?;
+    let root: Value =
+        serde_json::from_str(schema).map_err(|e| SchemaError::invalid(format!("Failed to parse JSON: {e}")))?;
     let mut parser = SchemaParser::new(root.clone(), strict_mode);
     let spec = parser.parse(&root, None)?;
-    let mut converter = JsonSchemaConverter::new(
-        indent,
-        separators,
-        any_whitespace,
-        max_whitespace_cnt,
-        parser,
-        any_order,
-    );
+    let mut converter =
+        JsonSchemaConverter::new(indent, separators, any_whitespace, max_whitespace_cnt, parser, any_order);
     Ok(converter.convert(&spec))
 }
 
@@ -172,17 +192,11 @@ pub fn json_schema_to_ebnf_xml_with_options(
     max_whitespace_cnt: Option<i32>,
     any_order: bool,
 ) -> Result<String, SchemaError> {
-    let root: Value = serde_json::from_str(schema).map_err(|e| {
-        SchemaError::invalid(format!("Failed to parse JSON: {e}"))
-    })?;
+    let root: Value =
+        serde_json::from_str(schema).map_err(|e| SchemaError::invalid(format!("Failed to parse JSON: {e}")))?;
     let mut parser = SchemaParser::new(root.clone(), true);
     let spec = parser.parse(&root, None)?;
-    let mut converter = JsonSchemaConverter::new_xml(
-        format,
-        parser,
-        max_whitespace_cnt,
-        any_order,
-    );
+    let mut converter = JsonSchemaConverter::new_xml(format, parser, max_whitespace_cnt, any_order);
     Ok(converter.convert(&spec))
 }
 
@@ -227,12 +241,7 @@ impl JsonSchemaConverter {
             format!("\"{colon_sep}\"")
         };
         Self {
-            indent_manager: IndentManager::new(
-                indent,
-                &item_sep,
-                any_whitespace,
-                max_whitespace_cnt,
-            ),
+            indent_manager: IndentManager::new(indent, &item_sep, any_whitespace, max_whitespace_cnt),
             any_whitespace,
             max_whitespace_cnt,
             colon_pattern,
@@ -253,8 +262,7 @@ impl JsonSchemaConverter {
         max_whitespace_cnt: Option<i32>,
         any_order: bool,
     ) -> Self {
-        let mut converter =
-            Self::new(None, None, true, max_whitespace_cnt, parser, any_order);
+        let mut converter = Self::new(None, None, true, max_whitespace_cnt, parser, any_order);
         converter.xml_format = Some(format);
         converter
     }
@@ -305,10 +313,7 @@ impl JsonSchemaConverter {
         let wrapper = self.xml_wrapper();
         self.ebnf.add_rule(
             XML_STRING,
-            &format!(
-                "TagDispatch(loop_after_dispatch=false,excludes=(\"{}\"))",
-                wrapper.param_suffix
-            ),
+            &format!("TagDispatch(loop_after_dispatch=false,excludes=(\"{}\"))", wrapper.param_suffix),
         );
         self.add_cache("{\"type\":\"string\"}", XML_STRING);
 
@@ -324,11 +329,7 @@ impl JsonSchemaConverter {
         };
         self.nested_object_level = 0;
         self.nested_object_level += 1;
-        let obj_body = self.generate_object(
-            &obj_spec,
-            XML_OBJECT,
-            self.nested_object_level > 1,
-        );
+        let obj_body = self.generate_object(&obj_spec, XML_OBJECT, self.nested_object_level > 1);
         self.nested_object_level -= 1;
         self.ebnf.add_rule(XML_OBJECT, &obj_body);
         self.add_cache("{\"type\":\"object\"}", XML_OBJECT);
@@ -351,8 +352,7 @@ impl JsonSchemaConverter {
         self.ebnf.add_rule(BASIC_ANY, &any_body);
         self.add_cache("{}", BASIC_ANY);
 
-        let int_body =
-            self.generate_integer(&IntegerSpec::default(), BASIC_INTEGER);
+        let int_body = self.generate_integer(&IntegerSpec::default(), BASIC_INTEGER);
         self.ebnf.add_rule(BASIC_INTEGER, &int_body);
         self.add_cache("{\"type\":\"integer\"}", BASIC_INTEGER);
 
@@ -393,10 +393,7 @@ impl JsonSchemaConverter {
     }
 
     fn add_helper_rules(&mut self) {
-        self.ebnf.add_rule(
-            BASIC_ESCAPE,
-            "[\"\\\\/bfnrt] | \"u\" [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9]",
-        );
+        self.ebnf.add_rule(BASIC_ESCAPE, "[\"\\\\/bfnrt] | \"u\" [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9]");
         let ws = self.get_whitespace_pattern();
         self.ebnf.add_rule(
             BASIC_STRING_SUB,
@@ -470,9 +467,7 @@ impl JsonSchemaConverter {
         rule_name_hint: &str,
     ) -> String {
         match &spec.spec {
-            SchemaSpecVariant::Integer(s) => {
-                self.generate_integer(s, rule_name_hint)
-            },
+            SchemaSpecVariant::Integer(s) => self.generate_integer(s, rule_name_hint),
             SchemaSpecVariant::Number(s) => self.generate_number(s),
             SchemaSpecVariant::String(s) => self.generate_string(s),
             SchemaSpecVariant::Boolean => Self::generate_boolean(),
@@ -491,8 +486,7 @@ impl JsonSchemaConverter {
                 if self.xml_format.is_some() {
                     self.nested_object_level += 1;
                     let need_braces = self.nested_object_level > 1;
-                    let result =
-                        self.generate_object(s, rule_name_hint, need_braces);
+                    let result = self.generate_object(s, rule_name_hint, need_braces);
                     self.nested_object_level -= 1;
                     result
                 } else {
@@ -503,15 +497,9 @@ impl JsonSchemaConverter {
             SchemaSpecVariant::Const(s) => self.generate_const(s),
             SchemaSpecVariant::Enum(s) => self.generate_enum(s),
             SchemaSpecVariant::Ref(s) => self.generate_ref(s),
-            SchemaSpecVariant::AnyOf(s) => {
-                self.generate_any_of(s, rule_name_hint)
-            },
-            SchemaSpecVariant::AllOf(s) => {
-                self.generate_all_of(s, rule_name_hint)
-            },
-            SchemaSpecVariant::TypeArray(s) => {
-                self.generate_type_array(s, rule_name_hint)
-            },
+            SchemaSpecVariant::AnyOf(s) => self.generate_any_of(s, rule_name_hint),
+            SchemaSpecVariant::AllOf(s) => self.generate_all_of(s, rule_name_hint),
+            SchemaSpecVariant::TypeArray(s) => self.generate_type_array(s, rule_name_hint),
         }
     }
 
@@ -529,11 +517,9 @@ impl JsonSchemaConverter {
                     .collect::<Vec<_>>()
                     .join("|");
                 let regex = format!("^({alternatives})$");
-                return regex_to_ebnf(&regex, false)
-                    .expect("integer multipleOf range regex is valid");
+                return regex_to_ebnf(&regex, false).expect("integer multipleOf range regex is valid");
             }
-            return self
-                .generate_integer_multiple_of_dfa(multiple_of, rule_name);
+            return self.generate_integer_multiple_of_dfa(multiple_of, rule_name);
         }
         if start.is_some() || end.is_some() {
             let regex = generate_range_regex(start, end);
@@ -548,11 +534,7 @@ impl JsonSchemaConverter {
         rule_name: &str,
     ) -> String {
         let state_rule_names = (0..multiple_of)
-            .map(|state| {
-                self.ebnf.allocate_rule_name(&format!(
-                    "{rule_name}_multiple_of_{multiple_of}_mod_{state}"
-                ))
-            })
+            .map(|state| self.ebnf.allocate_rule_name(&format!("{rule_name}_multiple_of_{multiple_of}_mod_{state}")))
             .collect::<Vec<_>>();
 
         for state in 0..multiple_of {
@@ -567,10 +549,8 @@ impl JsonSchemaConverter {
                     state_rule_names[next_state as usize].clone(),
                 ]));
             }
-            self.ebnf.add_rule_with_allocated_name(
-                &state_rule_names[state as usize],
-                &EbnfScriptCreator::or(&transitions),
-            );
+            self.ebnf
+                .add_rule_with_allocated_name(&state_rule_names[state as usize], &EbnfScriptCreator::or(&transitions));
         }
 
         let non_zero_starts = (1..=9)
@@ -611,17 +591,10 @@ impl JsonSchemaConverter {
             }
         }
         if start.is_some() || end.is_some() {
-            let regex = generate_float_range_regex_with_options(
-                start,
-                end,
-                exclusive_start,
-                exclusive_end,
-            );
-            return regex_to_ebnf(&regex, false)
-                .expect("float range regex is valid");
+            let regex = generate_float_range_regex_with_options(start, end, exclusive_start, exclusive_end);
+            return regex_to_ebnf(&regex, false).expect("float range regex is valid");
         }
-        "\"-\"? (\"0\" | [1-9] [0-9]*) (\".\" [0-9]+)? ([eE] [+-]? [0-9]+)?"
-            .to_owned()
+        "\"-\"? (\"0\" | [1-9] [0-9]*) (\".\" [0-9]+)? ([eE] [+-]? [0-9]+)?".to_owned()
     }
 
     fn generate_string(
@@ -629,23 +602,17 @@ impl JsonSchemaConverter {
         spec: &StringSpec,
     ) -> String {
         if self.is_xml_outer() {
-            if spec.pattern.is_none()
-                && spec.format.is_none()
-                && spec.min_length == 0
-                && spec.max_length == -1
-            {
+            if spec.pattern.is_none() && spec.format.is_none() && spec.min_length == 0 && spec.max_length == -1 {
                 return XML_STRING.to_owned();
             }
             if let Some(format) = &spec.format {
                 if let Some(regex) = json_format_to_regex_pattern(format) {
-                    let converted = regex_to_ebnf(&regex, false)
-                        .expect("format regex is valid");
+                    let converted = regex_to_ebnf(&regex, false).expect("format regex is valid");
                     return converted;
                 }
             }
             if let Some(pattern) = &spec.pattern {
-                let converted = regex_to_ebnf(pattern, false)
-                    .expect("pattern regex is valid");
+                let converted = regex_to_ebnf(pattern, false).expect("pattern regex is valid");
                 return converted;
             }
             if spec.min_length != 0 || spec.max_length != -1 {
@@ -659,14 +626,12 @@ impl JsonSchemaConverter {
         }
         if let Some(format) = &spec.format {
             if let Some(regex) = json_format_to_regex_pattern(format) {
-                let converted = regex_to_ebnf(&regex, false)
-                    .expect("format regex is valid");
+                let converted = regex_to_ebnf(&regex, false).expect("format regex is valid");
                 return format!("\"\\\"\" {converted} \"\\\"\"");
             }
         }
         if let Some(pattern) = &spec.pattern {
-            let converted =
-                regex_to_ebnf(pattern, false).expect("pattern regex is valid");
+            let converted = regex_to_ebnf(pattern, false).expect("pattern regex is valid");
             return format!("\"\\\"\" {converted} \"\\\"\"");
         }
         if spec.min_length != 0 || spec.max_length != -1 {
@@ -701,17 +666,13 @@ impl JsonSchemaConverter {
 
         let mut item_rule_names = Vec::new();
         for (i, item) in spec.prefix_items.iter().enumerate() {
-            item_rule_names
-                .push(self.create_rule(item, &format!("{rule_name}_item_{i}")));
+            item_rule_names.push(self.create_rule(item, &format!("{rule_name}_item_{i}")));
         }
 
         let mut additional_rule_name = String::new();
         if spec.allow_additional_items {
             if let Some(additional) = &spec.additional_items {
-                additional_rule_name = self.create_rule(
-                    additional,
-                    &format!("{rule_name}_additional"),
-                );
+                additional_rule_name = self.create_rule(additional, &format!("{rule_name}_additional"));
             }
         }
 
@@ -721,21 +682,12 @@ impl JsonSchemaConverter {
         let right = EbnfScriptCreator::str_literal("]");
 
         if spec.prefix_items.is_empty() {
-            let empty_part = EbnfScriptCreator::concat(&[
-                left.clone(),
-                empty_sep,
-                right.clone(),
-            ]);
-            if !spec.allow_additional_items
-                || (spec.min_items == 0 && spec.max_items == 0)
-            {
+            let empty_part = EbnfScriptCreator::concat(&[left.clone(), empty_sep, right.clone()]);
+            if !spec.allow_additional_items || (spec.min_items == 0 && spec.max_items == 0) {
                 empty_part
             } else if spec.min_items == 0 {
                 let repeat = EbnfScriptCreator::repeat(
-                    &EbnfScriptCreator::concat(&[
-                        mid_sep,
-                        additional_rule_name.clone(),
-                    ]),
+                    &EbnfScriptCreator::concat(&[mid_sep, additional_rule_name.clone()]),
                     0,
                     if spec.max_items == -1 {
                         -1
@@ -743,21 +695,12 @@ impl JsonSchemaConverter {
                         (spec.max_items - 1) as i32
                     },
                 );
-                let non_empty = EbnfScriptCreator::concat(&[
-                    left,
-                    start_sep,
-                    additional_rule_name,
-                    repeat,
-                    end_sep,
-                    right,
-                ]);
+                let non_empty =
+                    EbnfScriptCreator::concat(&[left, start_sep, additional_rule_name, repeat, end_sep, right]);
                 EbnfScriptCreator::or(&[non_empty, empty_part])
             } else {
                 let repeat = EbnfScriptCreator::repeat(
-                    &EbnfScriptCreator::concat(&[
-                        mid_sep,
-                        additional_rule_name.clone(),
-                    ]),
+                    &EbnfScriptCreator::concat(&[mid_sep, additional_rule_name.clone()]),
                     (spec.min_items - 1) as i32,
                     if spec.max_items == -1 {
                         -1
@@ -765,14 +708,7 @@ impl JsonSchemaConverter {
                         (spec.max_items - 1) as i32
                     },
                 );
-                EbnfScriptCreator::concat(&[
-                    left,
-                    start_sep,
-                    additional_rule_name,
-                    repeat,
-                    end_sep,
-                    right,
-                ])
+                EbnfScriptCreator::concat(&[left, start_sep, additional_rule_name, repeat, end_sep, right])
             }
         } else {
             let mut prefix_part = Vec::new();
@@ -784,21 +720,11 @@ impl JsonSchemaConverter {
             }
             let prefix_part_str = EbnfScriptCreator::concat(&prefix_part);
             if !spec.allow_additional_items {
-                EbnfScriptCreator::concat(&[
-                    left,
-                    start_sep,
-                    prefix_part_str,
-                    end_sep,
-                    right,
-                ])
+                EbnfScriptCreator::concat(&[left, start_sep, prefix_part_str, end_sep, right])
             } else {
-                let min_items =
-                    (spec.min_items - item_rule_names.len() as i64).max(0);
+                let min_items = (spec.min_items - item_rule_names.len() as i64).max(0);
                 let repeat = EbnfScriptCreator::repeat(
-                    &EbnfScriptCreator::concat(&[
-                        mid_sep,
-                        additional_rule_name,
-                    ]),
+                    &EbnfScriptCreator::concat(&[mid_sep, additional_rule_name]),
                     min_items as i32,
                     if spec.max_items == -1 {
                         -1
@@ -806,14 +732,7 @@ impl JsonSchemaConverter {
                         (spec.max_items - item_rule_names.len() as i64) as i32
                     },
                 );
-                EbnfScriptCreator::concat(&[
-                    left,
-                    start_sep,
-                    prefix_part_str,
-                    repeat,
-                    end_sep,
-                    right,
-                ])
+                EbnfScriptCreator::concat(&[left, start_sep, prefix_part_str, repeat, end_sep, right])
             }
         }
     }
@@ -834,12 +753,7 @@ impl JsonSchemaConverter {
             let w = self.xml_wrapper();
             return format!("\"{}{}{}\"", w.key_prefix, key, w.key_suffix);
         }
-        format!(
-            "\"{}\"",
-            json_str_to_printable_str(
-                &Value::String(key.to_owned()).to_string()
-            )
-        )
+        format!("\"{}\"", json_str_to_printable_str(&Value::String(key.to_owned()).to_string()))
     }
 
     fn format_property(
@@ -861,12 +775,7 @@ impl JsonSchemaConverter {
                 w.key_prefix, key, w.key_suffix, w.value_prefix, w.param_suffix
             );
         }
-        format!(
-            "{} {} {}",
-            self.format_property_key(key),
-            self.colon_pattern,
-            value_rule
-        )
+        format!("{} {} {}", self.format_property_key(key), self.colon_pattern, value_rule)
     }
 
     fn format_other_property(
@@ -965,38 +874,25 @@ impl JsonSchemaConverter {
         let mid_sep = self.next_separator(false);
         let last_sep = self.next_separator(true);
 
-        let mut item_patterns = Vec::with_capacity(
-            properties.len() + usize::from(additional.is_some()),
-        );
+        let mut item_patterns = Vec::with_capacity(properties.len() + usize::from(additional.is_some()));
         for (idx, prop) in properties.iter().enumerate() {
-            let value_rule = self
-                .create_rule(&prop.schema, &format!("{rule_name}_prop_{idx}"));
+            let value_rule = self.create_rule(&prop.schema, &format!("{rule_name}_prop_{idx}"));
             item_patterns.push(self.format_property(&prop.name, &value_rule));
         }
         if let Some(additional) = additional {
             if additional_prop_pattern_override.is_empty() {
-                let value_rule = self.create_rule(
-                    additional,
-                    &format!("{rule_name}_{additional_suffix}"),
-                );
+                let value_rule = self.create_rule(additional, &format!("{rule_name}_{additional_suffix}"));
                 let key = self.get_key_pattern_excluding(properties, rule_name);
-                item_patterns
-                    .push(self.format_other_property(&key, &value_rule));
+                item_patterns.push(self.format_other_property(&key, &value_rule));
             } else {
                 item_patterns.push(additional_prop_pattern_override.to_owned());
             }
         }
 
-        let item_rule = self
-            .ebnf
-            .add_rule(&format!("{rule_name}_item"), &item_patterns.join(" | "));
+        let item_rule = self.ebnf.add_rule(&format!("{rule_name}_item"), &item_patterns.join(" | "));
         let min_count = min_properties.max(required.len() as i32);
-        let rest = Self::get_property_with_number_constraints(
-            &format!("{mid_sep} {item_rule}"),
-            min_count,
-            max_properties,
-            1,
-        );
+        let rest =
+            Self::get_property_with_number_constraints(&format!("{mid_sep} {item_rule}"), min_count, max_properties, 1);
         format!("{first_sep} ({item_rule} {rest}) {last_sep}")
     }
 
@@ -1036,8 +932,7 @@ impl JsonSchemaConverter {
         let n = properties.len();
         let mut prop_patterns = Vec::with_capacity(n);
         for (idx, prop) in properties.iter().enumerate() {
-            let value_rule = self
-                .create_rule(&prop.schema, &format!("{rule_name}_prop_{idx}"));
+            let value_rule = self.create_rule(&prop.schema, &format!("{rule_name}_prop_{idx}"));
             prop_patterns.push(self.format_property(&prop.name, &value_rule));
         }
 
@@ -1051,24 +946,15 @@ impl JsonSchemaConverter {
             let mut additional_prop_pattern = String::new();
             if allow_additional {
                 if !additional_prop_pattern_override.is_empty() {
-                    additional_prop_pattern =
-                        additional_prop_pattern_override.to_owned();
+                    additional_prop_pattern = additional_prop_pattern_override.to_owned();
                 } else {
-                    let add_value_rule = self.create_rule(
-                        additional.unwrap(),
-                        &format!("{rule_name}_{additional_suffix}"),
-                    );
-                    let key =
-                        self.get_key_pattern_excluding(properties, rule_name);
-                    additional_prop_pattern =
-                        self.format_other_property(&key, &add_value_rule);
+                    let add_value_rule =
+                        self.create_rule(additional.unwrap(), &format!("{rule_name}_{additional_suffix}"));
+                    let key = self.get_key_pattern_excluding(properties, rule_name);
+                    additional_prop_pattern = self.format_other_property(&key, &add_value_rule);
                 }
-                let last_rule_body =
-                    format!("({mid_sep} {additional_prop_pattern})*");
-                let last_rule_name = self.ebnf.add_rule(
-                    &format!("{rule_name}_part_{}", n - 1),
-                    &last_rule_body,
-                );
+                let last_rule_body = format!("({mid_sep} {additional_prop_pattern})*");
+                let last_rule_name = self.ebnf.add_rule(&format!("{rule_name}_part_{}", n - 1), &last_rule_body);
                 rule_names[n - 1] = last_rule_name;
             } else {
                 rule_names[n - 1] = "\"\"".to_owned();
@@ -1077,17 +963,13 @@ impl JsonSchemaConverter {
             for i in (0..n.saturating_sub(1)).rev() {
                 let prop_pattern = &prop_patterns[i + 1];
                 let last_rule_name = &rule_names[i + 1];
-                let mut cur_rule_body =
-                    format!("{mid_sep} {prop_pattern} {last_rule_name}");
+                let mut cur_rule_body = format!("{mid_sep} {prop_pattern} {last_rule_name}");
                 if !required.contains(&properties[i + 1].name) {
-                    cur_rule_body =
-                        format!("{last_rule_name} | {cur_rule_body}");
+                    cur_rule_body = format!("{last_rule_name} | {cur_rule_body}");
                 } else {
                     is_required[i + 1] = true;
                 }
-                let cur_rule_name = self
-                    .ebnf
-                    .add_rule(&format!("{rule_name}_part_{i}"), &cur_rule_body);
+                let cur_rule_name = self.ebnf.add_rule(&format!("{rule_name}_part_{i}"), &cur_rule_body);
                 rule_names[i] = cur_rule_name;
             }
             if required.contains(&properties[0].name) {
@@ -1105,11 +987,7 @@ impl JsonSchemaConverter {
             }
 
             if allow_additional && required.is_empty() {
-                let _ = write!(
-                    res,
-                    " | {additional_prop_pattern} {}",
-                    rule_names[n - 1]
-                );
+                let _ = write!(res, " | {additional_prop_pattern} {}", rule_names[n - 1]);
             }
 
             res = format!("{first_sep} ({res}) {last_sep}");
@@ -1171,16 +1049,11 @@ impl JsonSchemaConverter {
         let mut additional_prop_pattern = String::new();
         if allow_additional {
             if !additional_prop_pattern_override.is_empty() {
-                additional_prop_pattern =
-                    additional_prop_pattern_override.to_owned();
+                additional_prop_pattern = additional_prop_pattern_override.to_owned();
             } else {
-                let add_value_rule = self.create_rule(
-                    additional.unwrap(),
-                    &format!("{rule_name}_{additional_suffix}"),
-                );
+                let add_value_rule = self.create_rule(additional.unwrap(), &format!("{rule_name}_{additional_suffix}"));
                 let key = self.get_key_pattern_excluding(properties, rule_name);
-                additional_prop_pattern =
-                    self.format_other_property(&key, &add_value_rule);
+                additional_prop_pattern = self.format_other_property(&key, &add_value_rule);
             }
         }
 
@@ -1210,8 +1083,7 @@ impl JsonSchemaConverter {
             key_matched_min[last] = key_matched_min[last].max(min_properties);
         }
         for i in (0..(n - 1) as usize).rev() {
-            key_matched_min[i] =
-                key_matched_min[i].max(key_matched_min[i + 1] - 1);
+            key_matched_min[i] = key_matched_min[i].max(key_matched_min[i + 1] - 1);
         }
 
         if allow_additional {
@@ -1223,10 +1095,7 @@ impl JsonSchemaConverter {
                     -1,
                     matched,
                 );
-                let name = self.ebnf.add_rule(
-                    &format!("{rule_name}_part_{}_{}", n - 1, matched),
-                    &body,
-                );
+                let name = self.ebnf.add_rule(&format!("{rule_name}_part_{}_{}", n - 1, matched), &body);
                 rule_names[last].push(name);
                 matched += 1;
             }
@@ -1242,27 +1111,19 @@ impl JsonSchemaConverter {
             let prop_pattern = &prop_patterns[i + 1];
             let mut matched = key_matched_min[i];
             while matched <= (i + 1) as i32 {
-                let body = if is_required[i + 1]
-                    || matched == key_matched_min[i + 1] - 1
-                {
+                let body = if is_required[i + 1] || matched == key_matched_min[i + 1] - 1 {
                     format!(
                         "{mid_sep} {prop_pattern} {}",
-                        rule_names[i + 1]
-                            [(matched + 1 - key_matched_min[i + 1]) as usize]
+                        rule_names[i + 1][(matched + 1 - key_matched_min[i + 1]) as usize]
                     )
                 } else {
                     format!(
                         "{} | {mid_sep} {prop_pattern} {}",
-                        rule_names[i + 1]
-                            [(matched - key_matched_min[i + 1]) as usize],
-                        rule_names[i + 1]
-                            [(matched - key_matched_min[i + 1] + 1) as usize]
+                        rule_names[i + 1][(matched - key_matched_min[i + 1]) as usize],
+                        rule_names[i + 1][(matched - key_matched_min[i + 1] + 1) as usize]
                     )
                 };
-                let name = self.ebnf.add_rule(
-                    &format!("{rule_name}_part_{i}_{matched}"),
-                    &body,
-                );
+                let name = self.ebnf.add_rule(&format!("{rule_name}_part_{i}_{matched}"), &body);
                 rule_names[i].push(name);
                 matched += 1;
             }
@@ -1279,12 +1140,7 @@ impl JsonSchemaConverter {
             } else {
                 is_first = false;
             }
-            let _ = write!(
-                res,
-                "({} {})",
-                prop_patterns[i],
-                rule_names[i][(1 - key_matched_min[i]) as usize]
-            );
+            let _ = write!(res, "({} {})", prop_patterns[i], rule_names[i][(1 - key_matched_min[i]) as usize]);
             if is_required[i] {
                 break;
             }
@@ -1335,16 +1191,11 @@ impl JsonSchemaConverter {
         let mut additional_prop_pattern = String::new();
         if allow_additional {
             if !additional_prop_pattern_override.is_empty() {
-                additional_prop_pattern =
-                    additional_prop_pattern_override.to_owned();
+                additional_prop_pattern = additional_prop_pattern_override.to_owned();
             } else {
-                let add_value_rule = self.create_rule(
-                    additional.unwrap(),
-                    &format!("{rule_name}_{additional_suffix}"),
-                );
+                let add_value_rule = self.create_rule(additional.unwrap(), &format!("{rule_name}_{additional_suffix}"));
                 let key = self.get_key_pattern_excluding(properties, rule_name);
-                additional_prop_pattern =
-                    self.format_other_property(&key, &add_value_rule);
+                additional_prop_pattern = self.format_other_property(&key, &add_value_rule);
             }
         }
 
@@ -1378,14 +1229,11 @@ impl JsonSchemaConverter {
             key_matched_max[last] = key_matched_max[last].min(max_properties);
         }
         for i in (0..(n - 1) as usize).rev() {
-            key_matched_min[i] =
-                key_matched_min[i].max(key_matched_min[i + 1] - 1);
+            key_matched_min[i] = key_matched_min[i].max(key_matched_min[i + 1] - 1);
             if is_required[i + 1] {
-                key_matched_max[i] =
-                    key_matched_max[i].min(key_matched_max[i + 1] - 1);
+                key_matched_max[i] = key_matched_max[i].min(key_matched_max[i + 1] - 1);
             } else {
-                key_matched_max[i] =
-                    key_matched_max[i].min(key_matched_max[i + 1]);
+                key_matched_max[i] = key_matched_max[i].min(key_matched_max[i + 1]);
             }
         }
 
@@ -1398,10 +1246,7 @@ impl JsonSchemaConverter {
                     max_properties,
                     matched,
                 );
-                let name = self.ebnf.add_rule(
-                    &format!("{rule_name}_part_{}_{}", n - 1, matched),
-                    &body,
-                );
+                let name = self.ebnf.add_rule(&format!("{rule_name}_part_{}_{}", n - 1, matched), &body);
                 rule_names[last].push(name);
                 matched += 1;
             }
@@ -1418,30 +1263,20 @@ impl JsonSchemaConverter {
             let mut matched = key_matched_min[i];
             while matched <= key_matched_max[i] {
                 let body = if matched == key_matched_max[i + 1] {
-                    rule_names[i + 1]
-                        [(matched - key_matched_min[i + 1]) as usize]
-                        .clone()
-                } else if is_required[i + 1]
-                    || matched == key_matched_min[i + 1] - 1
-                {
+                    rule_names[i + 1][(matched - key_matched_min[i + 1]) as usize].clone()
+                } else if is_required[i + 1] || matched == key_matched_min[i + 1] - 1 {
                     format!(
                         "{mid_sep} {prop_pattern} {}",
-                        rule_names[i + 1]
-                            [(matched + 1 - key_matched_min[i + 1]) as usize]
+                        rule_names[i + 1][(matched + 1 - key_matched_min[i + 1]) as usize]
                     )
                 } else {
                     format!(
                         "{} | {mid_sep} {prop_pattern} {}",
-                        rule_names[i + 1]
-                            [(matched - key_matched_min[i + 1]) as usize],
-                        rule_names[i + 1]
-                            [(matched - key_matched_min[i + 1] + 1) as usize]
+                        rule_names[i + 1][(matched - key_matched_min[i + 1]) as usize],
+                        rule_names[i + 1][(matched - key_matched_min[i + 1] + 1) as usize]
                     )
                 };
-                let name = self.ebnf.add_rule(
-                    &format!("{rule_name}_part_{i}_{matched}"),
-                    &body,
-                );
+                let name = self.ebnf.add_rule(&format!("{rule_name}_part_{i}_{matched}"), &body);
                 rule_names[i].push(name);
                 matched += 1;
             }
@@ -1461,12 +1296,7 @@ impl JsonSchemaConverter {
             } else {
                 is_first = false;
             }
-            let _ = write!(
-                res,
-                "({} {})",
-                prop_patterns[i],
-                rule_names[i][(1 - key_matched_min[i]) as usize]
-            );
+            let _ = write!(res, "({} {})", prop_patterns[i], rule_names[i][(1 - key_matched_min[i]) as usize]);
             if is_required[i] {
                 break;
             }
@@ -1506,30 +1336,20 @@ impl JsonSchemaConverter {
 
         let mut additional_suffix = String::new();
         let mut additional_property: Option<SchemaSpecPtr> = None;
-        if spec.allow_additional_properties
-            && spec.additional_properties_schema.is_some()
-        {
+        if spec.allow_additional_properties && spec.additional_properties_schema.is_some() {
             additional_suffix = "addl".to_owned();
             additional_property = spec.additional_properties_schema.clone();
-        } else if spec.allow_unevaluated_properties
-            && spec.unevaluated_properties_schema.is_some()
-        {
+        } else if spec.allow_unevaluated_properties && spec.unevaluated_properties_schema.is_some() {
             additional_suffix = "uneval".to_owned();
             additional_property = spec.unevaluated_properties_schema.clone();
-        } else if spec.allow_additional_properties
-            || spec.allow_unevaluated_properties
-        {
+        } else if spec.allow_additional_properties || spec.allow_unevaluated_properties {
             additional_suffix = "addl".to_owned();
-            additional_property =
-                Some(SchemaSpec::make(SchemaSpecVariant::Any, ""));
+            additional_property = Some(SchemaSpec::make(SchemaSpecVariant::Any, ""));
         }
 
         self.indent_manager.start_indent();
 
-        if !spec.properties.is_empty()
-            && (!spec.pattern_properties.is_empty()
-                || spec.property_names.is_some())
-        {
+        if !spec.properties.is_empty() && (!spec.pattern_properties.is_empty() || spec.property_names.is_some()) {
             let mut effective_additional = additional_property.clone();
             let mut effective_suffix = additional_suffix.clone();
             let mut pp_override = String::new();
@@ -1537,51 +1357,29 @@ impl JsonSchemaConverter {
             if !spec.pattern_properties.is_empty() {
                 let mut pp_body = String::new();
                 for (i, pp) in spec.pattern_properties.iter().enumerate() {
-                    let value = self.create_rule(
-                        &pp.schema,
-                        &format!("{rule_name}_pp_{i}"),
-                    );
-                    let converted = regex_to_ebnf(&pp.pattern, false)
-                        .expect("pattern regex is valid");
-                    let pp_single = format!(
-                        "\"\\\"\"{converted}\"\\\"\" {} {value}",
-                        self.colon_pattern
-                    );
+                    let value = self.create_rule(&pp.schema, &format!("{rule_name}_pp_{i}"));
+                    let converted = regex_to_ebnf(&pp.pattern, false).expect("pattern regex is valid");
+                    let pp_single = format!("\"\\\"\"{converted}\"\\\"\" {} {value}", self.colon_pattern);
                     if i != 0 {
                         pp_body.push_str(" | ");
                     }
                     pp_body.push_str(&pp_single);
                 }
                 if let Some(add) = &effective_additional {
-                    let add_value_rule = self.create_rule(
-                        add,
-                        &format!("{rule_name}_{effective_suffix}"),
-                    );
-                    let add_prop = self.format_other_property(
-                        &self.outer_key_pattern(),
-                        &add_value_rule,
-                    );
+                    let add_value_rule = self.create_rule(add, &format!("{rule_name}_{effective_suffix}"));
+                    let add_prop = self.format_other_property(&self.outer_key_pattern(), &add_value_rule);
                     let _ = write!(pp_body, " | {add_prop}");
                 }
                 pp_override = format!("({pp_body})");
                 if effective_additional.is_none() {
-                    effective_additional =
-                        Some(SchemaSpec::make(SchemaSpecVariant::Any, ""));
+                    effective_additional = Some(SchemaSpec::make(SchemaSpecVariant::Any, ""));
                 }
                 effective_suffix = "pp".to_owned();
-            } else if spec.property_names.is_some()
-                && effective_additional.is_some()
-            {
-                let key_pattern = self.create_rule(
-                    spec.property_names.as_ref().unwrap(),
-                    &format!("{rule_name}_name"),
-                );
-                let val_rule = self.create_rule(
-                    effective_additional.as_ref().unwrap(),
-                    &format!("{rule_name}_{effective_suffix}"),
-                );
-                pp_override =
-                    format!("{key_pattern} {} {val_rule}", self.colon_pattern);
+            } else if spec.property_names.is_some() && effective_additional.is_some() {
+                let key_pattern = self.create_rule(spec.property_names.as_ref().unwrap(), &format!("{rule_name}_name"));
+                let val_rule = self
+                    .create_rule(effective_additional.as_ref().unwrap(), &format!("{rule_name}_{effective_suffix}"));
+                pp_override = format!("{key_pattern} {} {val_rule}", self.colon_pattern);
                 effective_suffix = "pn".to_owned();
             }
 
@@ -1597,52 +1395,29 @@ impl JsonSchemaConverter {
             );
             result.push(' ');
             result.push_str(&partial);
-            could_be_empty =
-                spec.required.is_empty() && spec.min_properties == 0;
-        } else if !spec.pattern_properties.is_empty()
-            || spec.property_names.is_some()
-        {
+            could_be_empty = spec.required.is_empty() && spec.min_properties == 0;
+        } else if !spec.pattern_properties.is_empty() || spec.property_names.is_some() {
             let beg_seq = self.next_separator(false);
             if spec.max_properties != 0 {
                 let mut property_rule_body = String::from("(");
                 if !spec.pattern_properties.is_empty() {
                     for (i, pp) in spec.pattern_properties.iter().enumerate() {
-                        let value = self.create_rule(
-                            &pp.schema,
-                            &format!("{rule_name}_prop_{i}"),
-                        );
-                        let converted = regex_to_ebnf(&pp.pattern, false)
-                            .expect("pattern regex is valid");
-                        let property_pattern = format!(
-                            "\"\\\"\"{converted}\"\\\"\" {} {value}",
-                            self.colon_pattern
-                        );
+                        let value = self.create_rule(&pp.schema, &format!("{rule_name}_prop_{i}"));
+                        let converted = regex_to_ebnf(&pp.pattern, false).expect("pattern regex is valid");
+                        let property_pattern = format!("\"\\\"\"{converted}\"\\\"\" {} {value}", self.colon_pattern);
                         if i != 0 {
                             property_rule_body.push_str(" | ");
                         }
-                        let _ = write!(
-                            property_rule_body,
-                            "({beg_seq} {property_pattern})"
-                        );
+                        let _ = write!(property_rule_body, "({beg_seq} {property_pattern})");
                     }
                     property_rule_body.push(')');
                 } else {
-                    let key_pattern = self.create_rule(
-                        spec.property_names.as_ref().unwrap(),
-                        &format!("{rule_name}_name"),
-                    );
-                    let _ = write!(
-                        property_rule_body,
-                        "{beg_seq} {key_pattern} {} {BASIC_ANY})",
-                        self.colon_pattern
-                    );
+                    let key_pattern =
+                        self.create_rule(spec.property_names.as_ref().unwrap(), &format!("{rule_name}_name"));
+                    let _ = write!(property_rule_body, "{beg_seq} {key_pattern} {} {BASIC_ANY})", self.colon_pattern);
                 }
-                let prop_rule_name =
-                    self.ebnf.allocate_rule_name(&format!("{rule_name}_prop"));
-                self.ebnf.add_rule_with_allocated_name(
-                    &prop_rule_name,
-                    &property_rule_body,
-                );
+                let prop_rule_name = self.ebnf.allocate_rule_name(&format!("{rule_name}_prop"));
+                self.ebnf.add_rule_with_allocated_name(&prop_rule_name, &property_rule_body);
 
                 let next1 = self.next_separator(false);
                 let constraints = Self::get_property_with_number_constraints(
@@ -1652,8 +1427,7 @@ impl JsonSchemaConverter {
                     1,
                 );
                 let next_end = self.next_separator(true);
-                let _ =
-                    write!(result, " {prop_rule_name} {constraints}{next_end}");
+                let _ = write!(result, " {prop_rule_name} {constraints}{next_end}");
                 could_be_empty = spec.min_properties == 0;
             }
         } else if !spec.properties.is_empty() {
@@ -1669,18 +1443,11 @@ impl JsonSchemaConverter {
             );
             result.push(' ');
             result.push_str(&partial);
-            could_be_empty =
-                spec.required.is_empty() && spec.min_properties == 0;
+            could_be_empty = spec.required.is_empty() && spec.min_properties == 0;
         } else if let Some(additional) = &additional_property {
             if spec.max_properties != 0 {
-                let add_value_rule = self.create_rule(
-                    additional,
-                    &format!("{rule_name}_{additional_suffix}"),
-                );
-                let other_property_pattern = self.format_other_property(
-                    &self.outer_key_pattern(),
-                    &add_value_rule,
-                );
+                let add_value_rule = self.create_rule(additional, &format!("{rule_name}_{additional_suffix}"));
+                let other_property_pattern = self.format_other_property(&self.outer_key_pattern(), &add_value_rule);
                 let sep1 = self.next_separator(false);
                 let _ = write!(result, " {sep1} {other_property_pattern} ");
                 let sep2 = self.next_separator(false);
@@ -1773,12 +1540,8 @@ impl JsonSchemaConverter {
                 if i != 0 {
                     result.push_str(" | ");
                 }
-                if value.len() >= 2
-                    && value.starts_with('"')
-                    && value.ends_with('"')
-                {
-                    let _ =
-                        write!(result, "(\"{}\")", &value[1..value.len() - 1]);
+                if value.len() >= 2 && value.starts_with('"') && value.ends_with('"') {
+                    let _ = write!(result, "(\"{}\")", &value[1..value.len() - 1]);
                 } else {
                     let _ = write!(result, "(\"{value}\")");
                 }
@@ -1790,8 +1553,7 @@ impl JsonSchemaConverter {
             if i != 0 {
                 result.push_str(" | ");
             }
-            let _ =
-                write!(result, "(\"{}\")", json_str_to_printable_str(value));
+            let _ = write!(result, "(\"{}\")", json_str_to_printable_str(value));
         }
         result
     }
@@ -1813,11 +1575,7 @@ impl JsonSchemaConverter {
                         prefix.push('_');
                     }
                     for c in part.chars() {
-                        if c.is_ascii_alphabetic()
-                            || c == '_'
-                            || c == '-'
-                            || c == '.'
-                        {
+                        if c.is_ascii_alphabetic() || c == '_' || c == '-' || c == '.' {
                             prefix.push(c);
                         }
                     }
@@ -1831,10 +1589,8 @@ impl JsonSchemaConverter {
         let allocated = self.ebnf.allocate_rule_name(&rule_name_hint);
         self.uri_to_rule_name.insert(spec.uri.clone(), allocated.clone());
 
-        let resolved = self
-            .parser
-            .resolve_ref(&spec.uri, &allocated)
-            .expect("ref resolution succeeds for a valid schema");
+        let resolved =
+            self.parser.resolve_ref(&spec.uri, &allocated).expect("ref resolution succeeds for a valid schema");
         let body = self.generate_from_spec(&resolved, &allocated);
         self.ebnf.add_rule_with_allocated_name(&allocated, &body);
 
@@ -1854,9 +1610,7 @@ impl JsonSchemaConverter {
             if i != 0 {
                 result.push_str(" | ");
             }
-            result.push_str(
-                &self.create_rule(option, &format!("{rule_name}_case_{i}")),
-            );
+            result.push_str(&self.create_rule(option, &format!("{rule_name}_case_{i}")));
         }
         result
     }
@@ -1867,10 +1621,7 @@ impl JsonSchemaConverter {
         rule_name: &str,
     ) -> String {
         if spec.schemas.len() == 1 {
-            return self.generate_from_spec(
-                &spec.schemas[0],
-                &format!("{rule_name}_case_0"),
-            );
+            return self.generate_from_spec(&spec.schemas[0], &format!("{rule_name}_case_0"));
         }
         let any = SchemaSpec::make(SchemaSpecVariant::Any, "");
         self.generate_from_spec(&any, rule_name)
@@ -1886,9 +1637,7 @@ impl JsonSchemaConverter {
             if i != 0 {
                 result.push_str(" | ");
             }
-            result.push_str(
-                &self.create_rule(ty, &format!("{rule_name}_type_{i}")),
-            );
+            result.push_str(&self.create_rule(ty, &format!("{rule_name}_type_{i}")));
         }
         result
     }
@@ -1949,8 +1698,7 @@ fn build_trie_body(node: &TrieNode) -> String {
 fn json_format_to_regex_pattern(format: &str) -> Option<String> {
     let atext = "[\\w!#$%&'*+/=?^`{|}~-]";
     let dot_string = format!("({atext}+(\\.{atext}+)*)");
-    let quoted_string =
-        "\\\\\"(\\\\[\\x20-\\x7E]|[\\x20\\x21\\x23-\\x5B\\x5D-\\x7E])*\\\\\"";
+    let quoted_string = "\\\\\"(\\\\[\\x20-\\x7E]|[\\x20\\x21\\x23-\\x5B\\x5D-\\x7E])*\\\\\"";
     let domain = "([A-Za-z0-9]([\\-A-Za-z0-9]*[A-Za-z0-9])?)((\\.[A-Za-z0-9][\\-A-Za-z0-9]*[A-Za-z0-9])*)";
 
     let pat = match format {

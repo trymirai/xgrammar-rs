@@ -34,12 +34,7 @@ impl GrammarBuilder {
     /// Seeds a builder from an existing grammar (for functor passes and union/concat).
     #[must_use]
     pub fn from_grammar(grammar: &Grammar) -> Self {
-        let rule_name_to_id = grammar
-            .rules()
-            .iter()
-            .enumerate()
-            .map(|(i, r)| (r.name.clone(), i as i32))
-            .collect();
+        let rule_name_to_id = grammar.rules().iter().enumerate().map(|(i, r)| (r.name.clone(), i as i32)).collect();
         Self {
             rules: grammar.rules().to_vec(),
             exprs: grammar.exprs().clone(),
@@ -56,10 +51,10 @@ impl GrammarBuilder {
         self,
         root_rule_name: &str,
     ) -> Result<Grammar, String> {
-        let root_rule_id =
-            *self.rule_name_to_id.get(root_rule_name).ok_or_else(|| {
-                format!("root rule {root_rule_name:?} was never added")
-            })?;
+        let root_rule_id = *self
+            .rule_name_to_id
+            .get(root_rule_name)
+            .ok_or_else(|| format!("root rule {root_rule_name:?} was never added"))?;
         Ok(Grammar::from_parts(self.rules, self.exprs, root_rule_id))
     }
 
@@ -185,10 +180,7 @@ impl GrammarBuilder {
         min_repeat: i32,
         max_repeat: i32,
     ) -> i32 {
-        self.add_grammar_expr(
-            GrammarExprType::Repeat,
-            &[ref_rule_id, min_repeat, max_repeat],
-        )
+        self.add_grammar_expr(GrammarExprType::Repeat, &[ref_rule_id, min_repeat, max_repeat])
     }
 
     /// Adds a repetition of an arbitrary expression, wrapping it in a fresh rule (named
@@ -219,8 +211,7 @@ impl GrammarBuilder {
         &mut self,
         tag_dispatch: &TagDispatch,
     ) -> i32 {
-        let mut data =
-            Vec::with_capacity(tag_dispatch.tag_rule_pairs.len() * 2 + 2);
+        let mut data = Vec::with_capacity(tag_dispatch.tag_rule_pairs.len() * 2 + 2);
         for (tag, rule_id) in &tag_dispatch.tag_rule_pairs {
             let bytes: Vec<i32> = tag.iter().map(|&b| i32::from(b)).collect();
             data.push(self.add_byte_string_bytes(&bytes));
@@ -229,8 +220,7 @@ impl GrammarBuilder {
         data.push(i32::from(tag_dispatch.loop_after_dispatch));
         let mut exclude_ids = Vec::with_capacity(tag_dispatch.excludes.len());
         for exclude in &tag_dispatch.excludes {
-            let bytes: Vec<i32> =
-                exclude.iter().map(|&b| i32::from(b)).collect();
+            let bytes: Vec<i32> = exclude.iter().map(|&b| i32::from(b)).collect();
             exclude_ids.push(self.add_byte_string_bytes(&bytes));
         }
         let exclude_choices = self.add_choices(&exclude_ids);
@@ -243,9 +233,7 @@ impl GrammarBuilder {
         &mut self,
         ttd: &TokenTagDispatch,
     ) -> i32 {
-        let mut data = Vec::with_capacity(
-            ttd.trigger_rule_pairs.len() * 2 + ttd.excludes.len() + 3,
-        );
+        let mut data = Vec::with_capacity(ttd.trigger_rule_pairs.len() * 2 + ttd.excludes.len() + 3);
         data.push(ttd.trigger_rule_pairs.len() as i32);
         for (token_id, rule_id) in &ttd.trigger_rule_pairs {
             data.push(*token_id);
@@ -273,8 +261,7 @@ impl GrammarBuilder {
         expr_id: i32,
     ) -> GrammarExpr<'_> {
         let row = self.exprs.row(expr_id as usize);
-        let ty = GrammarExprType::try_from(row[0])
-            .expect("builder stores valid expr type tags");
+        let ty = GrammarExprType::try_from(row[0]).expect("builder stores valid expr type tags");
         GrammarExpr {
             ty,
             data: &row[1..],
@@ -292,11 +279,7 @@ impl GrammarBuilder {
         rule: Rule,
     ) -> i32 {
         let id = self.rules.len() as i32;
-        assert!(
-            !self.rule_name_to_id.contains_key(&rule.name),
-            "duplicate rule name: {:?}",
-            rule.name
-        );
+        assert!(!self.rule_name_to_id.contains_key(&rule.name), "duplicate rule name: {:?}", rule.name);
         self.rule_name_to_id.insert(rule.name.clone(), id);
         self.rules.push(rule);
         id
@@ -387,8 +370,7 @@ impl GrammarBuilder {
         rule_id: i32,
         lookahead_assertion_id: i32,
     ) {
-        self.rules[rule_id as usize].lookahead_assertion_id =
-            lookahead_assertion_id;
+        self.rules[rule_id as usize].lookahead_assertion_id = lookahead_assertion_id;
     }
 
     /// Marks a rule's lookahead assertion as exact (or not).
@@ -439,8 +421,7 @@ impl GrammarBuilder {
         if !self.rule_name_to_id.contains_key(name_hint) {
             return name_hint.to_owned();
         }
-        let cnt =
-            self.next_cnt_per_hint.entry(name_hint.to_owned()).or_insert(0);
+        let cnt = self.next_cnt_per_hint.entry(name_hint.to_owned()).or_insert(0);
         if *cnt == 0 {
             *cnt = 1;
         }

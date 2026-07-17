@@ -168,12 +168,7 @@ fn build_leaf_fsm(regex: &[u8]) -> FsmWithStartEnd {
                 if regex[i] == b'.' {
                     result.fsm_mut().add_edge(n - 1, n, 0, 0xFF);
                 } else {
-                    result.fsm_mut().add_edge(
-                        n - 1,
-                        n,
-                        i32::from(regex[i]),
-                        i32::from(regex[i]),
-                    );
+                    result.fsm_mut().add_edge(n - 1, n, i32::from(regex[i]), i32::from(regex[i]));
                 }
                 result.add_state();
                 i += 1;
@@ -205,33 +200,18 @@ fn build_leaf_fsm(regex: &[u8]) -> FsmWithStartEnd {
         if regex[i] != b'\\' {
             let is_range = i + 2 < regex.len() - 1 && regex[i + 1] == b'-';
             if !is_range {
-                result.fsm_mut().add_edge(
-                    0,
-                    1,
-                    i32::from(regex[i]),
-                    i32::from(regex[i]),
-                );
+                result.fsm_mut().add_edge(0, 1, i32::from(regex[i]), i32::from(regex[i]));
                 i += 1;
                 continue;
             }
             if regex[i + 2] != b'\\' {
-                result.fsm_mut().add_edge(
-                    0,
-                    1,
-                    i32::from(regex[i]),
-                    i32::from(regex[i + 2]),
-                );
+                result.fsm_mut().add_edge(0, 1, i32::from(regex[i]), i32::from(regex[i + 2]));
                 i += 3;
                 continue;
             }
             let escaped = handle_escapes(regex, i + 2);
             if escaped.len() != 1 || escaped[0].0 != escaped[0].1 {
-                result.fsm_mut().add_edge(
-                    0,
-                    1,
-                    i32::from(regex[i]),
-                    i32::from(regex[i]),
-                );
+                result.fsm_mut().add_edge(0, 1, i32::from(regex[i]), i32::from(regex[i]));
                 i += 1;
                 continue;
             }
@@ -254,12 +234,7 @@ fn build_leaf_fsm(regex: &[u8]) -> FsmWithStartEnd {
             continue;
         }
         if regex[i + 1] != b'\\' {
-            result.fsm_mut().add_edge(
-                0,
-                1,
-                escaped[0].0,
-                i32::from(regex[i + 1]),
-            );
+            result.fsm_mut().add_edge(0, 1, escaped[0].0, i32::from(regex[i + 1]));
             i += 2;
             continue;
         }
@@ -352,8 +327,7 @@ fn check_repeat(
     if num.is_empty() {
         return Err("Invalid repeat format2".to_owned());
     }
-    let lower: i32 =
-        num.parse().map_err(|_| "Invalid repeat format2".to_owned())?;
+    let lower: i32 = num.parse().map_err(|_| "Invalid repeat format2".to_owned())?;
     while *i < regex.len() && regex[*i] == b' ' {
         *i += 1;
     }
@@ -378,8 +352,7 @@ fn check_repeat(
     if num.is_empty() {
         return Err("Invalid repeat format4".to_owned());
     }
-    let upper: i32 =
-        num.parse().map_err(|_| "Invalid repeat format4".to_owned())?;
+    let upper: i32 = num.parse().map_err(|_| "Invalid repeat format4".to_owned())?;
     while *i < regex.len() && regex[*i] == b' ' {
         *i += 1;
     }
@@ -418,9 +391,7 @@ fn parse_regex(regex: &[u8]) -> Result<Vec<RegexNode>, String> {
             if left_bracket == -1 {
                 return Err("Invalid middle bracket!".to_owned());
             }
-            stack.push(StackItem::Node(RegexNode::Leaf(
-                regex[left_bracket as usize..=i].to_vec(),
-            )));
+            stack.push(StackItem::Node(RegexNode::Leaf(regex[left_bracket as usize..=i].to_vec())));
             left_bracket = -1;
             i += 1;
             continue;
@@ -434,19 +405,14 @@ fn parse_regex(regex: &[u8]) -> Result<Vec<RegexNode>, String> {
         }
         if c == b'+' || c == b'*' || c == b'?' {
             let Some(StackItem::Node(child)) = stack.pop() else {
-                return Err(
-                    "Invalid regex: no state before operator!".to_owned()
-                );
+                return Err("Invalid regex: no state before operator!".to_owned());
             };
             let symbol = match c {
                 b'+' => RegexSymbol::Plus,
                 b'*' => RegexSymbol::Star,
                 _ => RegexSymbol::Optional,
             };
-            stack.push(StackItem::Node(RegexNode::Symbol(
-                symbol,
-                Box::new(child),
-            )));
+            stack.push(StackItem::Node(RegexNode::Symbol(symbol, Box::new(child))));
             i += 1;
             continue;
         }
@@ -454,11 +420,7 @@ fn parse_regex(regex: &[u8]) -> Result<Vec<RegexNode>, String> {
             stack.push(StackItem::Char(c));
             // Skip a non-capturing-group `(?:` or a lookahead `(?!` / `(?=` prefix (lookahead
             // content is currently treated like an ordinary group).
-            if c == b'('
-                && i + 2 < len
-                && regex[i + 1] == b'?'
-                && matches!(regex[i + 2], b':' | b'!' | b'=')
-            {
+            if c == b'(' && i + 2 < len && regex[i + 1] == b'?' && matches!(regex[i + 2], b':' | b'!' | b'=') {
                 i += 2;
             }
             i += 1;
@@ -536,8 +498,7 @@ fn parse_close_paren(stack: &mut Vec<StackItem>) -> Result<(), String> {
         while let Some(item) = inner.pop() {
             match item {
                 StackItem::Char(b'|') => {
-                    union_states
-                        .push(RegexNode::Bracket(std::mem::take(&mut bracket)));
+                    union_states.push(RegexNode::Bracket(std::mem::take(&mut bracket)));
                 },
                 StackItem::Node(child) => bracket.push(child),
                 StackItem::Char(_) => {

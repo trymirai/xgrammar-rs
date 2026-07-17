@@ -12,7 +12,7 @@ pub use batch_grammar_matcher::BatchGrammarMatcher;
 pub use grammar_matcher::GrammarMatcher;
 pub use matcher_error::MatcherTerminatedError;
 pub use token_bitmask::{
-    allocate_token_bitmask, apply_token_bitmask_inplace_cpu, get_bitmask_size,
-    get_masked_tokens_from_bitmask, is_single_token_bitmask,
+    BitmaskDlType, allocate_token_bitmask, apply_token_bitmask_inplace_cpu, apply_token_bitmask_inplace_cpu_batch,
+    get_bitmask_dl_type, get_bitmask_size, get_masked_tokens_from_bitmask, is_single_token_bitmask,
     reset_token_bitmask,
 };

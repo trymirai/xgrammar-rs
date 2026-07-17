@@ -3,9 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::{
-    grammar_expr::GrammarExpr, grammar_expr_type::GrammarExprType, rule::Rule,
-};
+use super::{grammar_expr::GrammarExpr, grammar_expr_type::GrammarExprType, rule::Rule};
 use crate::{
     fsm::{CompactFsm, CompactFsmWithStartEndWithSize},
     support::Compact2dArray,
@@ -28,6 +26,12 @@ pub struct Grammar {
     /// Per-rule compiled FSMs into [`Self::complete_fsm`] (empty until optimized).
     #[serde(skip)]
     per_rule_fsms: Vec<Option<CompactFsmWithStartEndWithSize>>,
+    /// Per-rule FSM structural hashes (set by the FSM hasher; compile-time only).
+    #[serde(skip)]
+    per_rule_fsm_hashes: Vec<Option<u64>>,
+    /// Per-rule original→normalized state id pairs (set by the FSM hasher; compile-time only).
+    #[serde(skip)]
+    per_rule_fsm_new_state_ids: Vec<Vec<(i32, i32)>>,
     /// Ids of rules that can match the empty string (set by the allow-empty analyzer).
     #[serde(skip)]
     allow_empty_rule_ids: Vec<i32>,
@@ -50,6 +54,8 @@ impl Grammar {
             root_rule_id,
             complete_fsm: CompactFsm::default(),
             per_rule_fsms: Vec::new(),
+            per_rule_fsm_hashes: Vec::new(),
+            per_rule_fsm_new_state_ids: Vec::new(),
             allow_empty_rule_ids: Vec::new(),
             optimized: false,
         }
@@ -68,6 +74,34 @@ impl Grammar {
         rule_id: i32,
     ) -> Option<&CompactFsmWithStartEndWithSize> {
         self.per_rule_fsms.get(rule_id as usize).and_then(Option::as_ref)
+    }
+
+    /// The structural hash of the per-rule FSM for `rule_id`, if computed.
+    #[must_use]
+    pub fn per_rule_fsm_hash(
+        &self,
+        rule_id: i32,
+    ) -> Option<u64> {
+        self.per_rule_fsm_hashes.get(rule_id as usize).and_then(|hash| *hash)
+    }
+
+    /// Original→normalized state id mapping for `rule_id`'s FSM, if computed.
+    #[must_use]
+    pub fn per_rule_fsm_new_state_ids(
+        &self,
+        rule_id: i32,
+    ) -> &[(i32, i32)] {
+        self.per_rule_fsm_new_state_ids.get(rule_id as usize).map(Vec::as_slice).unwrap_or(&[])
+    }
+
+    /// Installs per-rule FSM hashes and state-id mappings (used by the FSM hasher).
+    pub(crate) fn set_fsm_hash_data(
+        &mut self,
+        hashes: Vec<Option<u64>>,
+        new_state_ids: Vec<Vec<(i32, i32)>>,
+    ) {
+        self.per_rule_fsm_hashes = hashes;
+        self.per_rule_fsm_new_state_ids = new_state_ids;
     }
 
     /// The ids of rules that can match the empty string.
@@ -109,9 +143,7 @@ impl Grammar {
     }
 
     /// Per-rule compiled FSM slices (empty until optimized).
-    pub(crate) fn per_rule_fsms_slice(
-        &self
-    ) -> &[Option<CompactFsmWithStartEndWithSize>] {
+    pub(crate) fn per_rule_fsms_slice(&self) -> &[Option<CompactFsmWithStartEndWithSize>] {
         &self.per_rule_fsms
     }
 
@@ -206,8 +238,7 @@ impl Grammar {
         expr_id: i32,
     ) -> GrammarExpr<'_> {
         let row = self.exprs.row(expr_id as usize);
-        let ty = GrammarExprType::try_from(row[0])
-            .expect("grammar stores valid expr type tags");
+        let ty = GrammarExprType::try_from(row[0]).expect("grammar stores valid expr type tags");
         GrammarExpr {
             ty,
             data: &row[1..],

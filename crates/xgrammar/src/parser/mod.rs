@@ -21,7 +21,7 @@ pub use ebnf_parser::ebnf_to_grammar_no_normalization;
 pub use lexer_error::LexerError;
 pub use macro_ir::{MacroArguments, MacroValue};
 pub use parse_error::ParserError;
-pub use parser_state::ParserState;
+pub use parser_state::{ParserState, ParserStateCacheKey};
 pub use repeat_detector::RepeatDetector;
 pub use token::{Token, TokenValue};
 pub use token_type::TokenType;

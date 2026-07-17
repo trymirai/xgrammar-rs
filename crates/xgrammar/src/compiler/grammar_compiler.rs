@@ -3,32 +3,126 @@
 //!
 //! Optimizes grammars (running the full functor pipeline so per-rule FSMs and
 //! `allow_empty_rule_ids` are built) against a fixed tokenizer, caching the results keyed by
-//! their source so repeated requests reuse the work.
+//! their source so repeated requests reuse the work. When `max_memory_bytes` is set, the
+//! cache evicts least-recently-used entries until under the limit.
 
-use std::{collections::HashMap, sync::Mutex};
+use std::{
+    collections::{HashMap, VecDeque},
+    sync::{Arc, Mutex},
+};
 
-use super::compiled_grammar::CompiledGrammar;
+use super::{
+    compiled_grammar::CompiledGrammar,
+    rule_level_cache::{RuleLevelCache, UNLIMITED_SIZE},
+};
 use crate::{
-    converter::StructuralTagError, functor::grammar_optimizer,
-    grammar::Grammar, tokenizer::TokenizerInfo,
+    converter::StructuralTagError,
+    functor::{grammar_fsm_hasher, grammar_optimizer},
+    grammar::Grammar,
+    tokenizer::TokenizerInfo,
 };
 
 /// Unlimited cache size sentinel.
 const UNLIMITED: i64 = -1;
 
+#[derive(Debug)]
+struct CacheState {
+    map: HashMap<String, CompiledGrammar>,
+    /// Front = least recently used; back = most recently used.
+    order: VecDeque<String>,
+    size_bytes: i64,
+}
+
+impl CacheState {
+    fn new() -> Self {
+        Self {
+            map: HashMap::new(),
+            order: VecDeque::new(),
+            size_bytes: 0,
+        }
+    }
+
+    fn clear(&mut self) {
+        self.map.clear();
+        self.order.clear();
+        self.size_bytes = 0;
+    }
+
+    fn get(
+        &mut self,
+        key: &str,
+    ) -> Option<CompiledGrammar> {
+        if !self.map.contains_key(key) {
+            return None;
+        }
+        if let Some(pos) = self.order.iter().position(|k| k == key) {
+            let k = self.order.remove(pos).expect("position valid");
+            self.order.push_back(k);
+        }
+        self.map.get(key).cloned()
+    }
+
+    fn insert(
+        &mut self,
+        key: String,
+        value: CompiledGrammar,
+        max_memory_bytes: i64,
+    ) {
+        let entry_size = value.memory_size_bytes() as i64;
+        if let Some(old) = self.map.remove(&key) {
+            self.size_bytes -= old.memory_size_bytes() as i64;
+            if let Some(pos) = self.order.iter().position(|k| k == &key) {
+                self.order.remove(pos);
+            }
+        }
+        self.map.insert(key.clone(), value);
+        self.order.push_back(key);
+        self.size_bytes += entry_size;
+        if self.size_bytes < 0 {
+            self.size_bytes = 0;
+        }
+        self.evict_to_limit(max_memory_bytes);
+    }
+
+    fn evict_to_limit(
+        &mut self,
+        max_memory_bytes: i64,
+    ) {
+        if max_memory_bytes < 0 {
+            return;
+        }
+        while self.size_bytes > max_memory_bytes {
+            let Some(oldest) = self.order.pop_front() else {
+                break;
+            };
+            if let Some(removed) = self.map.remove(&oldest) {
+                self.size_bytes -= removed.memory_size_bytes() as i64;
+            }
+        }
+        if self.size_bytes < 0 {
+            self.size_bytes = 0;
+        }
+    }
+}
+
 /// Compiles grammars/schemas/regexes/structural-tags against a fixed tokenizer, with a cache.
 #[derive(Debug)]
 pub struct GrammarCompiler {
-    tokenizer_info: TokenizerInfo,
-    #[allow(dead_code)]
+    tokenizer_info: Arc<TokenizerInfo>,
     max_threads: i32,
     cache_enabled: bool,
     max_memory_bytes: i64,
-    cache: Mutex<HashMap<String, CompiledGrammar>>,
+    grammar_cache_limit_bytes: i64,
+    rule_level_cache: Option<Arc<RuleLevelCache>>,
+    cache: Mutex<CacheState>,
 }
 
 impl GrammarCompiler {
     /// Creates a compiler bound to `tokenizer_info`.
+    ///
+    /// `max_threads` controls adaptive token-mask cache build parallelism.
+    /// `max_memory_bytes` is `-1` for unlimited; otherwise the LRU cache evicts until under
+    /// the limit.
     #[must_use]
     pub fn new(
         tokenizer_info: TokenizerInfo,
@@ -36,12 +130,29 @@ impl GrammarCompiler {
         cache_enabled: bool,
         max_memory_bytes: i64,
     ) -> Self {
+        assert!(max_memory_bytes >= -1, "Invalid max_memory_bytes: {max_memory_bytes}. Must be -1 (unlimited) or >= 0");
+        let grammar_cache_limit_bytes = if max_memory_bytes < 0 {
+            UNLIMITED
+        } else {
+            max_memory_bytes / 3 * 2
+        };
+        let rule_level_cache = if cache_enabled {
+            Some(Arc::new(RuleLevelCache::new(if max_memory_bytes < 0 {
+                UNLIMITED_SIZE
+            } else {
+                (max_memory_bytes - max_memory_bytes / 3 * 2) as usize
+            })))
+        } else {
+            None
+        };
         Self {
-            tokenizer_info,
+            tokenizer_info: Arc::new(tokenizer_info),
             max_threads,
             cache_enabled,
             max_memory_bytes,
-            cache: Mutex::new(HashMap::new()),
+            grammar_cache_limit_bytes,
+            rule_level_cache,
+            cache: Mutex::new(CacheState::new()),
         }
     }
 
@@ -71,8 +182,7 @@ impl GrammarCompiler {
         root_rule_name: &str,
     ) -> CompiledGrammar {
         self.cached(format!("ebnf:{root_rule_name}:{ebnf_str}"), || {
-            let grammar = Grammar::from_ebnf(ebnf_str, root_rule_name)
-                .expect("valid EBNF");
+            let grammar = Grammar::from_ebnf(ebnf_str, root_rule_name).expect("valid EBNF");
             self.optimize(&grammar)
         })
     }
@@ -80,9 +190,7 @@ impl GrammarCompiler {
     /// Compiles the built-in JSON grammar.
     #[must_use]
     pub fn compile_builtin_json_grammar(&self) -> CompiledGrammar {
-        self.cached("builtin_json".to_owned(), || {
-            self.optimize(&Grammar::builtin_json_grammar())
-        })
+        self.cached("builtin_json".to_owned(), || self.optimize(&Grammar::builtin_json_grammar()))
     }
 
     /// Compiles a JSON Schema (see [`Grammar::from_json_schema`]).
@@ -164,26 +272,16 @@ impl GrammarCompiler {
         &self,
         structural_tag_json: &str,
     ) -> Result<CompiledGrammar, StructuralTagError> {
+        let key = format!("stag:{structural_tag_json}");
         if self.cache_enabled {
-            if let Some(hit) = self
-                .cache
-                .lock()
-                .expect("cache mutex")
-                .get(&format!("stag:{structural_tag_json}"))
-            {
-                return Ok(hit.clone());
+            if let Some(hit) = self.cache.lock().expect("cache mutex").get(&key) {
+                return Ok(hit);
             }
         }
-        let grammar = Grammar::from_structural_tag_with_tokenizer(
-            structural_tag_json,
-            &self.tokenizer_info,
-        )?;
+        let grammar = Grammar::from_structural_tag_with_tokenizer(structural_tag_json, &self.tokenizer_info)?;
         let compiled = self.optimize(&grammar);
         if self.cache_enabled {
-            self.cache.lock().expect("cache mutex").insert(
-                format!("stag:{structural_tag_json}"),
-                compiled.clone(),
-            );
+            self.cache.lock().expect("cache mutex").insert(key, compiled.clone(), self.grammar_cache_limit_bytes);
         }
         Ok(compiled)
     }
@@ -196,12 +294,7 @@ impl GrammarCompiler {
     /// The approximate cache memory usage, in bytes.
     #[must_use]
     pub fn get_cache_size_bytes(&self) -> i64 {
-        self.cache
-            .lock()
-            .expect("cache mutex")
-            .values()
-            .map(|c| c.memory_size_bytes() as i64)
-            .sum()
+        self.cache.lock().expect("cache mutex").size_bytes
     }
 
     /// The configured cache memory limit (`-1` = unlimited).
@@ -210,17 +303,32 @@ impl GrammarCompiler {
         self.max_memory_bytes
     }
 
-    /// Optimizes `grammar` (if needed) and bundles it with the tokenizer.
+    /// The configured compile parallelism for the adaptive token-mask cache.
+    #[must_use]
+    pub fn max_threads(&self) -> i32 {
+        self.max_threads
+    }
+
+    /// Optimizes `grammar` (if needed), builds the adaptive token-mask cache, and bundles
+    /// the result with the tokenizer.
     fn optimize(
         &self,
         grammar: &Grammar,
     ) -> CompiledGrammar {
-        let optimized = if grammar.is_optimized() {
+        let mut optimized = if grammar.is_optimized() {
             grammar.clone()
         } else {
             grammar_optimizer(grammar)
         };
-        CompiledGrammar::new(optimized, self.tokenizer_info.clone())
+        if self.rule_level_cache.is_some() {
+            grammar_fsm_hasher(&mut optimized);
+        }
+        CompiledGrammar::build(
+            optimized,
+            Arc::clone(&self.tokenizer_info),
+            self.max_threads,
+            self.rule_level_cache.as_ref().map(Arc::clone),
+        )
     }
 
     /// Returns the cached result for `key`, computing and storing it on a miss.
@@ -229,19 +337,17 @@ impl GrammarCompiler {
         key: String,
         compute: impl FnOnce() -> CompiledGrammar,
     ) -> CompiledGrammar {
-        if self.cache_enabled {
-            if let Some(hit) = self.cache.lock().expect("cache mutex").get(&key)
-            {
-                return hit.clone();
-            }
+        if !self.cache_enabled {
+            return compute();
         }
+        let mut cache = self.cache.lock().expect("cache mutex");
+        if let Some(hit) = cache.get(&key) {
+            return hit;
+        }
+        // Drop the lock while compiling; a racing insert is rare and harmless.
+        drop(cache);
         let compiled = compute();
-        if self.cache_enabled {
-            self.cache
-                .lock()
-                .expect("cache mutex")
-                .insert(key, compiled.clone());
-        }
+        self.cache.lock().expect("cache mutex").insert(key, compiled.clone(), self.grammar_cache_limit_bytes);
         compiled
     }
 }

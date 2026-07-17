@@ -5,10 +5,7 @@ use super::{
     token::{Token, TokenValue},
     token_type::TokenType,
 };
-use crate::support::{
-    CharHandlingError, Codepoint, char_to_utf8_bytes,
-    parse_next_utf8_or_escaped,
-};
+use crate::support::{CharHandlingError, Codepoint, char_to_utf8_bytes, parse_next_utf8_or_escaped};
 
 /// Largest integer literal permitted in a grammar (`1e15`).
 const MAX_INTEGER_IN_GRAMMAR: i64 = 1_000_000_000_000_000;
@@ -145,15 +142,10 @@ impl<'a> Lexer<'a> {
     }
 
     fn consume_space(&mut self) {
-        while self.cur() != 0
-            && matches!(self.cur(), b' ' | b'\t' | b'#' | b'\n' | b'\r')
-        {
+        while self.cur() != 0 && matches!(self.cur(), b' ' | b'\t' | b'#' | b'\n' | b'\r') {
             self.consume(1);
             if self.peek(-1) == b'#' {
-                while self.cur() != 0
-                    && self.cur() != b'\n'
-                    && self.cur() != b'\r'
-                {
+                while self.cur() != 0 && self.cur() != b'\n' && self.cur() != b'\r' {
                     self.consume(1);
                 }
                 if self.cur() == 0 {
@@ -222,14 +214,9 @@ impl<'a> Lexer<'a> {
         self.consume(1); // opening quote
 
         let mut bytes = Vec::new();
-        while self.cur() != 0
-            && self.cur() != b'"'
-            && self.cur() != b'\n'
-            && self.cur() != b'\r'
-        {
+        while self.cur() != 0 && self.cur() != b'"' && self.cur() != b'\n' && self.cur() != b'\r' {
             let (codepoint, len) =
-                parse_next_utf8_or_escaped(&self.input[self.pos..], &[])
-                    .map_err(|e| self.char_err(e))?;
+                parse_next_utf8_or_escaped(&self.input[self.pos..], &[]).map_err(|e| self.char_err(e))?;
             self.consume(len);
             bytes.extend_from_slice(&char_to_utf8_bytes(codepoint));
         }
@@ -241,45 +228,28 @@ impl<'a> Lexer<'a> {
         Ok(Token {
             ty: TokenType::StringLiteral,
             lexeme: self.slice_string(start_pos, self.pos),
-            value: TokenValue::Str(
-                String::from_utf8_lossy(&bytes).into_owned(),
-            ),
+            value: TokenValue::Str(String::from_utf8_lossy(&bytes).into_owned()),
             line,
             column,
         })
     }
 
     fn parse_char_class(&mut self) -> Result<Vec<Token>, LexerError> {
-        let mut tokens =
-            vec![self.punct(TokenType::LBracket, "[", self.line, self.column)];
+        let mut tokens = vec![self.punct(TokenType::LBracket, "[", self.line, self.column)];
         self.consume(1); // '['
 
         if self.cur() == b'^' {
-            tokens.push(self.punct(
-                TokenType::Caret,
-                "^",
-                self.line,
-                self.column,
-            ));
+            tokens.push(self.punct(TokenType::Caret, "^", self.line, self.column));
             self.consume(1);
         }
 
         while self.cur() != 0 && self.cur() != b']' {
             if self.cur() == b'\r' || self.cur() == b'\n' {
-                return Err(
-                    self.err("Character class should not contain newline")
-                );
+                return Err(self.err("Character class should not contain newline"));
             } else if self.cur() == b'-' {
-                tokens.push(self.punct(
-                    TokenType::Dash,
-                    "-",
-                    self.line,
-                    self.column,
-                ));
+                tokens.push(self.punct(TokenType::Dash, "-", self.line, self.column));
                 self.consume(1);
-            } else if self.cur() == b'\\'
-                && is_regex_special_escape(self.peek(1))
-            {
+            } else if self.cur() == b'\\' && is_regex_special_escape(self.peek(1)) {
                 let (line, column) = (self.line, self.column);
                 let lexeme = self.slice_string(self.pos, self.pos + 2);
                 let value = self.slice_string(self.pos + 1, self.pos + 2);
@@ -293,11 +263,8 @@ impl<'a> Lexer<'a> {
                 self.consume(2);
             } else {
                 let (line, column) = (self.line, self.column);
-                let (codepoint, len) = parse_next_utf8_or_escaped(
-                    &self.input[self.pos..],
-                    REGEX_ESCAPE_CHARS,
-                )
-                .map_err(|e| self.char_err(e))?;
+                let (codepoint, len) = parse_next_utf8_or_escaped(&self.input[self.pos..], REGEX_ESCAPE_CHARS)
+                    .map_err(|e| self.char_err(e))?;
                 let lexeme = self.slice_string(self.pos, self.pos + len);
                 tokens.push(Token {
                     ty: TokenType::CharInCharClass,
@@ -313,12 +280,7 @@ impl<'a> Lexer<'a> {
         if self.cur() == 0 {
             return Err(self.err("Unterminated character class"));
         }
-        tokens.push(self.punct(
-            TokenType::RBracket,
-            "]",
-            self.line,
-            self.column,
-        ));
+        tokens.push(self.punct(TokenType::RBracket, "]", self.line, self.column));
         self.consume(1); // ']'
         Ok(tokens)
     }
@@ -341,9 +303,9 @@ impl<'a> Lexer<'a> {
             num = num * 10 + i64::from(self.cur() - b'0');
             self.consume(1);
             if num > MAX_INTEGER_IN_GRAMMAR {
-                return Err(self.err(format!(
-                    "Integer is too large: parsed {num}, max allowed is {MAX_INTEGER_IN_GRAMMAR}"
-                )));
+                return Err(
+                    self.err(format!("Integer is too large: parsed {num}, max allowed is {MAX_INTEGER_IN_GRAMMAR}"))
+                );
             }
         }
 
@@ -365,17 +327,10 @@ impl<'a> Lexer<'a> {
         let (line, column) = (self.line, self.column);
 
         if self.cur() == 0 {
-            return Ok(Next::One(self.punct(
-                TokenType::EndOfFile,
-                "",
-                line,
-                column,
-            )));
+            return Ok(Next::One(self.punct(TokenType::EndOfFile, "", line, column)));
         }
 
-        let one = |ty, lexeme, lexer: &Lexer| {
-            Next::One(lexer.punct(ty, lexeme, line, column))
-        };
+        let one = |ty, lexeme, lexer: &Lexer| Next::One(lexer.punct(ty, lexeme, line, column));
         Ok(match self.cur() {
             b'(' => {
                 if self.peek(1) == b'=' {
@@ -439,17 +394,14 @@ impl<'a> Lexer<'a> {
                 } else if c.is_ascii_digit() || c == b'+' {
                     Next::One(self.parse_integer()?)
                 } else {
-                    return Err(self
-                        .err(format!("Unexpected character: {}", c as char)));
+                    return Err(self.err(format!("Unexpected character: {}", c as char)));
                 }
             },
         })
     }
 
     /// Promotes each identifier immediately left of `::=` to a [`TokenType::RuleName`].
-    fn convert_identifier_to_rule_name(
-        tokens: &mut [Token]
-    ) -> Result<(), LexerError> {
+    fn convert_identifier_to_rule_name(tokens: &mut [Token]) -> Result<(), LexerError> {
         for i in 0..tokens.len() {
             if tokens[i].ty != TokenType::Assign {
                 continue;
@@ -465,17 +417,14 @@ impl<'a> Lexer<'a> {
                 return Err(LexerError {
                     line: tokens[i - 1].line,
                     column: tokens[i - 1].column,
-                    message: "Assign should be preceded by an identifier"
-                        .to_owned(),
+                    message: "Assign should be preceded by an identifier".to_owned(),
                 });
             }
             if i >= 2 && tokens[i - 2].line == tokens[i - 1].line {
                 return Err(LexerError {
                     line: tokens[i - 1].line,
                     column: tokens[i - 1].column,
-                    message:
-                        "The rule name should be at the beginning of the line"
-                            .to_owned(),
+                    message: "The rule name should be at the beginning of the line".to_owned(),
                 });
             }
             tokens[i - 1].ty = TokenType::RuleName;

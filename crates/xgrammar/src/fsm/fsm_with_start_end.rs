@@ -130,10 +130,7 @@ impl FsmWithStartEnd {
         &self,
         state: i32,
     ) -> bool {
-        self.fsm
-            .state_edges(state)
-            .iter()
-            .any(|e| e.is_char_range() || e.is_token() || e.is_exclude_token())
+        self.fsm.state_edges(state).iter().any(|e| e.is_char_range() || e.is_token() || e.is_exclude_token())
     }
 
     /// Whether `state` has an outgoing rule/epsilon/repeat edge (is non-terminal).
@@ -142,10 +139,7 @@ impl FsmWithStartEnd {
         &self,
         state: i32,
     ) -> bool {
-        self.fsm
-            .state_edges(state)
-            .iter()
-            .any(|e| e.is_rule_ref() || e.is_epsilon() || e.is_repeat_ref())
+        self.fsm.state_edges(state).iter().any(|e| e.is_rule_ref() || e.is_epsilon() || e.is_repeat_ref())
     }
 
     /// Whether the FSM accepts `input` (treating it as a byte sequence).
@@ -158,13 +152,7 @@ impl FsmWithStartEnd {
         self.fsm.epsilon_closure(&mut states);
         let mut result = HashSet::new();
         for byte in input.bytes() {
-            self.fsm.advance(
-                &states,
-                i32::from(byte),
-                &mut result,
-                EdgeKind::CharRange,
-                false,
-            );
+            self.fsm.advance(&states, i32::from(byte), &mut result, EdgeKind::CharRange, false);
             if result.is_empty() {
                 return false;
             }
@@ -182,12 +170,9 @@ impl FsmWithStartEnd {
     /// Whether the FSM is a leaf (contains no rule or repeat references).
     #[must_use]
     pub fn is_leaf(&self) -> bool {
-        self.reachable_states().iter().all(|&state| {
-            self.fsm
-                .state_edges(state)
-                .iter()
-                .all(|e| !e.is_rule_ref() && !e.is_repeat_ref())
-        })
+        self.reachable_states()
+            .iter()
+            .all(|&state| self.fsm.state_edges(state).iter().all(|e| !e.is_rule_ref() && !e.is_repeat_ref()))
     }
 
     /// Returns a copy.
@@ -320,14 +305,8 @@ impl FsmWithStartEnd {
                 new_ends[(offset + end) as usize] = true;
             }
         }
-        let edge_num: usize =
-            (0..n).map(|i| self.fsm.state_edges(i).len()).sum();
-        super::fsm_with_start_end_with_size::FsmWithStartEndWithSize::new(
-            new_start,
-            new_ends,
-            edge_num as i32,
-            n,
-        )
+        let edge_num: usize = (0..n).map(|i| self.fsm.state_edges(i).len()).sum();
+        super::fsm_with_start_end_with_size::FsmWithStartEndWithSize::new(new_start, new_ends, edge_num as i32, n)
     }
 
     /// Rebuilds this machine under `state_mapping` (old id → new id), collapsing the merged
@@ -338,8 +317,7 @@ impl FsmWithStartEnd {
         state_mapping: &[i32],
         new_num_states: i32,
     ) -> Self {
-        let new_fsm =
-            self.fsm.rebuild_with_mapping(state_mapping, new_num_states);
+        let new_fsm = self.fsm.rebuild_with_mapping(state_mapping, new_num_states);
         let new_start = state_mapping[self.start as usize];
         let mut new_ends = vec![false; new_num_states as usize];
         for end in 0..self.num_states() {
@@ -357,10 +335,7 @@ impl FsmWithStartEnd {
     /// the state limit.
     pub fn not(&self) -> Result<Self, String> {
         if !self.is_leaf() {
-            return Err(
-                "Not operation is not supported for FSM with rule references."
-                    .to_owned(),
-            );
+            return Err("Not operation is not supported for FSM with rule references.".to_owned());
         }
         let mut result = if self.is_dfa() {
             self.copy()
@@ -394,12 +369,7 @@ impl FsmWithStartEnd {
                 while right < 256 && !char_set[right] {
                     right += 1;
                 }
-                result.fsm_mut().add_edge(
-                    i,
-                    accept_all,
-                    left as i32,
-                    (right - 1) as i32,
-                );
+                result.fsm_mut().add_edge(i, accept_all, left as i32, (right - 1) as i32);
                 left = right;
             }
         }
@@ -429,9 +399,7 @@ impl FsmWithStartEnd {
         state_map.insert(start_pair, 0);
         while let Some((lhs_state, rhs_state)) = queue.pop_front() {
             let from = state_map[&(lhs_state, rhs_state)];
-            if lhs_dfa.is_end_state(lhs_state)
-                && rhs_dfa.is_end_state(rhs_state)
-            {
+            if lhs_dfa.is_end_state(lhs_state) && rhs_dfa.is_end_state(rhs_state) {
                 result.add_end_state(from);
             }
             for le in lhs_dfa.fsm().state_edges(lhs_state) {
@@ -476,10 +444,7 @@ impl FsmWithStartEnd {
             for e in edges {
                 in_degree[e.target as usize] += 1;
                 if e.is_epsilon() {
-                    if edges.len() == 1
-                        && !has_exclude_token[i as usize]
-                        && !has_exclude_token[e.target as usize]
-                    {
+                    if edges.len() == 1 && !has_exclude_token[i as usize] && !has_exclude_token[e.target as usize] {
                         union_find.add(i);
                         union_find.add(e.target);
                         union_find.union(i, e.target);
@@ -499,8 +464,7 @@ impl FsmWithStartEnd {
                 if equiv_node[i as usize] == i {
                     continue;
                 }
-                in_degree[equiv_node[i as usize] as usize] +=
-                    in_degree[i as usize];
+                in_degree[equiv_node[i as usize] as usize] += in_degree[i as usize];
             } else {
                 equiv_node[i as usize] = i;
             }
@@ -569,15 +533,12 @@ impl FsmWithStartEnd {
                     incoming_sizes[e.target as usize] += 1;
                 }
             }
-            let mut incoming: Compact2dArray<EndpointEdge> =
-                Compact2dArray::from_row_sizes(&incoming_sizes);
-            let mut outgoing: Compact2dArray<EndpointEdge> =
-                Compact2dArray::from_row_sizes(&outgoing_sizes);
+            let mut incoming: Compact2dArray<EndpointEdge> = Compact2dArray::from_row_sizes(&incoming_sizes);
+            let mut outgoing: Compact2dArray<EndpointEdge> = Compact2dArray::from_row_sizes(&outgoing_sizes);
             let mut incoming_pos = vec![0usize; n];
             let mut outgoing_pos = vec![0usize; n];
             for source in 0..n {
-                let edges: Vec<_> =
-                    result.fsm().state_edges(source as i32).to_vec();
+                let edges: Vec<_> = result.fsm().state_edges(source as i32).to_vec();
                 for e in &edges {
                     let t = e.target as usize;
                     incoming.row_mut(t)[incoming_pos[t]] = EndpointEdge {
@@ -640,16 +601,13 @@ impl FsmWithStartEnd {
                 while group_begin < siblings.len() {
                     let sibling = siblings[group_begin].peer;
                     let mut group_end = group_begin + 1;
-                    while group_end < siblings.len()
-                        && siblings[group_end].peer == sibling
-                    {
+                    while group_end < siblings.len() && siblings[group_end].peer == sibling {
                         group_end += 1;
                     }
                     group_begin = group_end;
                     if sibling <= i
                         || in_distinct[sibling as usize] != 1
-                        || result.is_end_state(sibling)
-                            != result.is_end_state(i)
+                        || result.is_end_state(sibling) != result.is_end_state(i)
                     {
                         continue;
                     }
@@ -657,10 +615,8 @@ impl FsmWithStartEnd {
                     if edges_to_i.len() != edges_to_sibling.len() {
                         continue;
                     }
-                    let is_equiv = edges_to_i
-                        .iter()
-                        .zip(edges_to_sibling)
-                        .all(|(a, b)| a.min == b.min && a.max == b.max);
+                    let is_equiv =
+                        edges_to_i.iter().zip(edges_to_sibling).all(|(a, b)| a.min == b.min && a.max == b.max);
                     if is_equiv {
                         union_find.add(i);
                         union_find.add(sibling);
@@ -693,16 +649,13 @@ impl FsmWithStartEnd {
                 let mut group_begin = 0;
                 while group_begin < siblings.len() {
                     let sibling = siblings[group_begin].peer;
-                    while group_begin < siblings.len()
-                        && siblings[group_begin].peer == sibling
-                    {
+                    while group_begin < siblings.len() && siblings[group_begin].peer == sibling {
                         group_begin += 1;
                     }
                     if sibling <= i
                         || union_find.count(sibling)
                         || out_distinct[sibling as usize] != 1
-                        || result.is_end_state(i)
-                            != result.is_end_state(sibling)
+                        || result.is_end_state(i) != result.is_end_state(sibling)
                     {
                         continue;
                     }
@@ -710,10 +663,7 @@ impl FsmWithStartEnd {
                     if sibling_edges.len() != node_edges.len() {
                         continue;
                     }
-                    let is_equiv = sibling_edges
-                        .iter()
-                        .zip(node_edges)
-                        .all(|(a, b)| a.min == b.min && a.max == b.max);
+                    let is_equiv = sibling_edges.iter().zip(node_edges).all(|(a, b)| a.min == b.min && a.max == b.max);
                     if is_equiv {
                         union_find.add(i);
                         union_find.add(sibling);
@@ -840,17 +790,12 @@ impl FsmWithStartEnd {
                 let mut next_closure: HashSet<i32> = HashSet::new();
                 for &state in &closures[now_process] {
                     for e in self.fsm.state_edges(state) {
-                        if e.is_char_range()
-                            && lo >= e.min
-                            && hi <= e.max
-                            && !next_closure.contains(&e.target)
-                        {
+                        if e.is_char_range() && lo >= e.min && hi <= e.max && !next_closure.contains(&e.target) {
                             next_closure.extend(closure_of(e.target));
                         }
                     }
                 }
-                let target =
-                    Self::find_or_add_closure(&mut closures, &next_closure);
+                let target = Self::find_or_add_closure(&mut closures, &next_closure);
                 dfa.fsm_mut().add_edge(now_process as i32, target, lo, hi);
             }
 
@@ -860,16 +805,12 @@ impl FsmWithStartEnd {
                 let mut next_closure: HashSet<i32> = HashSet::new();
                 for &state in &closures[now_process] {
                     for e in self.fsm.state_edges(state) {
-                        if e.is_rule_ref()
-                            && e.ref_rule_id() == rule
-                            && !next_closure.contains(&e.target)
-                        {
+                        if e.is_rule_ref() && e.ref_rule_id() == rule && !next_closure.contains(&e.target) {
                             next_closure.extend(closure_of(e.target));
                         }
                     }
                 }
-                let target =
-                    Self::find_or_add_closure(&mut closures, &next_closure);
+                let target = Self::find_or_add_closure(&mut closures, &next_closure);
                 dfa.fsm_mut().add_rule_edge(now_process as i32, target, rule);
             }
 
@@ -935,10 +876,7 @@ impl FsmWithStartEnd {
             let mut next_closure: HashSet<i32> = HashSet::new();
             for &state in &closures[now_process] {
                 for e in fsm.state_edges(state) {
-                    if e.min == kind
-                        && e.aux_index() == aux_idx
-                        && !next_closure.contains(&e.target)
-                    {
+                    if e.min == kind && e.aux_index() == aux_idx && !next_closure.contains(&e.target) {
                         next_closure.extend(closure_of(e.target));
                     }
                 }
@@ -964,8 +902,7 @@ impl FsmWithStartEnd {
         let n = now_fsm.num_states();
 
         // precursors[target] = list of ((min, max), source).
-        let mut precursors: Vec<Vec<((i32, i32), i32)>> =
-            vec![Vec::new(); n as usize];
+        let mut precursors: Vec<Vec<((i32, i32), i32)>> = vec![Vec::new(); n as usize];
         for i in 0..n {
             for e in now_fsm.fsm().state_edges(i) {
                 precursors[e.target as usize].push(((e.min, e.max), i));
@@ -989,8 +926,7 @@ impl FsmWithStartEnd {
         working.push(non_final);
 
         while let Some(current) = working.pop() {
-            let mut possible: BTreeMap<(i32, i32), HashSet<i32>> =
-                BTreeMap::new();
+            let mut possible: BTreeMap<(i32, i32), HashSet<i32>> = BTreeMap::new();
             for &state in &current {
                 for &(transition, source) in &precursors[state as usize] {
                     possible.entry(transition).or_default().insert(source);
@@ -1009,12 +945,9 @@ impl FsmWithStartEnd {
                         }
                     }
                     if !intersection.is_empty() && !difference.is_empty() {
-                        let inter_set: HashSet<i32> =
-                            intersection.iter().copied().collect();
-                        let diff_set: HashSet<i32> =
-                            difference.iter().copied().collect();
-                        let in_working =
-                            working.iter().position(|w| *w == partitions[i]);
+                        let inter_set: HashSet<i32> = intersection.iter().copied().collect();
+                        let diff_set: HashSet<i32> = difference.iter().copied().collect();
+                        let in_working = working.iter().position(|w| *w == partitions[i]);
                         if let Some(pos) = in_working {
                             working[pos] = inter_set.clone();
                             working.push(diff_set.clone());
@@ -1037,8 +970,7 @@ impl FsmWithStartEnd {
                 state_mapping[state as usize] = i as i32;
             }
         }
-        Ok(now_fsm
-            .rebuild_with_mapping(&state_mapping, partitions.len() as i32))
+        Ok(now_fsm.rebuild_with_mapping(&state_mapping, partitions.len() as i32))
     }
 
     /// Renumbers states so the start state becomes 0 and all states are
@@ -1068,13 +1000,10 @@ impl FsmWithStartEnd {
     /// Renders this machine the way the C++ `ToString` does (used by tests as the oracle).
     #[must_use]
     pub fn to_string_repr(&self) -> String {
-        let mut reachable: Vec<i32> =
-            self.reachable_states().into_iter().collect();
+        let mut reachable: Vec<i32> = self.reachable_states().into_iter().collect();
         reachable.sort_unstable();
-        let ends: Vec<String> = (0..self.num_states())
-            .filter(|&i| self.is_end_state(i))
-            .map(|i| i.to_string())
-            .collect();
+        let ends: Vec<String> =
+            (0..self.num_states()).filter(|&i| self.is_end_state(i)).map(|i| i.to_string()).collect();
         format!(
             "FSM(num_states={}, start={}, end=[{}], edges={})",
             self.num_states(),

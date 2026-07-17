@@ -1,15 +1,19 @@
 //! The Earley parser — a port of `EarleyParser` in `cpp/earley_parser.cc`.
 //!
-//! The parser walks the per-rule FSMs of an optimized [`Grammar`]: every rule body is
-//! compiled to an FSM (so every live [`ParserState`] has `rule_id >= 0`), and the parser
-//! scans byte/token edges, predicts referenced rules, and completes finished rules in the
-//! classic Earley three-phase loop. The IR-based path of the C++ (`rule_id == -1`) is dead
-//! once a grammar is optimized and is therefore not ported.
+//! The parser walks the per-rule FSMs of an optimized [`Grammar`]: most live
+//! [`ParserState`] values have `rule_id >= 0` and scan FSM byte/token edges. Lookahead
+//! assertions use the IR path (`rule_id == -1`) with `sequence_id` pointing at the
+//! assertion expression; the parser predicts, scans, and completes those states over the
+//! grammar expression tree in the classic Earley three-phase loop.
 
 use std::{collections::VecDeque, sync::Arc};
 
 use super::{parser_state::ParserState, repeat_detector::RepeatDetector};
-use crate::{fsm::FsmEdge, grammar::Grammar, support::Compact2dArray};
+use crate::{
+    fsm::FsmEdge,
+    grammar::{Grammar, GrammarExprType},
+    support::{Compact2dArray, handle_utf8_first_byte},
+};
 
 /// An incremental Earley parser over an optimized grammar's per-rule FSMs.
 #[derive(Debug, Clone)]
@@ -45,10 +49,7 @@ impl EarleyParser {
         initial_state: ParserState,
         need_expand: bool,
     ) -> Self {
-        assert!(
-            grammar.is_optimized(),
-            "the grammar is not optimized; optimize it before parsing"
-        );
+        assert!(grammar.is_optimized(), "the grammar is not optimized; optimize it before parsing");
         let init = if initial_state.is_invalid() {
             ParserState::new(
                 grammar.root_rule_id(),
@@ -84,10 +85,7 @@ impl EarleyParser {
     /// Whether the root rule is currently completed (the stop token is acceptable).
     #[must_use]
     pub fn is_completed(&self) -> bool {
-        *self
-            .is_completed
-            .last()
-            .expect("parser always has at least one position")
+        *self.is_completed.last().expect("parser always has at least one position")
     }
 
     /// Advances the parser by one input byte. Returns false (leaving state unchanged) if the
@@ -99,14 +97,11 @@ impl EarleyParser {
         self.tmp_states_visited_in_queue.clear();
         self.tmp_states_to_be_added.clear();
         self.tmp_accept_stop_token = false;
-        let latest: Vec<ParserState> =
-            self.scanable_state_history.back().to_vec();
+        let latest: Vec<ParserState> = self.scanable_state_history.back().to_vec();
         for state in latest {
-            self.advance_fsm(state, ch);
+            self.scan(state, ch);
         }
-        if self.tmp_process_state_queue.is_empty()
-            && self.tmp_states_to_be_added.is_empty()
-        {
+        if self.tmp_process_state_queue.is_empty() && self.tmp_states_to_be_added.is_empty() {
             return false;
         }
         self.process_queue();
@@ -122,14 +117,14 @@ impl EarleyParser {
         self.tmp_states_visited_in_queue.clear();
         self.tmp_states_to_be_added.clear();
         self.tmp_accept_stop_token = false;
-        let latest: Vec<ParserState> =
-            self.scanable_state_history.back().to_vec();
+        let latest: Vec<ParserState> = self.scanable_state_history.back().to_vec();
         for state in latest {
+            if state.rule_id == -1 {
+                continue;
+            }
             self.scan_atomic_token(state, token_id);
         }
-        if self.tmp_process_state_queue.is_empty()
-            && self.tmp_states_to_be_added.is_empty()
-        {
+        if self.tmp_process_state_queue.is_empty() && self.tmp_states_to_be_added.is_empty() {
             return false;
         }
         self.process_queue();
@@ -160,10 +155,7 @@ impl EarleyParser {
     ) {
         self.stop_token_is_accepted = false;
         let count = count as usize;
-        assert!(
-            count < self.rule_id_to_completable_states.len(),
-            "cannot pop more states than exist"
-        );
+        assert!(count < self.rule_id_to_completable_states.len(), "cannot pop more states than exist");
         self.rule_id_to_completable_states.pop_back(count);
         let new_len = self.is_completed.len() - count;
         self.is_completed.truncate(new_len);
@@ -284,19 +276,9 @@ impl EarleyParser {
             return false;
         }
         let body_id = self.grammar.rule(state.rule_id).body_expr_id;
-        let start = self
-            .grammar
-            .per_rule_fsm(state.rule_id)
-            .expect("optimized grammar has a per-rule FSM")
-            .fsm()
-            .start();
-        self.enqueue(ParserState::new(
-            state.rule_id,
-            body_id,
-            start,
-            ParserState::NO_PREV_INPUT_POS,
-            0,
-        ));
+        let start =
+            self.grammar.per_rule_fsm(state.rule_id).expect("optimized grammar has a per-rule FSM").fsm().start();
+        self.enqueue(ParserState::new(state.rule_id, body_id, start, ParserState::NO_PREV_INPUT_POS, 0));
         true
     }
 
@@ -304,16 +286,60 @@ impl EarleyParser {
         &mut self,
         state: ParserState,
     ) -> (bool, bool) {
-        self.expand_next_rule_ref_element_on_fsm(state);
-        let fsm = self
-            .grammar
-            .per_rule_fsm(state.rule_id)
-            .expect("per-rule FSM")
-            .fsm();
-        (
-            fsm.is_scanable_state(state.element_id),
-            fsm.is_end_state(state.element_id),
-        )
+        if state.rule_id != -1 {
+            self.expand_next_rule_ref_element_on_fsm(state);
+            let fsm = self.grammar.per_rule_fsm(state.rule_id).expect("per-rule FSM").fsm();
+            return (fsm.is_scanable_state(state.element_id), fsm.is_end_state(state.element_id));
+        }
+
+        let sequence_id = state.sequence_id;
+        let element_id = state.element_id;
+        let grammar_expr = self.grammar.expr(sequence_id);
+        debug_assert!(grammar_expr.ty == GrammarExprType::Sequence || grammar_expr.ty == GrammarExprType::EmptyStr);
+        if element_id == grammar_expr.len() as i32 {
+            return (false, true);
+        }
+
+        let element_expr_id = grammar_expr.data[element_id as usize];
+        let element_ty = self.grammar.expr(element_expr_id).ty;
+        match element_ty {
+            GrammarExprType::RuleRef => {
+                self.expand_next_rule_ref_element(state, sequence_id, element_expr_id);
+                (false, false)
+            },
+            GrammarExprType::CharacterClassStar => {
+                if state.sub_element_id == 0 {
+                    self.enqueue(ParserState::new(
+                        state.rule_id,
+                        state.sequence_id,
+                        state.element_id + 1,
+                        state.rule_start_pos,
+                        0,
+                    ));
+                }
+                (true, false)
+            },
+            GrammarExprType::Repeat => {
+                let (_, min_repeat_count, max_repeat_count) = self.grammar.expr(element_expr_id).repeat();
+                debug_assert!(state.repeat_count <= max_repeat_count);
+                self.expand_next_rule_ref_element(state, sequence_id, element_expr_id);
+                if state.repeat_count >= min_repeat_count {
+                    self.enqueue(ParserState::new(
+                        state.rule_id,
+                        state.sequence_id,
+                        state.element_id + 1,
+                        state.rule_start_pos,
+                        0,
+                    ));
+                }
+                (false, false)
+            },
+            GrammarExprType::ByteString | GrammarExprType::CharacterClass => (true, false),
+            GrammarExprType::Token | GrammarExprType::ExcludeToken => (false, false),
+            other => {
+                panic!("unsupported element type in IR predict: {:?}", other);
+            },
+        }
     }
 
     #[allow(clippy::too_many_lines)]
@@ -322,18 +348,18 @@ impl EarleyParser {
         state: ParserState,
     ) {
         let grammar = Arc::clone(&self.grammar);
-        let fsm = grammar.per_rule_fsm(state.rule_id).expect("per-rule FSM");
-        let edges: Vec<FsmEdge> =
-            fsm.fsm().fsm().state_edges(state.element_id).to_vec();
+        let fsm = grammar.per_rule_fsm(state.rule_id).unwrap_or_else(|| {
+            panic!(
+                "per-rule FSM missing for rule_id={} num_rules={} optimized={} state={state:?}",
+                state.rule_id,
+                grammar.num_rules(),
+                grammar.is_optimized(),
+            )
+        });
+        let edges: Vec<FsmEdge> = fsm.fsm().fsm().state_edges(state.element_id).to_vec();
         for edge in edges {
             if edge.is_epsilon() {
-                self.enqueue(ParserState::new(
-                    state.rule_id,
-                    state.sequence_id,
-                    edge.target,
-                    state.rule_start_pos,
-                    0,
-                ));
+                self.enqueue(ParserState::new(state.rule_id, state.sequence_id, edge.target, state.rule_start_pos, 0));
                 continue;
             }
 
@@ -345,8 +371,7 @@ impl EarleyParser {
                 is_repeat = false;
             } else if edge.is_repeat_ref() {
                 is_repeat = true;
-                let info =
-                    grammar.complete_fsm().repeat_edge_info(edge.aux_index());
+                let info = grammar.complete_fsm().repeat_edge_info(edge.aux_index());
                 ref_rule_id = info.rule_id();
                 if state.repeat_count >= info.lower() {
                     self.enqueue(ParserState::with_repeat(
@@ -367,34 +392,27 @@ impl EarleyParser {
 
             let mut right_recursion_to_root = false;
             let cur_pos = self.rule_id_to_completable_states.len() as i32 - 1;
-            let target_is_leaf_end = !is_repeat
-                && fsm.fsm().fsm().state_edges(target).is_empty()
-                && fsm.fsm().is_end_state(target);
+            let target_is_leaf_end =
+                !is_repeat && fsm.fsm().fsm().state_edges(target).is_empty() && fsm.fsm().is_end_state(target);
             if target_is_leaf_end && state.rule_start_pos != cur_pos {
                 if state.rule_start_pos == ParserState::NO_PREV_INPUT_POS {
                     right_recursion_to_root = true;
                 } else {
-                    let back: Vec<(i32, ParserState)> =
-                        self.rule_id_to_completable_states.back().to_vec();
-                    let parents: Vec<(i32, ParserState)> = self
-                        .rule_id_to_completable_states
-                        .row(state.rule_start_pos as usize)
-                        .to_vec();
+                    let back: Vec<(i32, ParserState)> = self.rule_id_to_completable_states.back().to_vec();
+                    let parents: Vec<(i32, ParserState)> =
+                        self.rule_id_to_completable_states.row(state.rule_start_pos as usize).to_vec();
                     let mut to_add: Vec<(i32, ParserState)> = Vec::new();
                     for (pid, parent_state) in &parents {
                         if *pid != state.rule_id {
                             continue;
                         }
-                        let in_back = back.iter().any(|(rid, s)| {
-                            *s == *parent_state && *rid == ref_rule_id
-                        });
+                        let in_back = back.iter().any(|(rid, s)| *s == *parent_state && *rid == ref_rule_id);
                         if !in_back {
                             to_add.push((ref_rule_id, *parent_state));
                         }
                     }
                     for item in to_add {
-                        self.rule_id_to_completable_states
-                            .push_in_latest_row(item);
+                        self.rule_id_to_completable_states.push_in_latest_row(item);
                     }
                 }
             } else if is_repeat {
@@ -412,49 +430,22 @@ impl EarleyParser {
             } else {
                 self.rule_id_to_completable_states.push_in_latest_row((
                     ref_rule_id,
-                    ParserState::new(
-                        state.rule_id,
-                        state.sequence_id,
-                        target,
-                        state.rule_start_pos,
-                        0,
-                    ),
+                    ParserState::new(state.rule_id, state.sequence_id, target, state.rule_start_pos, 0),
                 ));
             }
 
-            if !is_repeat
-                && grammar
-                    .allow_empty_rule_ids()
-                    .binary_search(&ref_rule_id)
-                    .is_ok()
-            {
-                self.enqueue(ParserState::new(
-                    state.rule_id,
-                    state.sequence_id,
-                    target,
-                    state.rule_start_pos,
-                    0,
-                ));
+            if !is_repeat && grammar.allow_empty_rule_ids().binary_search(&ref_rule_id).is_ok() {
+                self.enqueue(ParserState::new(state.rule_id, state.sequence_id, target, state.rule_start_pos, 0));
             }
 
             let ref_body_id = grammar.rule(ref_rule_id).body_expr_id;
-            let ref_start = grammar
-                .per_rule_fsm(ref_rule_id)
-                .expect("per-rule FSM")
-                .fsm()
-                .start();
+            let ref_start = grammar.per_rule_fsm(ref_rule_id).expect("per-rule FSM").fsm().start();
             let new_start_pos = if right_recursion_to_root {
                 ParserState::NO_PREV_INPUT_POS
             } else {
                 self.rule_id_to_completable_states.len() as i32 - 1
             };
-            self.enqueue(ParserState::new(
-                ref_rule_id,
-                ref_body_id,
-                ref_start,
-                new_start_pos,
-                0,
-            ));
+            self.enqueue(ParserState::new(ref_rule_id, ref_body_id, ref_start, new_start_pos, 0));
         }
     }
 
@@ -467,26 +458,53 @@ impl EarleyParser {
             return;
         }
         let grammar = Arc::clone(&self.grammar);
-        let parents: Vec<(i32, ParserState)> = self
-            .rule_id_to_completable_states
-            .row(state.rule_start_pos as usize)
-            .to_vec();
+        let parents: Vec<(i32, ParserState)> =
+            self.rule_id_to_completable_states.row(state.rule_start_pos as usize).to_vec();
         for (ref_id, parent_state) in parents {
             if ref_id != state.rule_id {
                 continue;
             }
-            let parent_fsm = grammar
-                .per_rule_fsm(parent_state.rule_id)
-                .expect("per-rule FSM");
+            if parent_state.rule_id == -1 {
+                let parent_expr = grammar.expr(parent_state.sequence_id);
+                let element_expr = grammar.expr(parent_expr.data[parent_state.element_id as usize]);
+                debug_assert!(
+                    element_expr.ty == GrammarExprType::RuleRef || element_expr.ty == GrammarExprType::Repeat
+                );
+                if element_expr.ty == GrammarExprType::RuleRef {
+                    self.enqueue(ParserState::new(
+                        parent_state.rule_id,
+                        parent_state.sequence_id,
+                        parent_state.element_id + 1,
+                        parent_state.rule_start_pos,
+                        0,
+                    ));
+                    continue;
+                }
+                debug_assert_eq!(element_expr.ty, GrammarExprType::Repeat);
+                let (_, min_repeat_count, max_repeat_count) = element_expr.repeat();
+                let mut new_state = parent_state;
+                new_state.repeat_count += 1;
+                if new_state.repeat_count >= min_repeat_count {
+                    self.enqueue(ParserState::new(
+                        parent_state.rule_id,
+                        parent_state.sequence_id,
+                        parent_state.element_id + 1,
+                        parent_state.rule_start_pos,
+                        0,
+                    ));
+                }
+                if new_state.repeat_count < max_repeat_count {
+                    self.enqueue(new_state);
+                }
+                continue;
+            }
+            let parent_fsm = grammar.per_rule_fsm(parent_state.rule_id).expect("per-rule FSM");
             let mut handled_as_repeat = false;
-            for edge in
-                parent_fsm.fsm().fsm().state_edges(parent_state.element_id)
-            {
+            for edge in parent_fsm.fsm().fsm().state_edges(parent_state.element_id) {
                 if !edge.is_repeat_ref() {
                     continue;
                 }
-                let info =
-                    grammar.complete_fsm().repeat_edge_info(edge.aux_index());
+                let info = grammar.complete_fsm().repeat_edge_info(edge.aux_index());
                 if info.rule_id() != ref_id {
                     continue;
                 }
@@ -520,16 +538,292 @@ impl EarleyParser {
         }
     }
 
+    fn scan(
+        &mut self,
+        state: ParserState,
+        ch: u8,
+    ) {
+        debug_assert!(state.rule_id == -1 || self.grammar.per_rule_fsm(state.rule_id).is_some());
+        if state.rule_id == -1 {
+            let sequence_id = state.sequence_id;
+            let element_id = state.element_id;
+            let element_expr_id = self.grammar.expr(sequence_id).data[element_id as usize];
+            let element_ty = self.grammar.expr(element_expr_id).ty;
+            match element_ty {
+                GrammarExprType::ByteString => {
+                    self.advance_byte_string(state, ch, element_expr_id);
+                },
+                GrammarExprType::CharacterClass => {
+                    self.advance_character_class(state, ch, element_expr_id);
+                },
+                GrammarExprType::CharacterClassStar => {
+                    self.advance_character_class_star(state, ch, element_expr_id);
+                },
+                other => {
+                    panic!("unsupported element type in IR scan: {:?}", other);
+                },
+            }
+        } else {
+            self.advance_fsm(state, ch);
+        }
+    }
+
+    fn expand_next_rule_ref_element(
+        &mut self,
+        state: ParserState,
+        sequence_id: i32,
+        sub_element_expr_id: i32,
+    ) {
+        let grammar = Arc::clone(&self.grammar);
+        let grammar_expr = grammar.expr(sequence_id);
+        let sub_grammar_expr = grammar.expr(sub_element_expr_id);
+        debug_assert_eq!(grammar_expr.ty, GrammarExprType::Sequence);
+        debug_assert!(
+            sub_grammar_expr.ty == GrammarExprType::RuleRef || sub_grammar_expr.ty == GrammarExprType::Repeat
+        );
+        let ref_rule_id = sub_grammar_expr.data[0];
+
+        let mut right_recursion_to_root = false;
+        let cur_pos = self.rule_id_to_completable_states.len() as i32 - 1;
+        if state.element_id != grammar_expr.len() as i32 - 1
+            || sub_grammar_expr.ty == GrammarExprType::Repeat
+            || state.rule_start_pos == cur_pos
+        {
+            self.rule_id_to_completable_states.push_in_latest_row((ref_rule_id, state));
+        } else if state.rule_start_pos == ParserState::NO_PREV_INPUT_POS {
+            right_recursion_to_root = true;
+        } else {
+            let back: Vec<(i32, ParserState)> = self.rule_id_to_completable_states.back().to_vec();
+            let parents: Vec<(i32, ParserState)> =
+                self.rule_id_to_completable_states.row(state.rule_start_pos as usize).to_vec();
+            let mut to_add: Vec<(i32, ParserState)> = Vec::new();
+            for (pid, parent_state) in &parents {
+                if *pid != state.rule_id {
+                    continue;
+                }
+                let in_back = back.iter().any(|(rid, s)| *s == *parent_state && *rid == ref_rule_id);
+                if !in_back {
+                    to_add.push((ref_rule_id, *parent_state));
+                }
+            }
+            for item in to_add {
+                self.rule_id_to_completable_states.push_in_latest_row(item);
+            }
+        }
+
+        if grammar.allow_empty_rule_ids().binary_search(&ref_rule_id).is_ok() {
+            self.enqueue(ParserState::new(
+                state.rule_id,
+                state.sequence_id,
+                state.element_id + 1,
+                state.rule_start_pos,
+                0,
+            ));
+        }
+
+        let ref_body_id = grammar.rule(ref_rule_id).body_expr_id;
+        let ref_start = grammar.per_rule_fsm(ref_rule_id).expect("per-rule FSM").fsm().start();
+        let new_start_pos = if right_recursion_to_root {
+            ParserState::NO_PREV_INPUT_POS
+        } else {
+            self.rule_id_to_completable_states.len() as i32 - 1
+        };
+        self.enqueue(ParserState::new(ref_rule_id, ref_body_id, ref_start, new_start_pos, 0));
+    }
+
+    fn advance_byte_string(
+        &mut self,
+        state: ParserState,
+        ch: u8,
+        expr_id: i32,
+    ) {
+        let sub_rule_len = self.grammar.expr(expr_id).len() as i32;
+        let expected = self.grammar.expr(expr_id).data[state.sub_element_id as usize] as u8;
+        debug_assert_eq!(self.grammar.expr(expr_id).ty, GrammarExprType::ByteString);
+        debug_assert!(sub_rule_len > state.sub_element_id);
+        if expected == ch {
+            let mut new_state = state;
+            new_state.sub_element_id += 1;
+            if new_state.sub_element_id == sub_rule_len {
+                new_state.element_id += 1;
+                new_state.sub_element_id = 0;
+                self.enqueue(new_state);
+            } else {
+                self.enqueue_without_processing(new_state);
+            }
+        }
+    }
+
+    fn advance_character_class(
+        &mut self,
+        state: ParserState,
+        ch: u8,
+        expr_id: i32,
+    ) {
+        let class_data: Vec<i32> = self.grammar.expr(expr_id).data.to_vec();
+        debug_assert_eq!(self.grammar.expr(expr_id).ty, GrammarExprType::CharacterClass);
+        let is_negative = class_data[0] != 0;
+
+        if state.sub_element_id > 0 {
+            if (ch & 0xC0) == 0x80 {
+                let mut new_state = state;
+                new_state.sub_element_id -= 1;
+                new_state.partial_codepoint = (new_state.partial_codepoint << 6) | i32::from(ch & 0x3F);
+
+                if new_state.sub_element_id == 0 {
+                    let matches_range = class_data[1..].chunks_exact(2).any(|range| {
+                        new_state.partial_codepoint >= range[0] && new_state.partial_codepoint <= range[1]
+                    });
+                    if is_negative {
+                        if !matches_range {
+                            new_state.element_id += 1;
+                            new_state.partial_codepoint = 0;
+                            self.enqueue(new_state);
+                        }
+                    } else if matches_range {
+                        new_state.element_id += 1;
+                        new_state.partial_codepoint = 0;
+                        self.enqueue(new_state);
+                    }
+                } else {
+                    let remaining_bytes = new_state.sub_element_id;
+                    let min_codepoint = new_state.partial_codepoint << (6 * remaining_bytes);
+                    let max_codepoint = min_codepoint | ((1 << (6 * remaining_bytes)) - 1);
+                    let could_match = class_data[1..]
+                        .chunks_exact(2)
+                        .any(|range| max_codepoint >= range[0] && min_codepoint <= range[1]);
+                    let should_continue = is_negative || could_match;
+                    if should_continue {
+                        self.enqueue_without_processing(new_state);
+                    }
+                }
+            }
+            return;
+        }
+
+        if !ch.is_ascii() {
+            let Some((num_bytes, partial)) = handle_utf8_first_byte(ch) else {
+                return;
+            };
+            debug_assert!(num_bytes > 1);
+            let min_codepoint = partial << (6 * (num_bytes as i32 - 1));
+            let max_codepoint = min_codepoint | ((1 << (6 * (num_bytes as i32 - 1))) - 1);
+            let could_match =
+                class_data[1..].chunks_exact(2).any(|range| max_codepoint >= range[0] && min_codepoint <= range[1]);
+            let should_continue = is_negative || could_match;
+            if should_continue {
+                let mut new_state = state;
+                new_state.sub_element_id = num_bytes as i32 - 1;
+                new_state.partial_codepoint = partial;
+                self.enqueue_without_processing(new_state);
+            }
+            return;
+        }
+
+        for range in class_data[1..].chunks_exact(2) {
+            if range[0] as u8 <= ch && ch <= range[1] as u8 {
+                if !is_negative {
+                    let mut new_state = state;
+                    new_state.element_id += 1;
+                    new_state.sub_element_id = 0;
+                    self.enqueue(new_state);
+                }
+                return;
+            }
+        }
+        if is_negative {
+            let mut new_state = state;
+            new_state.element_id += 1;
+            new_state.sub_element_id = 0;
+            self.enqueue(new_state);
+        }
+    }
+
+    fn advance_character_class_star(
+        &mut self,
+        state: ParserState,
+        ch: u8,
+        expr_id: i32,
+    ) {
+        let class_data: Vec<i32> = self.grammar.expr(expr_id).data.to_vec();
+        debug_assert_eq!(self.grammar.expr(expr_id).ty, GrammarExprType::CharacterClassStar);
+        let is_negative = class_data[0] != 0;
+
+        if state.sub_element_id > 0 {
+            if (ch & 0xC0) == 0x80 {
+                let mut new_state = state;
+                new_state.sub_element_id -= 1;
+                new_state.partial_codepoint = (new_state.partial_codepoint << 6) | i32::from(ch & 0x3F);
+
+                if new_state.sub_element_id == 0 {
+                    let matches_range = class_data[1..].chunks_exact(2).any(|range| {
+                        new_state.partial_codepoint >= range[0] && new_state.partial_codepoint <= range[1]
+                    });
+                    if is_negative {
+                        if !matches_range {
+                            new_state.partial_codepoint = 0;
+                            self.enqueue(new_state);
+                        }
+                    } else if matches_range {
+                        new_state.partial_codepoint = 0;
+                        self.enqueue(new_state);
+                    }
+                } else {
+                    let remaining_bytes = new_state.sub_element_id;
+                    let min_codepoint = new_state.partial_codepoint << (6 * remaining_bytes);
+                    let max_codepoint = min_codepoint | ((1 << (6 * remaining_bytes)) - 1);
+                    let could_match = class_data[1..]
+                        .chunks_exact(2)
+                        .any(|range| max_codepoint >= range[0] && min_codepoint <= range[1]);
+                    let should_continue = is_negative || could_match;
+                    if should_continue {
+                        self.enqueue_without_processing(new_state);
+                    }
+                }
+            }
+            return;
+        }
+
+        if !ch.is_ascii() {
+            let Some((num_bytes, partial)) = handle_utf8_first_byte(ch) else {
+                return;
+            };
+            debug_assert!(num_bytes > 1);
+            let min_codepoint = partial << (6 * (num_bytes as i32 - 1));
+            let max_codepoint = min_codepoint | ((1 << (6 * (num_bytes as i32 - 1))) - 1);
+            let could_match =
+                class_data[1..].chunks_exact(2).any(|range| max_codepoint >= range[0] && min_codepoint <= range[1]);
+            let should_continue = is_negative || could_match;
+            if should_continue {
+                let mut new_state = state;
+                new_state.sub_element_id = num_bytes as i32 - 1;
+                new_state.partial_codepoint = partial;
+                self.enqueue_without_processing(new_state);
+            }
+            return;
+        }
+
+        for range in class_data[1..].chunks_exact(2) {
+            if range[0] as u8 <= ch && ch <= range[1] as u8 {
+                if !is_negative {
+                    self.enqueue(state);
+                }
+                return;
+            }
+        }
+        if is_negative {
+            self.enqueue(state);
+        }
+    }
+
     fn advance_fsm(
         &mut self,
         state: ParserState,
         ch: u8,
     ) {
         let grammar = Arc::clone(&self.grammar);
-        let current =
-            grammar.per_rule_fsm(state.rule_id).expect("per-rule FSM");
-        let edges: Vec<FsmEdge> =
-            current.fsm().fsm().state_edges(state.element_id).to_vec();
+        let current = grammar.per_rule_fsm(state.rule_id).expect("per-rule FSM");
+        let edges: Vec<FsmEdge> = current.fsm().fsm().state_edges(state.element_id).to_vec();
         let value = i32::from(ch);
         for edge in edges {
             if !edge.is_char_range() || value < edge.min || value > edge.max {
@@ -547,23 +841,13 @@ impl EarleyParser {
         token_id: i32,
     ) {
         let grammar = Arc::clone(&self.grammar);
-        let current =
-            grammar.per_rule_fsm(state.rule_id).expect("per-rule FSM");
-        let edges: Vec<FsmEdge> =
-            current.fsm().fsm().state_edges(state.element_id).to_vec();
+        let current = grammar.per_rule_fsm(state.rule_id).expect("per-rule FSM");
+        let edges: Vec<FsmEdge> = current.fsm().fsm().state_edges(state.element_id).to_vec();
         for edge in edges {
             let matched = if edge.is_token() {
-                current
-                    .fsm()
-                    .fsm()
-                    .token_edge_info(edge.aux_index())
-                    .contains(token_id)
+                current.fsm().fsm().token_edge_info(edge.aux_index()).contains(token_id)
             } else if edge.is_exclude_token() {
-                current
-                    .fsm()
-                    .fsm()
-                    .exclude_token_edge_info(edge.aux_index())
-                    .accepts(token_id)
+                current.fsm().fsm().exclude_token_edge_info(edge.aux_index()).accepts(token_id)
             } else {
                 false
             };
@@ -584,10 +868,7 @@ impl EarleyParser {
         target: i32,
     ) {
         let f = current.fsm();
-        if !f.is_non_terminal_state(target)
-            && !f.is_end_state(target)
-            && f.is_scanable_state(target)
-        {
+        if !f.is_non_terminal_state(target) && !f.is_end_state(target) && f.is_scanable_state(target) {
             self.enqueue_without_processing(new_state);
         } else {
             self.enqueue(new_state);

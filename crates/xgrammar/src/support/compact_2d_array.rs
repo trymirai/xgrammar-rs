@@ -1,6 +1,7 @@
 //! Compressed-sparse-row (CSR) 2D array — a port of `cpp/support/compact_2d_array.h`.
 
 use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
 
 /// A 2D array stored in Compressed Sparse Row (CSR) format: every row may have a
 /// different length, and all rows live contiguously in one backing buffer.
@@ -71,9 +72,7 @@ impl<T> Compact2dArray<T> {
         if indptr.windows(2).any(|w| w[0] > w[1]) {
             return Err(Compact2dArrayError::NotMonotonic);
         }
-        if *indptr.last().expect("indptr is non-empty here") as usize
-            != data.len()
-        {
+        if *indptr.last().expect("indptr is non-empty here") as usize != data.len() {
             return Err(Compact2dArrayError::BadEnd);
         }
         Ok(Self {
@@ -178,8 +177,7 @@ impl<T> Compact2dArray<T> {
         assert!(cnt <= self.len(), "cannot pop more rows than exist");
         let new_len = self.indptr.len() - cnt;
         self.indptr.truncate(new_len);
-        let new_data_len =
-            *self.indptr.last().expect("indptr keeps its leading 0") as usize;
+        let new_data_len = *self.indptr.last().expect("indptr keeps its leading 0") as usize;
         self.data.truncate(new_data_len);
     }
 }
@@ -256,5 +254,39 @@ impl<T> Compact2dArray<T> {
         assert!(!self.is_empty(), "cannot push into an empty Compact2dArray");
         self.data.push(new_data);
         *self.indptr.last_mut().expect("non-empty") += 1;
+    }
+}
+
+impl Compact2dArray<i32> {
+    /// Serializes in the C++ reflection form `{"data_":[...],"indptr_":[...]}`.
+    #[must_use]
+    pub fn serialize_json_value(&self) -> Value {
+        json!({
+            "data_": self.data,
+            "indptr_": self.indptr,
+        })
+    }
+
+    /// Deserializes the C++ reflection form.
+    ///
+    /// # Errors
+    /// Returns an error string when the JSON shape is invalid.
+    pub fn deserialize_json_value(value: &Value) -> Result<Self, String> {
+        let obj = value.as_object().ok_or_else(|| "compact 2d array expects a JSON object".to_owned())?;
+        let data = obj
+            .get("data_")
+            .and_then(Value::as_array)
+            .ok_or_else(|| "missing compact 2d array data_".to_owned())?
+            .iter()
+            .map(|v| v.as_i64().map(|n| n as i32).ok_or_else(|| "data_ elements must be integers".to_owned()))
+            .collect::<Result<Vec<_>, _>>()?;
+        let indptr = obj
+            .get("indptr_")
+            .and_then(Value::as_array)
+            .ok_or_else(|| "missing compact 2d array indptr_".to_owned())?
+            .iter()
+            .map(|v| v.as_i64().map(|n| n as i32).ok_or_else(|| "indptr_ elements must be integers".to_owned()))
+            .collect::<Result<Vec<_>, _>>()?;
+        Self::from_data_and_indptr(data, indptr).map_err(|e| e.to_string())
     }
 }

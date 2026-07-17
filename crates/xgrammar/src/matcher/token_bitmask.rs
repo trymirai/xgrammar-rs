@@ -8,6 +8,27 @@
 /// Bits per bitmask word.
 const BITS_PER_WORD: i32 = 32;
 
+/// DLPack-compatible int32 type descriptor for token bitmasks (the C++ `GetBitmaskDLType`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BitmaskDlType {
+    /// DLDataType code: `kDLInt` = 0.
+    pub code: u8,
+    /// Bits per element.
+    pub bits: u8,
+    /// Lanes (always 1).
+    pub lanes: u16,
+}
+
+/// The bitmask DLPack dtype: signed 32-bit integer, one lane.
+#[must_use]
+pub fn get_bitmask_dl_type() -> BitmaskDlType {
+    BitmaskDlType {
+        code: 0,
+        bits: 32,
+        lanes: 1,
+    }
+}
+
 /// The number of `i32` words needed to hold `vocab_size` bits: `ceil(vocab_size / 32)`.
 #[must_use]
 pub fn get_bitmask_size(vocab_size: i32) -> i32 {
@@ -99,13 +120,45 @@ pub fn apply_token_bitmask_inplace_cpu(
     bitmask: &[i32],
     vocab_size: i32,
 ) {
-    assert!(
-        logits.len() >= vocab_size as usize,
-        "logits shorter than vocab size"
-    );
-    for token in 0..vocab_size {
-        if !bit_is_set(bitmask, token) {
-            logits[token as usize] = f32::NEG_INFINITY;
+    apply_token_bitmask_inplace_cpu_batch(logits, bitmask, vocab_size, 1, None);
+}
+
+/// Applies bitmask rows to a batched float32 logits buffer in place.
+///
+/// Both `logits` and `bitmask` are row-major. When `indices` is `None`, every batch row
+/// `0..batch_size` is masked (batch sizes must match). When `indices` is `Some`, each
+/// index selects the same row in both tensors (matching C++ `ApplyTokenBitmaskInplaceCPU`).
+///
+/// # Panics
+/// Panics if shapes are inconsistent with `vocab_size` / `batch_size` / `indices`.
+pub fn apply_token_bitmask_inplace_cpu_batch(
+    logits: &mut [f32],
+    bitmask: &[i32],
+    vocab_size: i32,
+    batch_size: i32,
+    indices: Option<&[i32]>,
+) {
+    let words = get_bitmask_size(vocab_size) as usize;
+    let vocab = vocab_size as usize;
+    let batch = batch_size as usize;
+    assert!(logits.len() >= batch * vocab, "logits shorter than batch × vocab_size");
+
+    let rows: Vec<usize> = if let Some(idx) = indices {
+        idx.iter().map(|&i| i as usize).collect()
+    } else {
+        assert_eq!(bitmask.len(), batch * words, "when indices is None, bitmask batch must match logits batch");
+        (0..batch).collect()
+    };
+
+    for &row_idx in &rows {
+        assert!(row_idx < batch, "batch index out of range");
+        assert!((row_idx + 1) * words <= bitmask.len(), "bitmask row out of range");
+        let bm = &bitmask[row_idx * words..(row_idx + 1) * words];
+        let logits_row = &mut logits[row_idx * vocab..(row_idx + 1) * vocab];
+        for token in 0..vocab_size {
+            if !bit_is_set(bm, token) {
+                logits_row[token as usize] = f32::NEG_INFINITY;
+            }
         }
     }
 }

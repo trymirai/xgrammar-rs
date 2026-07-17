@@ -6,14 +6,10 @@
 //! FSM builder, leaving the grammar marked optimized and ready for the Earley parser.
 
 use super::{
-    allow_empty_rule_analyzer::allow_empty_rule_ids,
-    byte_string_fuser::byte_string_fuser,
-    dead_code_eliminator::dead_code_eliminator,
-    grammar_fsm_builder::GrammarFsmBuilder,
-    lookahead_assertion_analyzer::lookahead_assertion_analyzer,
-    repetition_normalizer::repetition_normalizer,
-    repetition_range_expander::repetition_range_expander,
-    rule_inliner::rule_inliner,
+    allow_empty_rule_analyzer::allow_empty_rule_ids, byte_string_fuser::byte_string_fuser,
+    dead_code_eliminator::dead_code_eliminator, grammar_fsm_builder::GrammarFsmBuilder,
+    lookahead_assertion_analyzer::lookahead_assertion_analyzer, repetition_normalizer::repetition_normalizer,
+    repetition_range_expander::repetition_range_expander, rule_inliner::rule_inliner,
 };
 use crate::grammar::Grammar;
 

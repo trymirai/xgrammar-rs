@@ -6,11 +6,9 @@ use serde_json::{Map, Value};
 use super::{
     structural_tag_error::StructuralTagError,
     structural_tag_format::{
-        AnyTextFormat, AnyTokensFormat, ConstStringFormat, DispatchFormat,
-        ExcludeTokenFormat, Format, GrammarFormat, IntOrString,
-        JsonSchemaFormat, OptionalFormat, OrFormat, PlusFormat, RegexFormat,
-        RepeatFormat, SequenceFormat, StarFormat, TagBegin, TagEnd, TagFormat,
-        TagsWithSeparatorFormat, TokenDispatchFormat, TokenFormat,
+        AnyTextFormat, AnyTokensFormat, ConstStringFormat, DispatchFormat, ExcludeTokenFormat, Format, GrammarFormat,
+        IntOrString, JsonSchemaFormat, OptionalFormat, OrFormat, PlusFormat, RegexFormat, RepeatFormat, SequenceFormat,
+        StarFormat, TagBegin, TagEnd, TagFormat, TagsWithSeparatorFormat, TokenDispatchFormat, TokenFormat,
         TokenTriggeredTagsFormat, TriggeredTagsFormat,
     },
 };
@@ -22,11 +20,9 @@ fn err<T>(message: &str) -> Result<T, Ist> {
 }
 
 /// Parses a structural-tag JSON string into its [`Format`].
-pub(crate) fn parse_structural_tag(
-    json: &str
-) -> Result<Format, StructuralTagError> {
-    let value: Value = serde_json::from_str(json)
-        .map_err(|e| Ist::InvalidJson(format!("Failed to parse JSON: {e}")))?;
+pub(crate) fn parse_structural_tag(json: &str) -> Result<Format, StructuralTagError> {
+    let value: Value =
+        serde_json::from_str(json).map_err(|e| Ist::InvalidJson(format!("Failed to parse JSON: {e}")))?;
     parse_structural_tag_value(&value)
 }
 
@@ -36,9 +32,7 @@ fn parse_structural_tag_value(value: &Value) -> Result<Format, Ist> {
     };
     if let Some(ty) = obj.get("type") {
         if ty.as_str() != Some("structural_tag") {
-            return err(
-                "Structural tag's type must be a string \"structural_tag\"",
-            );
+            return err("Structural tag's type must be a string \"structural_tag\"");
         }
     }
     let Some(format) = obj.get("format") else {
@@ -57,19 +51,13 @@ fn parse_format(value: &Value) -> Result<Format, Ist> {
         };
         return match ty {
             "const_string" => Ok(Format::ConstString(parse_const_string(obj)?)),
-            "json_schema" => {
-                Ok(Format::JsonSchema(parse_json_schema(obj, None)?))
-            },
+            "json_schema" => Ok(Format::JsonSchema(parse_json_schema(obj, None)?)),
             "any_text" => Ok(Format::AnyText(parse_any_text(obj)?)),
             "sequence" => Ok(Format::Sequence(parse_sequence(obj)?)),
             "or" => Ok(Format::Or(parse_or(obj)?)),
             "tag" => Ok(Format::Tag(parse_tag(obj)?)),
-            "triggered_tags" => {
-                Ok(Format::TriggeredTags(parse_triggered_tags(obj)?))
-            },
-            "tags_with_separator" => {
-                Ok(Format::TagsWithSeparator(parse_tags_with_separator(obj)?))
-            },
+            "triggered_tags" => Ok(Format::TriggeredTags(parse_triggered_tags(obj)?)),
+            "tags_with_separator" => Ok(Format::TagsWithSeparator(parse_tags_with_separator(obj)?)),
             "optional" => Ok(Format::Optional(OptionalFormat {
                 content: Box::new(parse_content(obj, "Optional")?),
             })),
@@ -80,27 +68,16 @@ fn parse_format(value: &Value) -> Result<Format, Ist> {
                 content: Box::new(parse_content(obj, "Star")?),
             })),
             "repeat" => Ok(Format::Repeat(parse_repeat(obj)?)),
-            "qwen_xml_parameter" => Ok(Format::JsonSchema(parse_json_schema(
-                obj,
-                Some("qwen_xml"),
-            )?)),
+            "qwen_xml_parameter" => Ok(Format::JsonSchema(parse_json_schema(obj, Some("qwen_xml"))?)),
             "grammar" => Ok(Format::Grammar(parse_grammar(obj)?)),
             "regex" => Ok(Format::Regex(parse_regex(obj)?)),
             "token" => Ok(Format::Token(parse_token(obj)?)),
-            "exclude_token" => {
-                Ok(Format::ExcludeToken(parse_exclude_token(obj)?))
-            },
+            "exclude_token" => Ok(Format::ExcludeToken(parse_exclude_token(obj)?)),
             "any_tokens" => Ok(Format::AnyTokens(parse_any_tokens(obj)?)),
-            "token_triggered_tags" => {
-                Ok(Format::TokenTriggeredTags(parse_token_triggered_tags(obj)?))
-            },
+            "token_triggered_tags" => Ok(Format::TokenTriggeredTags(parse_token_triggered_tags(obj)?)),
             "dispatch" => Ok(Format::Dispatch(parse_dispatch(obj)?)),
-            "token_dispatch" => {
-                Ok(Format::TokenDispatch(parse_token_dispatch(obj)?))
-            },
-            other => Err(Ist::invalid(format!(
-                "Format type not recognized: {other}"
-            ))),
+            "token_dispatch" => Ok(Format::TokenDispatch(parse_token_dispatch(obj)?)),
+            other => Err(Ist::invalid(format!("Format type not recognized: {other}"))),
         };
     }
 
@@ -146,9 +123,7 @@ fn parse_format(value: &Value) -> Result<Format, Ist> {
     Err(Ist::invalid(format!("Invalid format: {value}")))
 }
 
-fn parse_const_string(
-    obj: &Map<String, Value>
-) -> Result<ConstStringFormat, Ist> {
+fn parse_const_string(obj: &Map<String, Value>) -> Result<ConstStringFormat, Ist> {
     match obj.get("value").and_then(Value::as_str) {
         Some(value) => Ok(ConstStringFormat {
             value: value.to_owned(),
@@ -162,24 +137,16 @@ fn parse_json_schema(
     style_override: Option<&str>,
 ) -> Result<JsonSchemaFormat, Ist> {
     let Some(js) = obj.get("json_schema") else {
-        return err(
-            "JSON schema format must have a json_schema field with a object or boolean value",
-        );
+        return err("JSON schema format must have a json_schema field with a object or boolean value");
     };
     if !js.is_object() && !js.is_boolean() {
-        return err(
-            "JSON schema format must have a json_schema field with a object or boolean value",
-        );
+        return err("JSON schema format must have a json_schema field with a object or boolean value");
     }
     let style = if let Some(s) = style_override {
         s.to_owned()
     } else if let Some(s) = obj.get("style").and_then(Value::as_str) {
-        if !["json", "qwen_xml", "minimax_xml", "deepseek_xml", "glm_xml"]
-            .contains(&s)
-        {
-            return err(
-                "style must be \"json\", \"qwen_xml\", \"minimax_xml\", \"deepseek_xml\", or \"glm_xml\"",
-            );
+        if !["json", "qwen_xml", "minimax_xml", "deepseek_xml", "glm_xml"].contains(&s) {
+            return err("style must be \"json\", \"qwen_xml\", \"minimax_xml\", \"deepseek_xml\", or \"glm_xml\"");
         }
         s.to_owned()
     } else {
@@ -193,9 +160,7 @@ fn parse_json_schema(
     let max_whitespace_cnt = match obj.get("max_whitespace_cnt") {
         Some(Value::Null) | None => None,
         Some(Value::Number(value)) => {
-            let Some(value) =
-                value.as_i64().and_then(|v| i32::try_from(v).ok())
-            else {
+            let Some(value) = value.as_i64().and_then(|v| i32::try_from(v).ok()) else {
                 return err("max_whitespace_cnt must be an integer or null");
             };
             Some(value)
@@ -215,9 +180,7 @@ fn parse_json_schema(
 fn parse_any_text(obj: &Map<String, Value>) -> Result<AnyTextFormat, Ist> {
     let Some(excludes) = obj.get("excludes") else {
         if !obj.contains_key("type") {
-            return err(
-                "Any text format should not have any fields other than type",
-            );
+            return err("Any text format should not have any fields other than type");
         }
         return Ok(AnyTextFormat::default());
     };
@@ -227,9 +190,7 @@ fn parse_any_text(obj: &Map<String, Value>) -> Result<AnyTextFormat, Ist> {
     let mut out = Vec::with_capacity(arr.len());
     for e in arr {
         let Some(s) = e.as_str() else {
-            return err(
-                "AnyText format's excluded_strs array must contain strings",
-            );
+            return err("AnyText format's excluded_strs array must contain strings");
         };
         out.push(s.to_owned());
     }
@@ -244,9 +205,7 @@ fn parse_grammar(obj: &Map<String, Value>) -> Result<GrammarFormat, Ist> {
         Some(g) if !g.is_empty() => Ok(GrammarFormat {
             grammar: g.to_owned(),
         }),
-        _ => err(
-            "Grammar format must have a grammar field with a non-empty string",
-        ),
+        _ => err("Grammar format must have a grammar field with a non-empty string"),
     }
 }
 
@@ -255,9 +214,7 @@ fn parse_regex(obj: &Map<String, Value>) -> Result<RegexFormat, Ist> {
         Some(p) if !p.is_empty() => Ok(RegexFormat {
             pattern: p.to_owned(),
         }),
-        _ => err(
-            "Regex format must have a pattern field with a non-empty string",
-        ),
+        _ => err("Regex format must have a pattern field with a non-empty string"),
     }
 }
 
@@ -266,18 +223,14 @@ fn parse_elements(
     kind: &str,
 ) -> Result<Vec<Format>, Ist> {
     let Some(arr) = obj.get("elements").and_then(Value::as_array) else {
-        return Err(Ist::invalid(format!(
-            "{kind} format must have an elements field with an array"
-        )));
+        return Err(Ist::invalid(format!("{kind} format must have an elements field with an array")));
     };
     let mut out = Vec::with_capacity(arr.len());
     for e in arr {
         out.push(parse_format(e)?);
     }
     if out.is_empty() {
-        return Err(Ist::invalid(format!(
-            "{kind} format must have at least one element"
-        )));
+        return Err(Ist::invalid(format!("{kind} format must have at least one element")));
     }
     Ok(out)
 }
@@ -301,9 +254,7 @@ fn parse_content(
     kind: &str,
 ) -> Result<Format, Ist> {
     let Some(content) = obj.get("content") else {
-        return Err(Ist::invalid(format!(
-            "{kind} format must have a content field"
-        )));
+        return Err(Ist::invalid(format!("{kind} format must have a content field")));
     };
     parse_format(content)
 }
@@ -357,9 +308,7 @@ fn parse_tag(obj: &Map<String, Value>) -> Result<TagFormat, Ist> {
     } else if let Some(o) = end_val.as_object() {
         TagEnd::Token(parse_token(o)?)
     } else {
-        return err(
-            "Tag format's end field must be a string or array of strings",
-        );
+        return err("Tag format's end field must be a string or array of strings");
     };
 
     Ok(TagFormat {
@@ -375,9 +324,7 @@ fn parse_bool_field(
 ) -> Result<bool, Ist> {
     match obj.get(key) {
         None => Ok(false),
-        Some(v) => v
-            .as_bool()
-            .ok_or_else(|| Ist::invalid(format!("{key} must be a boolean"))),
+        Some(v) => v.as_bool().ok_or_else(|| Ist::invalid(format!("{key} must be a boolean"))),
     }
 }
 
@@ -399,23 +346,16 @@ fn parse_tags(
     Ok(tags)
 }
 
-fn parse_triggered_tags(
-    obj: &Map<String, Value>
-) -> Result<TriggeredTagsFormat, Ist> {
-    let Some(triggers_arr) = obj.get("triggers").and_then(Value::as_array)
-    else {
-        return err(
-            "Triggered tags format must have a triggers field with an array",
-        );
+fn parse_triggered_tags(obj: &Map<String, Value>) -> Result<TriggeredTagsFormat, Ist> {
+    let Some(triggers_arr) = obj.get("triggers").and_then(Value::as_array) else {
+        return err("Triggered tags format must have a triggers field with an array");
     };
     let mut triggers = Vec::with_capacity(triggers_arr.len());
     for t in triggers_arr {
         match t.as_str() {
             Some(s) if !s.is_empty() => triggers.push(s.to_owned()),
             _ => {
-                return err(
-                    "Triggered tags format's triggers must be non-empty strings",
-                );
+                return err("Triggered tags format's triggers must be non-empty strings");
             },
         }
     }
@@ -430,17 +370,13 @@ fn parse_triggered_tags(
     let mut excludes = Vec::new();
     if let Some(ex) = obj.get("excludes") {
         let Some(arr) = ex.as_array() else {
-            return err(
-                "Triggered tags format should have a excludes field with an array",
-            );
+            return err("Triggered tags format should have a excludes field with an array");
         };
         for e in arr {
             match e.as_str() {
                 Some(s) if !s.is_empty() => excludes.push(s.to_owned()),
                 _ => {
-                    return err(
-                        "Triggered tags format's excluded_strs must be non-empty strings",
-                    );
+                    return err("Triggered tags format's excluded_strs must be non-empty strings");
                 },
             }
         }
@@ -455,18 +391,14 @@ fn parse_triggered_tags(
     })
 }
 
-fn parse_tags_with_separator(
-    obj: &Map<String, Value>
-) -> Result<TagsWithSeparatorFormat, Ist> {
+fn parse_tags_with_separator(obj: &Map<String, Value>) -> Result<TagsWithSeparatorFormat, Ist> {
     let tags = parse_tags(
         obj,
         "Tags with separator format must have a tags field with an array",
         "Tags with separator format's tags must be non-empty",
     )?;
     let Some(separator) = obj.get("separator").and_then(Value::as_str) else {
-        return err(
-            "Tags with separator format's separator field must be a string",
-        );
+        return err("Tags with separator format's separator field must be a string");
     };
     Ok(TagsWithSeparatorFormat {
         tags,
@@ -512,36 +444,26 @@ fn parse_int_or_string_array(
         if v.is_string() {
             let s = v.as_str().unwrap();
             if s.is_empty() {
-                return Err(Ist::invalid(format!(
-                    "{field} string elements must be non-empty"
-                )));
+                return Err(Ist::invalid(format!("{field} string elements must be non-empty")));
             }
             out.push(IntOrString::Str(s.to_owned()));
         } else if let Some(d) = v.as_f64() {
             if d != (d as i32) as f64 {
-                return Err(Ist::invalid(format!(
-                    "{field} elements must be integers, not floats"
-                )));
+                return Err(Ist::invalid(format!("{field} elements must be integers, not floats")));
             }
             let id = d as i32;
             if id < 0 {
-                return Err(Ist::invalid(format!(
-                    "{field} elements must be non-negative integers or strings"
-                )));
+                return Err(Ist::invalid(format!("{field} elements must be non-negative integers or strings")));
             }
             out.push(IntOrString::Int(id));
         } else {
-            return Err(Ist::invalid(format!(
-                "{field} elements must be integers or strings"
-            )));
+            return Err(Ist::invalid(format!("{field} elements must be integers or strings")));
         }
     }
     Ok(out)
 }
 
-fn parse_exclude_token(
-    obj: &Map<String, Value>
-) -> Result<ExcludeTokenFormat, Ist> {
+fn parse_exclude_token(obj: &Map<String, Value>) -> Result<ExcludeTokenFormat, Ist> {
     let exclude_tokens = match obj.get("exclude_tokens") {
         Some(v) => parse_int_or_string_array(v, "exclude_tokens")?,
         None => Vec::new(),
@@ -563,16 +485,11 @@ fn parse_any_tokens(obj: &Map<String, Value>) -> Result<AnyTokensFormat, Ist> {
     })
 }
 
-fn parse_token_triggered_tags(
-    obj: &Map<String, Value>
-) -> Result<TokenTriggeredTagsFormat, Ist> {
+fn parse_token_triggered_tags(obj: &Map<String, Value>) -> Result<TokenTriggeredTagsFormat, Ist> {
     let Some(triggers_val) = obj.get("trigger_tokens") else {
-        return err(
-            "TokenTriggeredTagsFormat must have a trigger_tokens field",
-        );
+        return err("TokenTriggeredTagsFormat must have a trigger_tokens field");
     };
-    let trigger_tokens =
-        parse_int_or_string_array(triggers_val, "trigger_tokens")?;
+    let trigger_tokens = parse_int_or_string_array(triggers_val, "trigger_tokens")?;
     if trigger_tokens.is_empty() {
         return err("trigger_tokens must be non-empty");
     }
@@ -637,13 +554,9 @@ fn parse_dispatch(obj: &Map<String, Value>) -> Result<DispatchFormat, Ist> {
     })
 }
 
-fn parse_token_dispatch(
-    obj: &Map<String, Value>
-) -> Result<TokenDispatchFormat, Ist> {
+fn parse_token_dispatch(obj: &Map<String, Value>) -> Result<TokenDispatchFormat, Ist> {
     let Some(rules_arr) = obj.get("rules").and_then(Value::as_array) else {
-        return err(
-            "TokenTagDispatch format must have a rules field with an array",
-        );
+        return err("TokenTagDispatch format must have a rules field with an array");
     };
     if rules_arr.is_empty() {
         return err("TokenTagDispatch format rules must be non-empty");
@@ -664,9 +577,7 @@ fn parse_token_dispatch(
             }
             IntOrString::Int(d as i32)
         } else {
-            return err(
-                "TokenTagDispatch pair first element must be an integer or string",
-            );
+            return err("TokenTagDispatch pair first element must be an integer or string");
         };
         let content = parse_format(&pair[1])?;
         rules.push((trigger, Box::new(content)));
@@ -706,10 +617,7 @@ fn parse_repeat(obj: &Map<String, Value>) -> Result<RepeatFormat, Ist> {
         max = -1;
     }
     if min > i64::from(i32::MAX) {
-        return Err(Ist::invalid(format!(
-            "Repeat min is too large, must be <= {}",
-            i32::MAX
-        )));
+        return Err(Ist::invalid(format!("Repeat min is too large, must be <= {}", i32::MAX)));
     }
     let content = parse_content(obj, "Repeat")?;
     Ok(RepeatFormat {

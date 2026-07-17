@@ -103,8 +103,7 @@ pub fn intset_complement(
     n: i32,
     excluded: &[i32],
 ) -> Vec<i32> {
-    let mut result =
-        Vec::with_capacity((n as usize).saturating_sub(excluded.len()));
+    let mut result = Vec::with_capacity((n as usize).saturating_sub(excluded.len()));
     let mut it = excluded.iter().peekable();
     for i in 0..n {
         if it.peek() == Some(&&i) {

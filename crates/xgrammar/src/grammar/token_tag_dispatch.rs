@@ -26,18 +26,12 @@ impl Grammar {
         expr_id: i32,
     ) -> TokenTagDispatch {
         let expr = self.expr(expr_id);
-        assert_eq!(
-            expr.ty,
-            GrammarExprType::TokenTagDispatch,
-            "not a token tag dispatch"
-        );
+        assert_eq!(expr.ty, GrammarExprType::TokenTagDispatch, "not a token tag dispatch");
         Self::decode_token_tag_dispatch_data(expr.data)
     }
 
     /// Decodes a token-tag-dispatch payload (the expr data without its type tag).
-    pub(crate) fn decode_token_tag_dispatch_data(
-        data: &[i32]
-    ) -> TokenTagDispatch {
+    pub(crate) fn decode_token_tag_dispatch_data(data: &[i32]) -> TokenTagDispatch {
         let mut pos = 0;
 
         let trigger_count = data[pos] as usize;
@@ -59,11 +53,7 @@ impl Grammar {
             pos += 1;
         }
 
-        debug_assert_eq!(
-            pos,
-            data.len(),
-            "token-tag-dispatch payload length mismatch"
-        );
+        debug_assert_eq!(pos, data.len(), "token-tag-dispatch payload length mismatch");
         TokenTagDispatch {
             trigger_rule_pairs,
             loop_after_dispatch,

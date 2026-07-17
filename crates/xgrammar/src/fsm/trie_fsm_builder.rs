@@ -42,8 +42,7 @@ impl TrieFsmBuilder {
         let mut collected_ends: Vec<i32> = Vec::new();
 
         for pattern in patterns {
-            let end =
-                Self::insert_pattern(&mut fsm, pattern, &ends, allow_overlap)?;
+            let end = Self::insert_pattern(&mut fsm, pattern, &ends, allow_overlap)?;
             ends.insert(end);
             collected_ends.push(end);
         }
@@ -51,12 +50,7 @@ impl TrieFsmBuilder {
         let mut dead_states: HashSet<i32> = HashSet::new();
         if add_back_edges {
             for pattern in excluded_patterns {
-                let end = Self::insert_pattern(
-                    &mut fsm,
-                    pattern,
-                    &ends,
-                    allow_overlap,
-                )?;
+                let end = Self::insert_pattern(&mut fsm, pattern, &ends, allow_overlap)?;
                 ends.insert(end);
                 dead_states.insert(end);
             }
@@ -65,8 +59,7 @@ impl TrieFsmBuilder {
 
             if !dead_states.is_empty() {
                 for state in 0..fsm.num_states() {
-                    fsm.state_edges_mut(state)
-                        .retain(|e| !dead_states.contains(&e.target));
+                    fsm.state_edges_mut(state).retain(|e| !dead_states.contains(&e.target));
                 }
             }
         }
@@ -135,10 +128,7 @@ impl TrieFsmBuilder {
             // Step 2: route every remaining byte back to the start.
             Self::fill_range_edges(&mut edge_set, start);
             // Step 3: install the completed edge list.
-            *fsm.state_edges_mut(i) = edge_set
-                .iter()
-                .map(|(&(min, max), &t)| FsmEdge::new(min, max, t))
-                .collect();
+            *fsm.state_edges_mut(i) = edge_set.iter().map(|(&(min, max), &t)| FsmEdge::new(min, max, t)).collect();
         }
 
         let mut start_set: BTreeMap<(i32, i32), i32> = BTreeMap::new();
@@ -146,10 +136,7 @@ impl TrieFsmBuilder {
             start_set.entry((e.min, e.max)).or_insert(e.target);
         }
         Self::fill_range_edges(&mut start_set, start);
-        *fsm.state_edges_mut(start) = start_set
-            .iter()
-            .map(|(&(min, max), &t)| FsmEdge::new(min, max, t))
-            .collect();
+        *fsm.state_edges_mut(start) = start_set.iter().map(|(&(min, max), &t)| FsmEdge::new(min, max, t)).collect();
     }
 
     /// Fills the gaps between the existing `[min, max]` ranges so the set covers all of

@@ -9,9 +9,7 @@ use std::{
     fmt::Write,
 };
 
-use super::fsm_edge::{
-    ExcludeTokenEdgeRef, FsmEdge, RepeatEdgeRef, TokenEdgeRef, edge_type,
-};
+use super::fsm_edge::{ExcludeTokenEdgeRef, FsmEdge, RepeatEdgeRef, TokenEdgeRef, edge_type};
 use crate::support::escape_codepoint;
 
 /// Sentinel returned by [`Fsm::next_state`] when no transition exists.
@@ -123,8 +121,7 @@ impl Fsm {
                     let c = escape_codepoint(edge.min, &[]);
                     let _ = write!(result, "'{c}'->{}", edge.target);
                 } else if edge.is_rule_ref() {
-                    let _ =
-                        write!(result, "Rule({})->{}", edge.max, edge.target);
+                    let _ = write!(result, "Rule({})->{}", edge.max, edge.target);
                 } else if edge.is_epsilon() {
                     let _ = write!(result, "Eps->{}", edge.target);
                 } else if edge.is_eos() {
@@ -215,11 +212,7 @@ impl Fsm {
         to: i32,
         rule_id: i32,
     ) {
-        self.edges[from as usize].push(FsmEdge::new(
-            edge_type::RULE_REF,
-            rule_id,
-            to,
-        ));
+        self.edges[from as usize].push(FsmEdge::new(edge_type::RULE_REF, rule_id, to));
     }
 
     /// Adds an end-of-string edge.
@@ -249,11 +242,7 @@ impl Fsm {
         );
         let aux_index = self.edge_aux_data.len() as i32;
         self.edge_aux_data.extend_from_slice(&[rule_id, lower, upper]);
-        self.edges[from as usize].push(FsmEdge::new(
-            edge_type::REPEAT_REF,
-            aux_index,
-            to,
-        ));
+        self.edges[from as usize].push(FsmEdge::new(edge_type::REPEAT_REF, aux_index, to));
     }
 
     fn push_token_aux(
@@ -278,11 +267,7 @@ impl Fsm {
     ) {
         debug_assert!(!token_ids.is_empty(), "token set must not be empty");
         let aux_index = self.push_token_aux(token_ids);
-        self.edges[from as usize].push(FsmEdge::new(
-            edge_type::TOKEN,
-            aux_index,
-            to,
-        ));
+        self.edges[from as usize].push(FsmEdge::new(edge_type::TOKEN, aux_index, to));
     }
 
     /// Adds an exclude-token-set edge.
@@ -295,16 +280,9 @@ impl Fsm {
         to: i32,
         token_ids: &[i32],
     ) {
-        debug_assert!(
-            !token_ids.is_empty(),
-            "token exclude set must not be empty"
-        );
+        debug_assert!(!token_ids.is_empty(), "token exclude set must not be empty");
         let aux_index = self.push_token_aux(token_ids);
-        self.edges[from as usize].push(FsmEdge::new(
-            edge_type::EXCLUDE_TOKEN,
-            aux_index,
-            to,
-        ));
+        self.edges[from as usize].push(FsmEdge::new(edge_type::EXCLUDE_TOKEN, aux_index, to));
     }
 
     /// The repeat-edge aux view at `idx`.
@@ -420,12 +398,8 @@ impl Fsm {
         for &state in start_closure {
             for e in &self.edges[state as usize] {
                 let matches = match kind {
-                    EdgeKind::CharRange => {
-                        e.is_char_range() && e.min <= value && e.max >= value
-                    },
-                    EdgeKind::RuleRef => {
-                        e.is_rule_ref() && e.ref_rule_id() == value
-                    },
+                    EdgeKind::CharRange => e.is_char_range() && e.min <= value && e.max >= value,
+                    EdgeKind::RuleRef => e.is_rule_ref() && e.ref_rule_id() == value,
                     EdgeKind::Eos => e.is_eos(),
                     EdgeKind::RepeatRef => e.is_repeat_ref(),
                 };
@@ -443,11 +417,7 @@ impl Fsm {
         &self,
         state: i32,
     ) -> HashSet<i32> {
-        self.edges[state as usize]
-            .iter()
-            .filter(|e| e.is_rule_ref())
-            .map(FsmEdge::ref_rule_id)
-            .collect()
+        self.edges[state as usize].iter().filter(|e| e.is_rule_ref()).map(FsmEdge::ref_rule_id).collect()
     }
 
     /// All states reachable from `from` (following every edge as a plain transition).
@@ -487,11 +457,7 @@ impl Fsm {
                 } else {
                     e.max
                 };
-                self.edges[from as usize].push(FsmEdge::new(
-                    e.min,
-                    max,
-                    e.target + old_num_states,
-                ));
+                self.edges[from as usize].push(FsmEdge::new(e.min, max, e.target + old_num_states));
             }
         }
         old_num_states
@@ -505,20 +471,13 @@ impl Fsm {
         state_mapping: &[i32],
         new_num_states: i32,
     ) -> Fsm {
-        let mut new_edges: Vec<Vec<FsmEdge>> =
-            vec![Vec::new(); new_num_states as usize];
+        let mut new_edges: Vec<Vec<FsmEdge>> = vec![Vec::new(); new_num_states as usize];
         for (i, state_edges) in self.edges.iter().enumerate() {
             for e in state_edges {
-                if e.is_epsilon()
-                    && state_mapping[i] == state_mapping[e.target as usize]
-                {
+                if e.is_epsilon() && state_mapping[i] == state_mapping[e.target as usize] {
                     continue;
                 }
-                new_edges[state_mapping[i] as usize].push(FsmEdge::new(
-                    e.min,
-                    e.max,
-                    state_mapping[e.target as usize],
-                ));
+                new_edges[state_mapping[i] as usize].push(FsmEdge::new(e.min, e.max, state_mapping[e.target as usize]));
             }
         }
         for edges in &mut new_edges {

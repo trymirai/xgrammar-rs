@@ -85,10 +85,7 @@ impl CompactFsmWithStartEnd {
         &self,
         state: i32,
     ) -> bool {
-        self.fsm
-            .state_edges(state)
-            .iter()
-            .any(|e| e.is_char_range() || e.is_token() || e.is_exclude_token())
+        self.fsm.state_edges(state).iter().any(|e| e.is_char_range() || e.is_token() || e.is_exclude_token())
     }
 
     /// Whether `state` has an outgoing rule/epsilon/repeat edge (is non-terminal).
@@ -97,10 +94,13 @@ impl CompactFsmWithStartEnd {
         &self,
         state: i32,
     ) -> bool {
-        self.fsm
-            .state_edges(state)
-            .iter()
-            .any(|e| e.is_rule_ref() || e.is_epsilon() || e.is_repeat_ref())
+        self.fsm.state_edges(state).iter().any(|e| e.is_rule_ref() || e.is_epsilon() || e.is_repeat_ref())
+    }
+
+    /// All states reachable from the start state.
+    #[must_use]
+    pub fn reachable_states(&self) -> HashSet<i32> {
+        self.fsm.reachable_states(&[self.start])
     }
 
     /// Whether the FSM accepts `input` (treating it as a byte sequence).

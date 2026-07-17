@@ -77,11 +77,7 @@ impl IndentManager {
         if !self.enable_newline {
             return format!("\"{}\"", self.separator);
         }
-        format!(
-            "\"{}\\n{}\"",
-            self.separator,
-            " ".repeat(self.total_indent.max(0) as usize)
-        )
+        format!("\"{}\\n{}\"", self.separator, " ".repeat(self.total_indent.max(0) as usize))
     }
 
     pub fn end_separator(&self) -> String {
@@ -91,10 +87,7 @@ impl IndentManager {
         if !self.enable_newline {
             return "\"\"".to_owned();
         }
-        format!(
-            "\"\\n{}\"",
-            " ".repeat((self.total_indent - self.indent).max(0) as usize)
-        )
+        format!("\"\\n{}\"", " ".repeat((self.total_indent - self.indent).max(0) as usize))
     }
 
     pub fn empty_separator(&self) -> String {

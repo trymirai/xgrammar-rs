@@ -49,16 +49,8 @@ impl Grammar {
 
         let loop_after_dispatch = data[data.len() - 2] != 0;
         let exclude_expr = self.expr(data[data.len() - 1]);
-        assert_eq!(
-            exclude_expr.ty,
-            GrammarExprType::Choices,
-            "tag-dispatch excludes must be a choices expr"
-        );
-        let excludes = exclude_expr
-            .data
-            .iter()
-            .map(|&child| self.byte_string(child))
-            .collect();
+        assert_eq!(exclude_expr.ty, GrammarExprType::Choices, "tag-dispatch excludes must be a choices expr");
+        let excludes = exclude_expr.data.iter().map(|&child| self.byte_string(child)).collect();
 
         TagDispatch {
             tag_rule_pairs,

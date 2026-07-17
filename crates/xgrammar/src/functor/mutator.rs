@@ -40,18 +40,14 @@ pub trait GrammarMutator {
         for i in 0..grammar.num_rules() {
             let rule = grammar.rule(i);
             state.cur_rule_name = rule.name.clone();
-            let (body, lookahead) =
-                (rule.body_expr_id, rule.lookahead_assertion_id);
+            let (body, lookahead) = (rule.body_expr_id, rule.lookahead_assertion_id);
             let new_body = self.visit_expr_id(&mut state, body);
             state.builder.update_rule_body(i, new_body);
             let new_lookahead = self.visit_lookahead(&mut state, lookahead);
             state.builder.update_lookahead_assertion(i, new_lookahead);
         }
         let root = grammar.root_rule().name.clone();
-        state
-            .builder
-            .into_grammar(&root)
-            .expect("root rule preserved during mutation")
+        state.builder.into_grammar(&root).expect("root rule preserved during mutation")
     }
 
     /// Visits a lookahead assertion, passing [`NO_EXPR`] through.
@@ -91,27 +87,15 @@ pub trait GrammarMutator {
             GrammarExprType::Sequence => self.visit_sequence(state, data),
             GrammarExprType::Choices => self.visit_choices(state, data),
             GrammarExprType::EmptyStr => self.visit_empty_str(state, ty, data),
-            GrammarExprType::ByteString => {
-                self.visit_byte_string(state, ty, data)
-            },
-            GrammarExprType::CharacterClass => {
-                self.visit_character_class(state, ty, data)
-            },
-            GrammarExprType::CharacterClassStar => {
-                self.visit_character_class_star(state, ty, data)
-            },
+            GrammarExprType::ByteString => self.visit_byte_string(state, ty, data),
+            GrammarExprType::CharacterClass => self.visit_character_class(state, ty, data),
+            GrammarExprType::CharacterClassStar => self.visit_character_class_star(state, ty, data),
             GrammarExprType::RuleRef => self.visit_rule_ref(state, ty, data),
             GrammarExprType::Repeat => self.visit_repeat(state, ty, data),
             GrammarExprType::Token => self.visit_token(state, ty, data),
-            GrammarExprType::ExcludeToken => {
-                self.visit_exclude_token(state, ty, data)
-            },
-            GrammarExprType::TagDispatch => {
-                self.visit_tag_dispatch(state, ty, data)
-            },
-            GrammarExprType::TokenTagDispatch => {
-                self.visit_token_tag_dispatch(state, ty, data)
-            },
+            GrammarExprType::ExcludeToken => self.visit_exclude_token(state, ty, data),
+            GrammarExprType::TagDispatch => self.visit_tag_dispatch(state, ty, data),
+            GrammarExprType::TokenTagDispatch => self.visit_token_tag_dispatch(state, ty, data),
         }
     }
 

@@ -18,7 +18,7 @@ pub fn allow_empty_rule_ids(grammar: &Grammar) -> Vec<i32> {
 }
 
 /// Builds the inverse reference graph: `graph[referee] = [referrers...]`.
-fn rule_ref_graph(grammar: &Grammar) -> Vec<Vec<i32>> {
+pub(crate) fn rule_ref_graph(grammar: &Grammar) -> Vec<Vec<i32>> {
     let n = grammar.num_rules();
     let mut graph: Vec<Vec<i32>> = vec![Vec::new(); n as usize];
     for cur in 0..n {
@@ -54,9 +54,7 @@ fn visit_refs(
             }
         },
         GrammarExprType::TokenTagDispatch => {
-            for (_, rule_id) in
-                grammar.token_tag_dispatch(expr_id).trigger_rule_pairs
-            {
+            for (_, rule_id) in grammar.token_tag_dispatch(expr_id).trigger_rule_pairs {
                 graph[rule_id as usize].push(cur_rule);
             }
         },
@@ -70,10 +68,7 @@ fn find_explicit_empty_rules(
 ) {
     for i in 0..grammar.num_rules() {
         let body = grammar.expr(grammar.rule(i).body_expr_id);
-        if matches!(
-            body.ty,
-            GrammarExprType::TagDispatch | GrammarExprType::TokenTagDispatch
-        ) {
+        if matches!(body.ty, GrammarExprType::TagDispatch | GrammarExprType::TokenTagDispatch) {
             empty.insert(i);
             continue;
         }
@@ -84,9 +79,7 @@ fn find_explicit_empty_rules(
         }
         for &seq_id in body.data {
             let seq = grammar.expr(seq_id);
-            if seq.data.iter().all(|&e| {
-                grammar.expr(e).ty == GrammarExprType::CharacterClassStar
-            }) {
+            if seq.data.iter().all(|&e| grammar.expr(e).ty == GrammarExprType::CharacterClassStar) {
                 empty.insert(i);
                 break;
             }
@@ -109,9 +102,7 @@ fn seq_expr_is_epsilon(
         match element.ty {
             GrammarExprType::RuleRef => empty.contains(&element.data[0]),
             GrammarExprType::CharacterClassStar => true,
-            GrammarExprType::Repeat => {
-                empty.contains(&element.data[0]) || element.data[1] == 0
-            },
+            GrammarExprType::Repeat => empty.contains(&element.data[0]) || element.data[1] == 0,
             _ => false,
         }
     })
@@ -129,10 +120,7 @@ fn find_indirect_empty_rules(
                 continue;
             }
             let body = grammar.expr(grammar.rule(referrer).body_expr_id);
-            let is_epsilon = body
-                .data
-                .iter()
-                .any(|&seq_id| seq_expr_is_epsilon(grammar, seq_id, empty));
+            let is_epsilon = body.data.iter().any(|&seq_id| seq_expr_is_epsilon(grammar, seq_id, empty));
             if is_epsilon {
                 empty.insert(referrer);
                 queue.push_back(referrer);

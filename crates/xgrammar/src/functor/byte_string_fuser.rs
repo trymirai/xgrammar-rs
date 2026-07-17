@@ -33,9 +33,7 @@ impl GrammarMutator for ByteStringFuser {
                 cur_byte_string.extend_from_slice(&edata);
             } else {
                 if !cur_byte_string.is_empty() {
-                    new_ids.push(
-                        state.builder.add_byte_string_bytes(&cur_byte_string),
-                    );
+                    new_ids.push(state.builder.add_byte_string_bytes(&cur_byte_string));
                     cur_byte_string.clear();
                 }
                 new_ids.push(self.visit_expr(state, ty, &edata));

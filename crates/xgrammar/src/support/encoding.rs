@@ -34,11 +34,7 @@ pub fn char_to_utf8_bytes(codepoint: Codepoint) -> Vec<u8> {
     } else if cp <= 0x7FF {
         vec![0xC0 | ((cp >> 6) & 0x1F) as u8, 0x80 | (cp & 0x3F) as u8]
     } else if cp <= 0xFFFF {
-        vec![
-            0xE0 | ((cp >> 12) & 0x0F) as u8,
-            0x80 | ((cp >> 6) & 0x3F) as u8,
-            0x80 | (cp & 0x3F) as u8,
-        ]
+        vec![0xE0 | ((cp >> 12) & 0x0F) as u8, 0x80 | ((cp >> 6) & 0x3F) as u8, 0x80 | (cp & 0x3F) as u8]
     } else {
         vec![
             0xF0 | ((cp >> 18) & 0x07) as u8,
@@ -68,17 +64,12 @@ pub fn handle_utf8_first_byte(byte: u8) -> Option<(usize, Codepoint)> {
 /// # Errors
 /// Returns [`CharHandlingError::InvalidUtf8`] if `bytes` is empty or not valid UTF-8 at
 /// its start.
-pub fn parse_next_utf8(
-    bytes: &[u8]
-) -> Result<(Codepoint, usize), CharHandlingError> {
+pub fn parse_next_utf8(bytes: &[u8]) -> Result<(Codepoint, usize), CharHandlingError> {
     let &first = bytes.first().ok_or(CharHandlingError::InvalidUtf8)?;
-    let (num_bytes, mut res) =
-        handle_utf8_first_byte(first).ok_or(CharHandlingError::InvalidUtf8)?;
+    let (num_bytes, mut res) = handle_utf8_first_byte(first).ok_or(CharHandlingError::InvalidUtf8)?;
     for i in 1..num_bytes {
         match bytes.get(i) {
-            Some(&b) if (b & 0xC0) == 0x80 => {
-                res = (res << 6) | Codepoint::from(b & 0x3F)
-            },
+            Some(&b) if (b & 0xC0) == 0x80 => res = (res << 6) | Codepoint::from(b & 0x3F),
             _ => return Err(CharHandlingError::InvalidUtf8),
         }
     }
@@ -152,9 +143,7 @@ pub fn escape_codepoint(
     codepoint: Codepoint,
     additional_escape_map: &[(Codepoint, &str)],
 ) -> String {
-    if let Some((_, s)) =
-        additional_escape_map.iter().find(|(c, _)| *c == codepoint)
-    {
+    if let Some((_, s)) = additional_escape_map.iter().find(|(c, _)| *c == codepoint) {
         return (*s).to_owned();
     }
     if let Some(s) = default_codepoint_escape(codepoint) {
@@ -188,8 +177,7 @@ pub fn escape_byte(raw_char: u8) -> String {
 /// form.
 #[must_use]
 pub fn escape_bytes(raw: &[u8]) -> String {
-    let codepoints =
-        parse_utf8(raw, true).expect("preserve_invalid_bytes never errors");
+    let codepoints = parse_utf8(raw, true).expect("preserve_invalid_bytes never errors");
     let mut out = String::new();
     for cp in codepoints {
         out.push_str(&escape_codepoint(cp, &[]));
@@ -243,9 +231,7 @@ pub fn parse_next_escaped(
         return Err(CharHandlingError::InvalidEscape);
     }
 
-    if let Some((_, cp)) =
-        additional_escape_map.iter().find(|(c, _)| *c == second)
-    {
+    if let Some((_, cp)) = additional_escape_map.iter().find(|(c, _)| *c == second) {
         return Ok((*cp, 2));
     }
     if let Some(cp) = default_escape_to_codepoint(second) {
@@ -257,9 +243,7 @@ pub fn parse_next_escaped(
             // arbitrary-length hex
             let mut len = 0usize;
             let mut codepoint: Codepoint = 0;
-            while let Some(digit) =
-                data.get(2 + len).copied().and_then(hex_char_to_int)
-            {
+            while let Some(digit) = data.get(2 + len).copied().and_then(hex_char_to_int) {
                 codepoint = codepoint * 16 + digit as Codepoint;
                 len += 1;
             }
@@ -276,11 +260,8 @@ pub fn parse_next_escaped(
             };
             let mut codepoint: Codepoint = 0;
             for i in 0..len {
-                let digit = data
-                    .get(2 + i)
-                    .copied()
-                    .and_then(hex_char_to_int)
-                    .ok_or(CharHandlingError::InvalidEscape)?;
+                let digit =
+                    data.get(2 + i).copied().and_then(hex_char_to_int).ok_or(CharHandlingError::InvalidEscape)?;
                 codepoint = codepoint * 16 + digit as Codepoint;
             }
             Ok((codepoint, len + 2))
@@ -319,8 +300,7 @@ pub fn latin1_to_bytes(latin1: &[u8]) -> Result<Vec<u8>, CharHandlingError> {
             result.push(c1);
             i += 1;
         } else {
-            let c2 =
-                *latin1.get(i + 1).ok_or(CharHandlingError::InvalidLatin1)?;
+            let c2 = *latin1.get(i + 1).ok_or(CharHandlingError::InvalidLatin1)?;
             if (c2 & 0xC0) != 0x80 {
                 return Err(CharHandlingError::InvalidLatin1);
             }

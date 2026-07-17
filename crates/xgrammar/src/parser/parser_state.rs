@@ -92,6 +92,60 @@ impl ParserState {
     pub fn is_invalid(&self) -> bool {
         self.sequence_id == -1
     }
+
+    /// The four FSM fields used as an adaptive token-mask cache key (mirrors C++
+    /// `StateHashForCache`).
+    #[must_use]
+    pub fn cache_key(&self) -> ParserStateCacheKey {
+        ParserStateCacheKey {
+            rule_id: self.rule_id,
+            sequence_id: self.sequence_id,
+            element_id: self.element_id,
+            sub_element_id: self.sub_element_id,
+        }
+    }
+
+    /// Serializes the state as a member array (mirrors C++ `XGRAMMAR_MEMBER_ARRAY`).
+    #[must_use]
+    pub fn serialize_member_array(&self) -> [i32; 7] {
+        [
+            self.rule_id,
+            self.sequence_id,
+            self.element_id,
+            self.rule_start_pos,
+            self.sub_element_id,
+            self.repeat_count,
+            self.partial_codepoint,
+        ]
+    }
+
+    /// Deserializes a member array into a parser state.
+    ///
+    /// # Panics
+    /// Panics if `values` does not contain exactly seven integers.
+    #[must_use]
+    pub fn from_member_array(values: &[i32]) -> Self {
+        assert_eq!(values.len(), 7, "ParserState member array must have 7 fields");
+        Self {
+            rule_id: values[0],
+            sequence_id: values[1],
+            element_id: values[2],
+            rule_start_pos: values[3],
+            sub_element_id: values[4],
+            repeat_count: values[5],
+            partial_codepoint: values[6],
+        }
+    }
+}
+
+/// Adaptive token-mask cache key — equality/hash over `rule_id`, `sequence_id`,
+/// `element_id`, and `sub_element_id` only (mirrors C++ `StateHashForCache`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ParserStateCacheKey {
+    pub rule_id: i32,
+    pub sequence_id: i32,
+    pub element_id: i32,
+    pub sub_element_id: i32,
 }
 
 impl fmt::Display for ParserState {
@@ -102,11 +156,7 @@ impl fmt::Display for ParserState {
         write!(
             f,
             "ParserState(rule_id={}, sequence_id={}, element_id={}, rule_start_pos={}, sub_element_id={}",
-            self.rule_id,
-            self.sequence_id,
-            self.element_id,
-            self.rule_start_pos,
-            self.sub_element_id
+            self.rule_id, self.sequence_id, self.element_id, self.rule_start_pos, self.sub_element_id
         )?;
         if self.repeat_count != 0 {
             write!(f, ", repeat_count={}", self.repeat_count)?;

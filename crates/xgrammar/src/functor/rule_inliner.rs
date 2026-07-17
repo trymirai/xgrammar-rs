@@ -53,8 +53,7 @@ impl GrammarMutator for RuleInliner {
             };
 
             // Keep empty strings, empty sequences, and sequences not led by a rule ref.
-            if choice_ty != GrammarExprType::Sequence || choice_data.is_empty()
-            {
+            if choice_ty != GrammarExprType::Sequence || choice_data.is_empty() {
                 new_choice_ids.push(self.visit_expr_id(state, choice_id));
                 continue;
             }
@@ -74,18 +73,12 @@ impl GrammarMutator for RuleInliner {
 
             // Inline: splice each of the referenced rule's choices in front of the rest of
             // this sequence's elements.
-            let other_elements: Vec<i32> = choice_data[1..]
-                .iter()
-                .map(|&e| self.visit_expr_id(state, e))
-                .collect();
+            let other_elements: Vec<i32> = choice_data[1..].iter().map(|&e| self.visit_expr_id(state, e)).collect();
             let ref_body = state.base.rule(rule_ref_id).body_expr_id;
             let ref_choice_ids = state.base.expr(ref_body).data.to_vec();
             for ref_choice_id in ref_choice_ids {
-                let ref_element_ids =
-                    state.base.expr(ref_choice_id).data.to_vec();
-                let mut new_sequence = Vec::with_capacity(
-                    ref_element_ids.len() + other_elements.len(),
-                );
+                let ref_element_ids = state.base.expr(ref_choice_id).data.to_vec();
+                let mut new_sequence = Vec::with_capacity(ref_element_ids.len() + other_elements.len());
                 for &re in &ref_element_ids {
                     new_sequence.push(self.visit_expr_id(state, re));
                 }

@@ -6,10 +6,7 @@
 //! elements, where only the first choice may be the empty string. Nested choices in a
 //! sequence are hoisted into fresh rules.
 
-use super::{
-    mutator::GrammarMutator,
-    single_element_expr_eliminator::SingleElementExprEliminator,
-};
+use super::{mutator::GrammarMutator, single_element_expr_eliminator::SingleElementExprEliminator};
 use crate::grammar::{Grammar, GrammarBuilder, GrammarExprType, NO_EXPR};
 
 /// Normalizes the structure of `grammar` (the `GrammarFunctor.structure_normalizer` pass).
@@ -34,19 +31,14 @@ impl StructureNormalizer {
     }
 
     fn run(mut self) -> Grammar {
-        let names: Vec<String> =
-            self.base.rules().iter().map(|r| r.name.clone()).collect();
+        let names: Vec<String> = self.base.rules().iter().map(|r| r.name.clone()).collect();
         for name in names {
             self.builder.add_empty_rule(name);
         }
         for i in 0..self.base.num_rules() {
             let (body_id, lookahead_id, name) = {
                 let rule = self.base.rule(i);
-                (
-                    rule.body_expr_id,
-                    rule.lookahead_assertion_id,
-                    rule.name.clone(),
-                )
+                (rule.body_expr_id, rule.lookahead_assertion_id, rule.name.clone())
             };
             self.cur_rule_name = name;
             let new_body = self.visit_rule_body(body_id);
@@ -55,9 +47,7 @@ impl StructureNormalizer {
             self.builder.update_lookahead_assertion(i, new_lookahead);
         }
         let root = self.base.root_rule().name.clone();
-        self.builder
-            .into_grammar(&root)
-            .expect("root rule preserved during normalization")
+        self.builder.into_grammar(&root).expect("root rule preserved during normalization")
     }
 
     /// Reads an expression's type and payload out of the source grammar.
@@ -93,9 +83,7 @@ impl StructureNormalizer {
                 let ttd = Grammar::decode_token_tag_dispatch_data(data);
                 self.builder.add_token_tag_dispatch(&ttd)
             },
-            _ => unreachable!(
-                "rebuild_tag_dispatch called with non-tag-dispatch type"
-            ),
+            _ => unreachable!("rebuild_tag_dispatch called with non-tag-dispatch type"),
         }
     }
 
@@ -160,16 +148,12 @@ impl StructureNormalizer {
             },
             // A tag dispatch is kept as the rule body directly (printed without the
             // `(( … ))` choices/sequence wrapping).
-            GrammarExprType::TagDispatch => {
-                self.rebuild_tag_dispatch(ty, &data)
-            },
+            GrammarExprType::TagDispatch => self.rebuild_tag_dispatch(ty, &data),
             // A token-tag dispatch is hoisted into its own rule, matching the C++
             // `StructureNormalizer::VisitRuleBody` asymmetry.
             GrammarExprType::TokenTagDispatch => {
                 let ttd = self.rebuild_tag_dispatch(ty, &data);
-                let rule_id = self
-                    .builder
-                    .add_rule_with_hint(&self.cur_rule_name.clone(), ttd);
+                let rule_id = self.builder.add_rule_with_hint(&self.cur_rule_name.clone(), ttd);
                 let rule_ref = self.builder.add_rule_ref(rule_id);
                 let seq = self.builder.add_sequence(&[rule_ref]);
                 self.builder.add_choices(&[seq])
@@ -199,8 +183,7 @@ impl StructureNormalizer {
                 },
                 GrammarExprType::Choices => {
                     let sub = self.visit_choices_(&cdata);
-                    let first_is_empty =
-                        self.built_expr(sub[0]).0 == GrammarExprType::EmptyStr;
+                    let first_is_empty = self.built_expr(sub[0]).0 == GrammarExprType::EmptyStr;
                     if first_is_empty {
                         found_empty = true;
                         new_choice_ids.extend_from_slice(&sub[1..]);
@@ -209,13 +192,9 @@ impl StructureNormalizer {
                     }
                 },
                 GrammarExprType::EmptyStr => found_empty = true,
-                GrammarExprType::TagDispatch
-                | GrammarExprType::TokenTagDispatch => {
+                GrammarExprType::TagDispatch | GrammarExprType::TokenTagDispatch => {
                     let element = self.rebuild_tag_dispatch(ty, &cdata);
-                    let rule_id = self.builder.add_rule_with_hint(
-                        &self.cur_rule_name.clone(),
-                        element,
-                    );
+                    let rule_id = self.builder.add_rule_with_hint(&self.cur_rule_name.clone(), element);
                     let rule_ref = self.builder.add_rule_ref(rule_id);
                     let seq = self.builder.add_sequence(&[rule_ref]);
                     new_choice_ids.push(seq);
@@ -258,26 +237,17 @@ impl StructureNormalizer {
                         }
                     } else {
                         let choices = self.builder.add_choices(&sub);
-                        let rule_id = self.builder.add_rule_with_hint(
-                            &self.cur_rule_name.clone(),
-                            choices,
-                        );
-                        new_sequence_ids
-                            .push(self.builder.add_rule_ref(rule_id));
+                        let rule_id = self.builder.add_rule_with_hint(&self.cur_rule_name.clone(), choices);
+                        new_sequence_ids.push(self.builder.add_rule_ref(rule_id));
                     }
                 },
                 GrammarExprType::EmptyStr => {},
-                GrammarExprType::TagDispatch
-                | GrammarExprType::TokenTagDispatch => {
+                GrammarExprType::TagDispatch | GrammarExprType::TokenTagDispatch => {
                     let element_id = self.rebuild_tag_dispatch(ty, &edata);
-                    let rule_id = self.builder.add_rule_with_hint(
-                        &self.cur_rule_name.clone(),
-                        element_id,
-                    );
+                    let rule_id = self.builder.add_rule_with_hint(&self.cur_rule_name.clone(), element_id);
                     new_sequence_ids.push(self.builder.add_rule_ref(rule_id));
                 },
-                _ => new_sequence_ids
-                    .push(self.builder.add_grammar_expr(ty, &edata)),
+                _ => new_sequence_ids.push(self.builder.add_grammar_expr(ty, &edata)),
             }
         }
         new_sequence_ids

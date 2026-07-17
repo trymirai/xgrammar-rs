@@ -30,14 +30,10 @@ thread_local! {
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum RecursionError {
     /// A requested maximum was non-positive or exceeded [`MAX_REASONABLE_RECURSION_DEPTH`].
-    #[error(
-        "maximum recursion depth must be positive and at most {MAX_REASONABLE_RECURSION_DEPTH}, got {0}"
-    )]
+    #[error("maximum recursion depth must be positive and at most {MAX_REASONABLE_RECURSION_DEPTH}, got {0}")]
     InvalidMax(i32),
     /// The live recursion depth exceeded the configured maximum.
-    #[error(
-        "maximum recursion depth exceeded: current depth {current}, max allowed {max}"
-    )]
+    #[error("maximum recursion depth exceeded: current depth {current}, max allowed {max}")]
     DepthExceeded {
         /// The depth reached when the limit was hit.
         current: i32,

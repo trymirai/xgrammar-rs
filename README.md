@@ -148,20 +148,36 @@ For detailed API documentation, visit [docs.rs/xgrammar-rs](https://docs.rs/xgra
 ## WebAssembly support
 
 The library supports Rust's wasm32-wasi* targets. When compiling for wasi targets,
-a wasi sysroot is required, and the default build process of xgrammar-rs will compile
-[wasi-sdk](https://github.com/WebAssembly/wasi-sdk) and use it as a WASI sysroot.
-This requires that the system system has:
-- clang compiler version 22 or newer, supporting the target the corresponding wasi target
+a WASI sysroot with C++ exceptions support is required. xgrammar-rs does not
+download or build one implicitly: set the `WASI_SYSROOT` environment variable to
+its location, e.g.:
+
+```sh
+export WASI_SYSROOT=/opt/wasi-sdk/share/wasi-sysroot
+```
+
+The exception-enabled C++ runtime must live at the standard sysroot locations,
+so that every crate that compiles C++ finds it through the plain `--sysroot`
+mechanism. The prebuilt `wasi-sysroot` artifacts from
+[wasi-sdk](https://github.com/WebAssembly/wasi-sdk) releases 33 and newer are
+"dual": the exception-enabled variant sits in `eh/` subdirectories that stock
+clang does not select automatically. Overlay it onto the standard locations
+once after extraction:
+
+```sh
+sysroot=/path/to/wasi-sysroot
+for t in wasm32-wasi wasm32-wasi-threads wasm32-wasip1 wasm32-wasip1-threads wasm32-wasip2; do
+  cp -r "$sysroot/include/$t/eh/c++" "$sysroot/include/$t/"
+  cp "$sysroot/lib/$t/eh/"*.a "$sysroot/lib/$t/"
+done
+```
+
+Alternatively, build a sysroot from source with `-DWASI_SDK_EXCEPTIONS=ON`,
+which installs the exception-enabled runtime at the standard locations
+directly. Additionally, the system must have:
+- clang compiler version 22 or newer, supporting the corresponding wasi target
   (including the "compiler runtime libraries for clang" for WASI, aka wasi-compiler-rt);
 - [wasm-component-ld](https://github.com/bytecodealliance/wasm-component-ld).
-
-Building the sysroot might take a while.
-
-The user may also choose to provide their own wasi sysroot (advanced).
-If the `WASI_SYSROOT` environment variable is set, xgrammar-rs will skip
-the wasi-sdk building stage and use the provided sysroot. Note that the provided
-sysroot must be compiled with C++ exceptions support. For details, refer to
-wasi-sdk's README or your sysroot provider documentation.
 
 ## License
 

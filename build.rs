@@ -1,7 +1,53 @@
-use std::env;
+use std::{
+    env,
+    path::{Path, PathBuf},
+};
 
 #[path = "build/mod.rs"]
 mod build;
+
+/// wasm32-wasi* builds need a WASI sysroot with C++ exceptions support,
+/// provided by the user via WASI_SYSROOT (cc-rs picks it up from there).
+fn require_wasi_sysroot(target: &str) {
+    let sysroot = match env::var("WASI_SYSROOT") {
+        Ok(path) if !path.is_empty() && Path::new(&path).is_dir() => {
+            PathBuf::from(path)
+        }
+        Ok(path) => panic!(
+            "WASI_SYSROOT is set to '{path}', which is not an existing directory"
+        ),
+        Err(_) => panic!(
+            "building for a wasm32-wasi* target requires a WASI sysroot with \
+             C++ exceptions support. Set the WASI_SYSROOT environment variable \
+             to its location, e.g. \
+             WASI_SYSROOT=/opt/wasi-sdk/share/wasi-sysroot \
+             (see the `WebAssembly support` section of README.md)"
+        ),
+    };
+
+    // The C++ runtime must be at the standard sysroot locations so that
+    // every C++-compiling crate finds it via plain --sysroot.
+    let target_include = sysroot.join("include").join(target);
+    if !target_include.join("c++/v1").is_dir() {
+        if target_include.join("eh/c++/v1").is_dir() {
+            panic!(
+                "WASI_SYSROOT points at a dual (eh/noeh) sysroot as shipped by \
+                 wasi-sdk >= 33, with the exception-enabled C++ runtime in \
+                 `eh/` subdirectories. Stock clang does not select it \
+                 automatically, so overlay the `eh` variant onto the standard \
+                 sysroot locations (see the `WebAssembly support` section of \
+                 README.md)"
+            );
+        }
+        panic!(
+            "WASI_SYSROOT points at {}, which does not contain C++ headers for \
+             target {target} at include/{target}/c++/v1. A WASI sysroot with \
+             C++ exceptions support is required (see the `WebAssembly support` \
+             section of README.md)",
+            sysroot.display()
+        );
+    }
+}
 
 fn main() {
     println!("cargo::rerun-if-changed=src/cxx_utils.hpp");
@@ -16,10 +62,9 @@ fn main() {
 
     let mut wasm_c_cxx_flags = vec![];
     if target.starts_with("wasm32-wasi") {
-        build::wasi_sysroot::find_or_build_and_set();
-        // Flags for C++ exceptions to work correctly with wasi-sdk:
-        // https://github.com/WebAssembly/wasi-sdk/blob/3a57aa06289ee679a62119d8842ca9ee7a4e5ee9/CppExceptions.md#compiling-code-with-c-exceptions
-        // The set of flags may change for future wasi-sdk releases.
+        require_wasi_sysroot(&target);
+        // C++ exceptions flags per wasi-sdk docs (may change between releases):
+        // https://github.com/WebAssembly/wasi-sdk/blob/wasi-sdk-33/CppExceptions.md#compiling-code-with-c-exceptions
         println!("cargo::rustc-link-arg=-fwasm-exceptions");
         println!("cargo::rustc-link-lib=static=unwind");
         wasm_c_cxx_flags =

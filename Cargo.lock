@@ -296,7 +296,7 @@ checksum = "d0a5c400df2834b80a4c3327b3aad3a4c4cd4de0629063962b03235697506a28"
 [[package]]
 name = "cxx"
 version = "1.0.194"
-source = "git+https://github.com/trymirai/cxx.git?branch=unbreak_cargo_vendor#79614f6ca23c3c8b898d72528ce444f37d45a52c"
+source = "git+https://github.com/trymirai/cxx.git?branch=master#aefe85bdd845e391c68e5400e19bdb437502859d"
 dependencies = [
  "cxx-build",
  "cxx-cc",
@@ -309,7 +309,7 @@ dependencies = [
 [[package]]
 name = "cxx-build"
 version = "1.0.194"
-source = "git+https://github.com/trymirai/cxx.git?branch=unbreak_cargo_vendor#79614f6ca23c3c8b898d72528ce444f37d45a52c"
+source = "git+https://github.com/trymirai/cxx.git?branch=master#aefe85bdd845e391c68e5400e19bdb437502859d"
 dependencies = [
  "cc",
  "codespan-reporting",
@@ -324,7 +324,7 @@ dependencies = [
 [[package]]
 name = "cxx-cc"
 version = "1.0.194"
-source = "git+https://github.com/trymirai/cxx.git?branch=unbreak_cargo_vendor#79614f6ca23c3c8b898d72528ce444f37d45a52c"
+source = "git+https://github.com/trymirai/cxx.git?branch=master#aefe85bdd845e391c68e5400e19bdb437502859d"
 dependencies = [
  "cc",
  "cxxbridge-flags",
@@ -333,7 +333,7 @@ dependencies = [
 [[package]]
 name = "cxxbridge-cmd"
 version = "1.0.194"
-source = "git+https://github.com/trymirai/cxx.git?branch=unbreak_cargo_vendor#79614f6ca23c3c8b898d72528ce444f37d45a52c"
+source = "git+https://github.com/trymirai/cxx.git?branch=master#aefe85bdd845e391c68e5400e19bdb437502859d"
 dependencies = [
  "clap",
  "codespan-reporting",
@@ -346,12 +346,12 @@ dependencies = [
 [[package]]
 name = "cxxbridge-flags"
 version = "1.0.194"
-source = "git+https://github.com/trymirai/cxx.git?branch=unbreak_cargo_vendor#79614f6ca23c3c8b898d72528ce444f37d45a52c"
+source = "git+https://github.com/trymirai/cxx.git?branch=master#aefe85bdd845e391c68e5400e19bdb437502859d"
 
 [[package]]
 name = "cxxbridge-macro"
 version = "1.0.194"
-source = "git+https://github.com/trymirai/cxx.git?branch=unbreak_cargo_vendor#79614f6ca23c3c8b898d72528ce444f37d45a52c"
+source = "git+https://github.com/trymirai/cxx.git?branch=master#aefe85bdd845e391c68e5400e19bdb437502859d"
 dependencies = [
  "indexmap",
  "proc-macro2",
@@ -534,7 +534,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1661,7 +1661,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2045,7 +2045,7 @@ dependencies = [
  "getrandom 0.4.2",
  "once_cell",
  "rustix",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2587,15 +2587,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "which"
-version = "8.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "81995fafaaaf6ae47a7d0cc83c67caf92aeb7e5331650ae6ff856f7c0c60c459"
-dependencies = [
- "libc",
-]
-
-[[package]]
 name = "winapi"
 version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2617,7 +2608,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2858,7 +2849,6 @@ dependencies = [
  "serial_test",
  "tokenizers",
  "walkdir",
- "which",
 ]
 
 [[package]]

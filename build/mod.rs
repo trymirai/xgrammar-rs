@@ -1,6 +1,5 @@
 pub mod common;
 pub mod submodules;
-pub mod wasi_sysroot;
 pub mod xgrammar_cmake;
 
 #[cfg(target_os = "windows")]

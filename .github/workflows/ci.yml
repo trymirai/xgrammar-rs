@@ -28,14 +28,21 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Ensure wasi-sdk has tags
+      - name: Install WASI sysroot
         if: startsWith(matrix.target, 'wasm32-wasi')
         run: |
-          # We need tags for `git describe` to work in wasi-sdk build.
-          # `actions/checkout` does not handle this very well.
-          # The `--depth 1` works fine as long as the wasi-sdk submodule is at a tagged commit.
-          cd build/wasi-sdk/
-          git fetch --tags --depth 1
+          # The prebuilt sysroot is "dual": stock clang doesn't auto-select
+          # the exception-enabled (eh/) C++ runtime, so overlay it.
+          curl -fsSL -o /tmp/wasi-sysroot.tar.gz https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-33/wasi-sysroot-33.0+m.tar.gz
+          echo "063bc1b56582b9923e08ac9b89e58789618d851763f01530b3ff20b9e5df0ca3  /tmp/wasi-sysroot.tar.gz" | sha256sum -c
+          sudo mkdir -p /opt
+          sudo tar xzf /tmp/wasi-sysroot.tar.gz -C /opt
+          sysroot=/opt/wasi-sysroot-33.0+m
+          for t in wasm32-wasi wasm32-wasi-threads wasm32-wasip1 wasm32-wasip1-threads wasm32-wasip2; do
+            sudo cp -r "$sysroot/include/$t/eh/c++" "$sysroot/include/$t/"
+            sudo cp "$sysroot/lib/$t/eh/"*.a "$sysroot/lib/$t/"
+          done
+          echo "WASI_SYSROOT=$sysroot" >> "$GITHUB_ENV"
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -98,14 +105,4 @@ jobs:
 
       - name: "Cross-compile for: ${{ matrix.target }}"
         if: matrix.target != 'native'
-        run: |
-          export RUST_BACKTRACE=1
-          # The wasi-sdk sometimes fails spuriously with a No such file or directory
-          # at cmake/wasi-wits.cmake (seems to only happen in CI).
-          # Thus, retry the build once if it fails.
-          BUILD="cargo build --locked --all-features --target ${{ matrix.target }}"
-          if $BUILD; then
-            echo Succeeded on the first attempt
-          else
-            $BUILD && echo Succeeded on the second attempt
-          fi
+        run: cargo build --locked --all-features --target ${{ matrix.target }}

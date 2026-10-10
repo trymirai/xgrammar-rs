@@ -8,7 +8,7 @@ repository.workspace = true
 homepage.workspace = true
 authors.workspace = true
 description = "Efficient, Flexible and Portable Structured Generation for Rust — pure-Rust XGrammar."
-keywords = ["llm", "grammar", "structured-generation", "json-schema", "parser"]
+keywords.workspace = true
 categories = ["parsing", "text-processing"]
 readme = "../../README.md"
 # Integration tests are aggregated per-suite via main.rs (cpp gtest port), so disable

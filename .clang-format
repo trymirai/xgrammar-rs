@@ -1,7 +1,7 @@
 BasedOnStyle: LLVM
 IndentWidth: 2
 ContinuationIndentWidth: 4
-ColumnLimit: 80
+ColumnLimit: 120
 
 # Keep return type with function name
 AlwaysBreakAfterReturnType: None
@@ -13,6 +13,10 @@ BinPackArguments: false
 AllowAllParametersOfDeclarationOnNextLine: false
 AllowAllArgumentsOnNextLine: false
 AlignAfterOpenBracket: BlockIndent
+
+# Template closing bracket on own line
+BreakTemplateDeclarations: Yes
+Cpp11BracedListStyle: true
 
 # Brace and pointer/reference style
 BreakBeforeBraces: Attach

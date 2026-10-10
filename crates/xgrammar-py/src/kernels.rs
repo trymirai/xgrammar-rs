@@ -1,0 +1,169 @@
+//! CPU bitmask-apply kernel exposed to Python (`_core.kernels`).
+//!
+//! The Python CPU kernel passes raw `data_ptr()` values (usize) and shape/stride tuples
+//! from torch tensors. We write to memory-mapped logit buffers in-place.
+
+#[cfg(feature = "bindings-pyo3")]
+use pyo3::{exceptions::PyValueError, prelude::*, wrap_pyfunction};
+
+#[cfg(feature = "bindings-pyo3")]
+pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    use pyo3::types::PyModuleMethods;
+    m.add_function(wrap_pyfunction!(apply_token_bitmask_inplace_cpu, m)?)?;
+    Ok(())
+}
+
+/// Apply the bitmask to logits in-place on CPU, operating on raw tensor memory.
+///
+/// Called by `python/xgrammar/kernels/apply_token_bitmask_inplace_cpu.py` with:
+/// - `logits_ptr`: `logits.data_ptr()` — pointer to logit memory
+/// - `logits_shape`: `(batch, vocab)` or `(1, vocab)` for 1-D logits
+/// - `logits_stride`: stride tuple
+/// - `bitmask_ptr`: `bitmask.data_ptr()` — pointer to int32 bitmask memory
+/// - `bitmask_shape`: `(batch, words)` or `(1, words)` for 1-D bitmask
+/// - `bitmask_stride`: stride tuple
+/// - `vocab_size`: effective vocabulary size
+/// - `indices`: optional list of batch indices to mask
+/// - `dtype`: `"float32"`, `"bfloat16"`, or `"float16"`
+#[cfg(feature = "bindings-pyo3")]
+#[pyfunction]
+#[allow(clippy::too_many_arguments)]
+fn apply_token_bitmask_inplace_cpu(
+    _py: Python<'_>,
+    logits_ptr: usize,
+    logits_shape: (usize, usize),
+    logits_stride: (usize, usize),
+    bitmask_ptr: usize,
+    bitmask_shape: (usize, usize),
+    bitmask_stride: (usize, usize),
+    vocab_size: usize,
+    indices: Option<Vec<usize>>,
+    dtype: &str,
+) -> PyResult<()> {
+    let (batch, logits_vocab) = logits_shape;
+    let (log_stride_batch, log_stride_elem) = logits_stride;
+    let (bm_batch, bm_words) = bitmask_shape;
+    let (bm_stride_batch, _) = bitmask_stride;
+
+    // Every row written below must exist in both tensors (the C++ ApplyTokenBitmaskInplaceCPU
+    // checks); an out-of-range index would write out of bounds.
+    if vocab_size > bm_words * 32 || vocab_size > logits_vocab {
+        return Err(PyValueError::new_err(format!(
+            "vocab_size {vocab_size} exceeds the bitmask ({}) or logits ({logits_vocab}) width",
+            bm_words * 32
+        )));
+    }
+    let rows: Vec<usize> = match indices {
+        None => {
+            if batch != bm_batch {
+                return Err(PyValueError::new_err(format!(
+                    "When indices is not provided, the logits's batch size should be equal to the bitmask's batch \
+                     size, but got {batch} vs {bm_batch}"
+                )));
+            }
+            (0..batch).collect()
+        },
+        Some(indices) => {
+            if let Some(&index) = indices.iter().find(|&&index| index >= batch.min(bm_batch)) {
+                return Err(PyValueError::new_err(format!(
+                    "The provided index {index} is out of bounds: it should be in [0, {}).",
+                    batch.min(bm_batch)
+                )));
+            }
+            indices
+        },
+    };
+
+    match dtype {
+        "float32" => {
+            for row in rows {
+                // SAFETY: caller guarantees ptr/shape/stride describe live CPU tensors.
+                let logit_ptr = unsafe { (logits_ptr as *mut f32).add(row * log_stride_batch) };
+                let bitmask_row = unsafe {
+                    let base = (bitmask_ptr as *const i32).add(row * bm_stride_batch);
+                    std::slice::from_raw_parts(base, bm_words)
+                };
+                apply_row_f32(logit_ptr, bitmask_row, vocab_size, log_stride_elem);
+            }
+        },
+        "bfloat16" => {
+            for row in rows {
+                let logit_ptr = unsafe { (logits_ptr as *mut u16).add(row * log_stride_batch) };
+                let bitmask_row = unsafe {
+                    let base = (bitmask_ptr as *const i32).add(row * bm_stride_batch);
+                    std::slice::from_raw_parts(base, bm_words)
+                };
+                apply_row_bf16(logit_ptr, bitmask_row, vocab_size, log_stride_elem);
+            }
+        },
+        "float16" => {
+            for row in rows {
+                let logit_ptr = unsafe { (logits_ptr as *mut u16).add(row * log_stride_batch) };
+                let bitmask_row = unsafe {
+                    let base = (bitmask_ptr as *const i32).add(row * bm_stride_batch);
+                    std::slice::from_raw_parts(base, bm_words)
+                };
+                apply_row_f16(logit_ptr, bitmask_row, vocab_size, log_stride_elem);
+            }
+        },
+        other => {
+            return Err(PyValueError::new_err(format!("unsupported dtype: {other}")));
+        },
+    }
+    Ok(())
+}
+
+fn bit_is_set(
+    bitmask: &[i32],
+    token: usize,
+) -> bool {
+    let word = token / 32;
+    let bit = token % 32;
+    word < bitmask.len() && (bitmask[word] >> bit) & 1 == 1
+}
+
+fn apply_row_f32(
+    ptr: *mut f32,
+    bitmask: &[i32],
+    vocab_size: usize,
+    stride: usize,
+) {
+    for token in 0..vocab_size {
+        if !bit_is_set(bitmask, token) {
+            // SAFETY: caller guarantees ptr + token*stride is in-bounds for the logit tensor.
+            unsafe {
+                *ptr.add(token * stride) = f32::NEG_INFINITY;
+            }
+        }
+    }
+}
+
+fn apply_row_bf16(
+    ptr: *mut u16,
+    bitmask: &[i32],
+    vocab_size: usize,
+    stride: usize,
+) {
+    // bf16 -inf = 0xFF80
+    for token in 0..vocab_size {
+        if !bit_is_set(bitmask, token) {
+            // SAFETY: caller guarantees ptr + token*stride is in-bounds.
+            unsafe { *ptr.add(token * stride) = 0xFF80u16 };
+        }
+    }
+}
+
+fn apply_row_f16(
+    ptr: *mut u16,
+    bitmask: &[i32],
+    vocab_size: usize,
+    stride: usize,
+) {
+    // fp16 -inf = 0xFC00
+    for token in 0..vocab_size {
+        if !bit_is_set(bitmask, token) {
+            // SAFETY: caller guarantees ptr + token*stride is in-bounds.
+            unsafe { *ptr.add(token * stride) = 0xFC00u16 };
+        }
+    }
+}

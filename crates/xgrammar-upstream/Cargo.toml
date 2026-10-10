@@ -1,0 +1,11 @@
+[package]
+name = "xgrammar-upstream"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+description = "Downloads the upstream xgrammar release whose original Python tests check this port."
+
+[lints]
+workspace = true

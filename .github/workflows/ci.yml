@@ -1,108 +1,193 @@
 name: CI
 
 on:
-  push:
   pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# A newer push to the same PR or branch supersedes the running checks.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: always
+  HF_HUB_DISABLE_XET: "1"
+  # Warnings fail the upstream suite, except the ones observed from upstream's own tests: the
+  # deprecated max_rollback_tokens argument, stop-token auto-detection, and a transformers
+  # deprecation raised while loading a tokenizer config. Each is allowed only as the exact whole
+  # message, category, and module (anchored regexes in pytest's filterwarnings, one per line).
+  PYTEST_ADDOPTS: |-
+    -o "filterwarnings=error
+    ignore:\Amax_rollback_tokens\ is\ deprecated\.\ You\ don't\ need\ to\ set\ it\ and\ it's\ always\ unlimited\ \(\-1\)\.\Z:DeprecationWarning:\Axgrammar\.matcher\Z
+    ignore:\AWhen\ constructing\ TokenizerInfo\ from\ a\ huggingface\ tokenizer,\ stop_token_ids\ is\ neither\ provided\ by\ user\ nor\ found\ from\ the\ tokenizer\.\ It\ will\ be\ automatically\ detected\.\Z:UserWarning:\Axgrammar\.tokenizer_info\Z
+    ignore:\A`rope_config_validation`\ is\ deprecated\ and\ has\ been\ removed\.\ Its\ functionality\ has\ been\ moved\ to\ RotaryEmbeddingConfigMixin\.validate_rope\ method\.\ PreTrainedConfig\ inherits\ this\ class,\ so\ please\ call\ self\.validate_rope\(\)\ instead\.\ Also,\ make\ sure\ to\ use\ the\ new\ rope_parameters\ syntax\.\ You\ can\ call\ self\.standardize_rope_params\(\)\ in\ the\ meantime\.\Z:FutureWarning:\Atransformers\.modeling_rope_utils\Z"
 
 jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rustfmt
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo +nightly fmt --all -- --check
+      # Warnings are errors everywhere: every crate, every binding backend, and the docs.
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - run: cargo clippy -p xgrammar-rs --all-targets --features tokenizers --locked -- -D warnings
+      - run: cargo clippy -p xgrammar-py --all-targets --locked --no-default-features --features bindings-pyo3 -- -D warnings
+      - run: cargo clippy -p xgrammar-py --all-targets --locked --no-default-features --features bindings-napi -- -D warnings
+      - run: cargo clippy -p xgrammar-py --all-targets --locked --no-default-features --features bindings-uniffi -- -D warnings
+      - run: cargo clippy -p xgrammar-py --locked --target wasm32-unknown-unknown --no-default-features --features bindings-wasm -- -D warnings
+      - run: cargo doc --workspace --no-deps --locked
+        env:
+          RUSTDOCFLAGS: -D warnings
+      - run: cargo doc -p xgrammar-rs --no-deps --features tokenizers --locked
+        env:
+          RUSTDOCFLAGS: -D warnings
+      # The core is pure Rust, so every release target type-checks from this one host.
+      - name: Check release targets
+        run: |
+          for target in aarch64-unknown-linux-gnu x86_64-pc-windows-msvc aarch64-pc-windows-msvc \
+            aarch64-apple-darwin x86_64-apple-darwin aarch64-apple-ios aarch64-apple-ios-sim wasm32-unknown-unknown; do
+            rustup target add "$target"
+            cargo check -p xgrammar-rs --locked --target "$target"
+          done
+      - run: rustup toolchain install 1.85.0 --profile minimal
+      - run: cargo +1.85.0 build --workspace --locked
+      - run: cargo +1.85.0 build -p xgrammar-py --locked --no-default-features --features bindings-napi
+      # The published crate must build from its own files: publishing drops the path-only dev-dependency
+      # that downloads the upstream tests.
+      - run: cargo publish -p xgrammar-rs --dry-run --locked
+      - uses: astral-sh/setup-uv@v7
+      - run: uvx ruff@0.16.10 check bindings/python
+      - run: uvx ruff@0.16.10 format --check bindings/python
+
+  # Rust tests, the untouched upstream Python suite (external/xgrammar/tests/python) against our
+  # extension, and the Swift / TypeScript / wasm API tests, once per OS.
   test:
-    name: Test
+    name: Test (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
-        # TODO: test wasi builds on MacOS, too
-        os: [ubuntu-latest]
-        # TODO: add wasm32-wasip1-threads when supported
-        target: [native, wasm32-wasip1, wasm32-wasip1-threads, wasm32-wasip2]
-        include:
-          - os: macos-latest
-            target: native
-
+        os: [ubuntu-latest, windows-latest, macos-14]
     runs-on: ${{ matrix.os }}
-
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          submodules: recursive
+          targets: ${{ matrix.os == 'ubuntu-latest' && 'wasm32-unknown-unknown' || '' }}
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test -p xgrammar-rs --locked
+      - run: cargo test -p xgrammar-rs --locked --features tokenizers --test rust_api
 
-      - name: Install WASI sysroot
-        if: startsWith(matrix.target, 'wasm32-wasi')
-        run: |
-          # The prebuilt sysroot is "dual": stock clang doesn't auto-select
-          # the exception-enabled (eh/) C++ runtime, so overlay it.
-          curl -fsSL -o /tmp/wasi-sysroot.tar.gz https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-33/wasi-sysroot-33.0+m.tar.gz
-          echo "063bc1b56582b9923e08ac9b89e58789618d851763f01530b3ff20b9e5df0ca3  /tmp/wasi-sysroot.tar.gz" | sha256sum -c
-          sudo mkdir -p /opt
-          sudo tar xzf /tmp/wasi-sysroot.tar.gz -C /opt
-          sysroot=/opt/wasi-sysroot-33.0+m
-          for t in wasm32-wasi wasm32-wasi-threads wasm32-wasip1 wasm32-wasip1-threads wasm32-wasip2; do
-            sudo cp -r "$sysroot/include/$t/eh/c++" "$sysroot/include/$t/"
-            sudo cp "$sysroot/lib/$t/eh/"*.a "$sysroot/lib/$t/"
-          done
-          echo "WASI_SYSROOT=$sysroot" >> "$GITHUB_ENV"
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+      - uses: astral-sh/setup-uv@v7
         with:
-          targets: wasm32-wasip1,wasm32-wasip1-threads,wasm32-wasip2
-
-      - name: Install CMake
-        if: startsWith(matrix.os, 'macos-')
-        run: brew install cmake
-
-      - name: Install llvm clang with wasm support
-        if: startsWith(matrix.os, 'ubuntu-')
-        run: |
-          wget https://apt.llvm.org/llvm.sh
-          chmod +x ./llvm.sh
-          sudo ./llvm.sh
-          sudo apt install libclang-rt-22-dev-wasm32
-
-          # The following snippet fixes what seems to be a Ubuntu/LLVM packaging bug:
-          # `wasm-ld` is looking for libclang_rt under a different name.
-          for target in wasm32-unknown-wasi{p1,p1-threads,p2}; do
-            sudo mkdir -p /usr/lib/llvm-22/lib/clang/22/lib/"$target"/
-            sudo ln -s ../wasi/libclang_rt.builtins-wasm32.a /usr/lib/llvm-22/lib/clang/22/lib/"$target"/libclang_rt.builtins.a
-          done
-
-          echo CC=clang-22 >> "$GITHUB_ENV"
-          echo CXX=clang++-22 >> "$GITHUB_ENV"
-
-      - name: Install wasm-component-ld
-        if: startsWith(matrix.target, 'wasm32')
-        run: |
-          cargo install wasm-component-ld
-          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
-
-      - name: Cache cargo registry
+          python-version: "3.13"
+          version: 0.12.24
+          enable-cache: true
+      - name: Cache Hugging Face hub
         uses: actions/cache@v5
         with:
-          path: ~/.cargo/registry
-          key: ${{ matrix.os }}_${{ matrix.target }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Cache cargo index
-        uses: actions/cache@v5
-        with:
-          path: ~/.cargo/git
-          key: ${{ matrix.os }}_${{ matrix.target }}-cargo-git-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Run tests (without HF feature)
-        if: matrix.target == 'native'
-        run: cargo test --locked --verbose
-
-      - name: Run tests (with HF feature)
-        if: matrix.target == 'native'
+          path: ~/.cache/huggingface
+          key: huggingface-${{ matrix.os }}
+      - name: Build and install the mixed Rust/Python package
+        shell: bash
+        run: |
+          set -euo pipefail
+          extras=(--extra test)
+          # Match upstream: MLX is tested on macOS arm64.
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            extras+=(--extra metal)
+          fi
+          uv cache clean xgrammar
+          uv sync --locked --project bindings/python "${extras[@]}"
+      - name: Check that tests import this repository's xgrammar
+        run: uv run --no-sync --project bindings/python python -c "import pathlib, xgrammar; p = pathlib.Path(xgrammar.__file__).resolve(); root = pathlib.Path('bindings/python').resolve(); assert str(p).startswith(str(root)), p"
+      - run: uv run --no-sync --project bindings/python python -m pytest bindings/python/tests
+      - name: Run upstream Python suite
+        shell: bash
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        run: cargo test --locked --features hf --verbose
+          HUGGING_FACE_HUB_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_HUB_DOWNLOAD_TIMEOUT: 60
+        run: |
+          set -euo pipefail
+          args=(external/xgrammar/tests/python)
+          # Same gate as upstream unit_test.yaml: full suite when the token is present.
+          if [ -z "${HF_TOKEN:-}" ]; then
+            args+=(-m "not hf_token_required")
+          fi
+          uv run --no-sync --project bindings/python python -m pytest "${args[@]}"
 
-      - name: Build documentation
-        if: matrix.target == 'native'
-        run: cargo doc --locked --no-deps --features hf
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      # Dependency management follows the existing pnpm lock; Bun executes the native tests.
+      - run: bun add --global pnpm@10.18.1
+      - run: cargo tools test typescript
+      - name: Swift API tests
+        if: runner.os == 'macOS'
+        run: |
+          cargo tools install swift
+          cargo tools build swift --targets host
+          swift test
+      - name: Wasm API tests
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo build -p xgrammar-py --release --locked --target wasm32-unknown-unknown --no-default-features --features bindings-wasm
+          version=$(bun -e 'const t = await Bun.file("Cargo.lock").text(); const p = t.split("[[package]]").find(p => /^name = "wasm-bindgen"$/m.test(p)); if (!p) throw new Error("wasm-bindgen missing from lock"); console.log(/^version = "([^"]+)"$/m.exec(p)[1]);')
+          cargo install wasm-bindgen-cli --locked --version "$version"
+          wasm-bindgen --target nodejs --out-dir target/wasm-bindgen target/wasm32-unknown-unknown/release/xgrammar_rs.wasm
+          bun test bindings/wasm/tests/api.test.ts
 
-      - name: "Cross-compile for: ${{ matrix.target }}"
-        if: matrix.target != 'native'
-        run: cargo build --locked --all-features --target ${{ matrix.target }}
+  # The abi3 extension's lowest supported Python, and the free-threaded build (its own ABI).
+  python-versions:
+    name: Python ${{ matrix.python }}
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.8", "3.14t"]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # Downloads the upstream release whose Python tests run below (into external/xgrammar).
+      - run: cargo build -p xgrammar-upstream --locked
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: ${{ matrix.python }}
+          version: 0.12.24
+          enable-cache: true
+      # Triton (installed on Linux x86_64) has no free-threaded build and would re-enable the GIL;
+      # it only serves CUDA kernels, which CI cannot run.
+      - run: uv sync --locked --project bindings/python --extra test ${{ matrix.python == '3.14t' && '--no-install-package triton' || '' }}
+      - name: Check that the free-threaded build keeps the GIL disabled
+        if: matrix.python == '3.14t'
+        run: uv run --no-sync --project bindings/python python -c "import sys, xgrammar; assert not sys._is_gil_enabled()"
+      - run: uv run --no-sync --project bindings/python python -m pytest bindings/python/tests
+      # Test-only extensions without a free-threaded build (cohere_melody, which renders Cohere
+      # prompts) would re-enable the GIL mid-run; PYTHON_GIL=0 keeps the suite free-threaded.
+      # It is ignored by GIL builds; this module's own support is checked above without it.
+      - run: uv run --no-sync --project bindings/python python -m pytest external/xgrammar/tests/python -m "not hf_token_required"
+        env:
+          PYTHON_GIL: 0
+      - name: Run suite under pytest-run-parallel (free-threaded)
+        if: matrix.python == '3.14t'
+        env:
+          PYTHON_GIL: 0
+        run: |
+          uv run --no-sync --project bindings/python --with pytest-run-parallel python -m pytest \
+            external/xgrammar/tests/python -m "not hf_token_required" --parallel-threads=8

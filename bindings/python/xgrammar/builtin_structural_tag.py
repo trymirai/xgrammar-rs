@@ -1,0 +1,2925 @@
+from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Union
+
+from pydantic import TypeAdapter
+
+from .openai_tool_call_schema import (
+    AllowedToolChoiceParam,
+    BuiltinToolChoiceParam,
+    BuiltinToolParam,
+    FunctionDefinition,
+    FunctionToolParam,
+    NamedToolChoiceParam,
+    ToolChoiceOptionParam,
+    ToolParam,
+)
+from .structural_tag import (
+    AnyTextFormat,
+    ConstStringFormat,
+    Format,
+    JSONSchemaFormat,
+    OptionalFormat,
+    OrFormat,
+    RegexFormat,
+    SequenceFormat,
+    StructuralTag,
+    TagFormat,
+    TagsWithSeparatorFormat,
+    TriggeredTagsFormat,
+)
+
+# ---------- API Functions ----------
+
+
+def get_model_structural_tag(
+    model: str,
+    tools: Optional[List[Union[ToolParam, dict]]] = None,
+    tool_choice: Union[ToolChoiceOptionParam, dict, None] = "auto",
+    reasoning: Union[bool, Literal["enabled", "disabled", "auto"]] = "enabled",
+    force_reasoning: bool = False,
+    any_order: bool = False,
+    exclude_special_tokens: bool = True,
+    max_whitespace_cnt: Optional[int] = None,
+    parallel_tool_calls: bool = True,
+) -> StructuralTag:
+    r"""Get a structural tag for a model's reasoning and tool-call output format.
+
+    Use this function when a serving engine needs a structural tag that matches
+    a model's tool-call syntax. Pass the model format, the available tools, and
+    the desired tool choice policy.
+
+    This API is designed to resemble OpenAI Chat Completions API.
+
+    Function tools use the OpenAI Chat Completions shape:
+    ``{"type": "function", "function": {...}}``.
+
+    Builtin tools use a compact shape:
+
+    - ``type`` is the provider-level builtin tool type, such as
+      ``"web_search_preview"``.
+    - ``name`` is the exact tool name that may appear in model output. If it is
+      omitted, ``type`` is used as the output name.
+    - ``parameters`` is the JSON schema used to constrain the arguments emitted
+      by the model.
+
+    Examples
+    --------
+    Ordinary function tool:
+
+    .. code-block:: python
+
+        structural_tag = get_model_structural_tag(
+            "llama",
+            tools=[
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "get_weather",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {"location": {"type": "string"}},
+                        },
+                    },
+                }
+            ],
+        )
+
+    Harmony with a builtin web search tool:
+
+    .. code-block:: python
+
+        structural_tag = get_model_structural_tag(
+            "harmony",
+            tools=[
+                {
+                    "type": "web_search_preview",
+                    "name": "browser.search",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {"query": {"type": "string"}},
+                        "required": ["query"],
+                    },
+                }
+            ],
+        )
+
+    Force an ordinary function tool:
+
+    .. code-block:: python
+
+        structural_tag = get_model_structural_tag(
+            "llama",
+            tools=[
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "get_weather",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {"location": {"type": "string"}},
+                        },
+                    },
+                }
+            ],
+            tool_choice={
+                "type": "function",
+                "function": {"name": "get_weather"},
+            },
+        )
+
+    Force a builtin tool by type and output name:
+
+    .. code-block:: python
+
+        structural_tag = get_model_structural_tag(
+            "harmony",
+            tools=[...],
+            tool_choice={"type": "web_search_preview"},
+        )
+
+    Allow only a subset of tools:
+
+    .. code-block:: python
+
+        structural_tag = get_model_structural_tag(
+            "harmony",
+            tools=[...],
+            tool_choice={
+                "type": "allowed_tools",
+                "allowed_tools": {
+                    "mode": "auto",
+                    "tools": [
+                        {"type": "function", "function": {"name": "get_weather"}},
+                        {"type": "web_search_preview"},
+                    ],
+                },
+            },
+        )
+
+    Parameters
+    ----------
+    model : str
+        The model type of the structural tag template. It should be one of the registered values.
+    tools : Optional[List[Union[ToolParam, dict]]]
+        Function and builtin tools available to the model. Function tools use
+        the Chat Completions shape. Builtin tools use ``type`` plus optional
+        ``name`` and ``parameters`` fields. Defaults to ``None``, which is
+        treated as an empty list.
+    tool_choice : Union[ToolChoiceOptionParam, dict, None]
+        Controls whether the model may or must call tools. Defaults to
+        ``"auto"``.
+
+        - ``"auto"`` lets the model choose between text output and tool calls.
+        - ``None`` is treated the same as ``"auto"``.
+        - ``"none"`` disables all tools.
+        - ``"required"`` requires at least one available tool.
+        - ``{"type": "function", "function": {"name": ...}}`` forces one
+          function tool.
+        - ``{"type": <builtin_type>}`` forces one builtin tool. Builtin tool
+          choices are matched by ``type``.
+        - ``{"type": "allowed_tools", "allowed_tools": ...}`` limits the
+          available tools before applying its ``mode``. Its ``tools`` list may
+          contain both function refs and builtin refs. Builtin refs are matched
+          by ``type``.
+    reasoning : Union[bool, Literal["enabled", "disabled", "auto"]]
+        Controls the model-specific reasoning section. Use the recommended
+        string modes ``"enabled"``, ``"disabled"``, or ``"auto"``.
+        For models with a leading reasoning block, ``"auto"`` allows either a
+        complete block or a direct response/tool call. Defaults to ``"enabled"``.
+        The boolean aliases ``True`` and ``False`` are deprecated but remain
+        supported by this dispatcher as ``"enabled"`` and ``"disabled"``,
+        respectively. Model-specific builders accept the three string modes.
+    force_reasoning : bool
+        Deprecated. Control whether to keep the reasoning part but leave its content empty.
+        Now we will embed the model's specific behavior into the structural tag function, so
+        only controlling ``reasoning`` is enough.
+    any_order : bool
+        Relax object property ordering for every tool-argument schema. When
+        ``True``, ``any_order=True`` is applied to every :class:`JSONSchemaFormat`
+        in the generated structural tag, so each tool's arguments may be emitted
+        in any property order (see :class:`JSONSchemaFormat` for the exact
+        semantics). When ``False`` (default), the declared property order is kept
+        with full validation. Default: ``False``.
+    exclude_special_tokens : bool
+        Whether to forbid model special tokens (such as ``<think>`` and
+        ``</think>``) from appearing inside the free-text and triggered-text
+        spans of the structural tag. Defaults to ``True``, which keeps the
+        free-text spans constrained to exclude those tokens. Set to ``False``
+        to allow them to appear as plain text. For models that have no special
+        tokens to exclude (such as ``"harmony"``), this has no effect.
+        For Kimi-K3, this also applies to tool-argument string values without
+        ``pattern``/``format`` and to property names, nested JSON strings included;
+        ``minLength``/``maxLength`` on such strings are dropped with a warning.
+    max_whitespace_cnt : Optional[int]
+        Applied to every tool-argument :class:`JSONSchemaFormat`. Caps the number
+        of consecutive whitespace characters. Setting it (e.g. ``2``) bounds runs
+        of whitespace, which avoids the unbounded-whitespace outputs some models
+        emit in bad cases that would otherwise blow up grammar
+        compilation/matching. Default: ``None``.
+    parallel_tool_calls : bool
+        Whether the model may emit more than one tool call in a single response.
+        Follows the OpenAI Chat Completions parameter of the same name. Default
+        ``True``, which keeps the multi-call grammar. When ``False``, the
+        structural tag allows at most one tool call, so the response holds
+        exactly zero or one call under ``tool_choice="auto"`` and exactly one
+        under ``"required"`` or a forced tool. Because a second call is no
+        longer reachable, generation must end once the single call is closed:
+        free text is still allowed *before* the call but not after it.
+
+    Notes
+    -----
+    If a tool's ``parameters`` field is omitted or ``None``, its generated
+    arguments are unconstrained JSON. If a function tool has ``strict=False``,
+    its ``parameters`` schema is also treated as unconstrained. MiniMax M3's
+    fixed-name XML converter currently rejects such unconstrained schemas.
+
+    Returns
+    -------
+    StructuralTag
+        A structural tag for function calling format.
+
+    Raises
+    ------
+    ValueError
+        If tool lists, tool choices, reasoning modes, or required tool availability are invalid.
+    """
+
+    func = _structural_tag_registry.get(model)
+    if func is None:
+        supported = list(_structural_tag_registry.keys())
+        raise ValueError(f"Unknown format type: {model}, supported types: {supported}")
+
+    function_tools, builtin_tools, simplified_tool_choice = normalize_tool_choice(tools, tool_choice)
+
+    if isinstance(reasoning, bool):
+        reasoning_mode = "enabled" if reasoning else "disabled"
+    elif isinstance(reasoning, str) and reasoning in ("enabled", "disabled", "auto"):
+        reasoning_mode = reasoning
+    else:
+        raise ValueError("The 'reasoning' argument must be a bool or one of: 'enabled', 'disabled', 'auto'.")
+
+    if not isinstance(parallel_tool_calls, bool):
+        raise ValueError("The 'parallel_tool_calls' argument must be a bool.")
+
+    return func(
+        function_tools,
+        builtin_tools,
+        simplified_tool_choice,
+        reasoning_mode,
+        any_order=any_order,
+        exclude_special_tokens=exclude_special_tokens,
+        max_whitespace_cnt=max_whitespace_cnt,
+        parallel_tool_calls=parallel_tool_calls,
+    )
+
+
+# ---------- Helper Functions And Constants ----------
+
+
+SimplifiedToolChoice = Literal["auto", "required", "forced"]
+BuiltinStructuralTagFn = Callable[..., StructuralTag]
+_TOOL_ADAPTER = TypeAdapter(ToolParam)
+_TOOL_CHOICE_ADAPTER = TypeAdapter(ToolChoiceOptionParam)
+
+_structural_tag_registry: Dict[str, BuiltinStructuralTagFn] = {}
+
+
+def normalize_tool_choice(
+    tools: Optional[List[Union[ToolParam, dict]]] = None,
+    tool_choice: Union[ToolChoiceOptionParam, dict, None] = "auto",
+) -> Tuple[List[FunctionToolParam], List[BuiltinToolParam], SimplifiedToolChoice]:
+    r"""Normalize tools and tool choice for structural tag builders.
+
+    This helper exposes the model-independent part of
+    :func:`get_model_structural_tag`. It is intended for serving engines that
+    want to own their model-specific structural tag templates while reusing
+    OpenAI-style tool and tool-choice handling.
+
+    The return value is not a new public tool-calling protocol. It is a compact
+    prepared form for structural tag builder functions:
+
+    - ordinary function tools are returned as ``FunctionToolParam`` objects;
+    - builtin/server tools are returned as ``BuiltinToolParam`` objects;
+    - public tool-choice values are simplified to ``"auto"``, ``"required"``,
+      or ``"forced"``.
+
+    Parameters
+    ----------
+    tools : Optional[List[Union[ToolParam, dict]]]
+        Function and builtin tools available to the model. Function tools use
+        the OpenAI Chat Completions shape,
+        ``{"type": "function", "function": {...}}``. Builtin tools use
+        ``type`` plus optional ``name`` and ``parameters`` fields. ``None`` is
+        treated as an empty list.
+    tool_choice : Union[ToolChoiceOptionParam, dict, None]
+        Controls whether the model may or must call tools. This accepts the
+        same values as :func:`get_model_structural_tag`:
+
+        - ``"auto"`` keeps all available tools and lets the builder allow text
+          or tool calls.
+        - ``None`` is treated as ``"auto"``.
+        - ``"none"`` clears all tools and returns simplified choice
+          ``"auto"``. Builders already interpret auto with no tools as
+          text-only.
+        - ``"required"`` keeps all available tools and requires at least one
+          function or builtin tool to remain available.
+        - ``{"type": "function", "function": {"name": ...}}`` filters to the
+          named function tool and returns simplified choice ``"forced"``.
+        - ``{"type": <builtin_type>}`` filters to exactly one builtin tool
+          whose ``type`` matches and returns simplified choice ``"forced"``.
+        - ``{"type": "allowed_tools", "allowed_tools": ...}`` filters to the
+          referenced tools and returns the nested allowed-tools ``mode`` as the
+          simplified choice.
+
+    Returns
+    -------
+    Tuple[List[FunctionToolParam], List[BuiltinToolParam], SimplifiedToolChoice]
+        A tuple of ``(function_tools, builtin_tools, simplified_tool_choice)``
+        ready to pass to a model-specific structural tag builder.
+
+    Raises
+    ------
+    ValueError
+        If ``tools`` is not a list, a referenced tool is missing, a builtin
+        tool choice does not match exactly one builtin tool, ``required`` leaves
+        no available tools, or ``forced`` does not resolve to exactly one tool.
+
+    Examples
+    --------
+    Build tool-choice handling with an external model-specific builder:
+
+    .. code-block:: python
+
+        function_tools, builtin_tools, tool_choice = normalize_tool_choice(
+            tools=[
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "get_weather",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {"location": {"type": "string"}},
+                        },
+                    },
+                }
+            ],
+            tool_choice={
+                "type": "function",
+                "function": {"name": "get_weather"},
+            },
+        )
+
+        structural_tag = build_my_model_structural_tag(
+            function_tools,
+            builtin_tools,
+            tool_choice,
+            reasoning="enabled",
+        )
+    """
+
+    if tools is None:
+        tools = []
+    if not isinstance(tools, list):
+        raise ValueError("The 'tools' argument must be a list.")
+
+    normalized_tools = [
+        (tool if isinstance(tool, (FunctionToolParam, BuiltinToolParam)) else _TOOL_ADAPTER.validate_python(tool))
+        for tool in tools
+    ]
+
+    # Model-specific functions need separate lists because builtin tools may use
+    # a different output channel or recipient from ordinary function tools.
+    function_tools = [tool for tool in normalized_tools if isinstance(tool, FunctionToolParam)]
+    builtin_tools = [tool for tool in normalized_tools if isinstance(tool, BuiltinToolParam)]
+
+    if tool_choice is None:
+        normalized_tool_choice: ToolChoiceOptionParam = "auto"
+    else:
+        normalized_tool_choice = _TOOL_CHOICE_ADAPTER.validate_python(tool_choice)
+
+    simplified_tool_choice: SimplifiedToolChoice
+    if isinstance(normalized_tool_choice, AllowedToolChoiceParam):
+        function_tools, builtin_tools = _filter_allowed_tools(function_tools, builtin_tools, normalized_tool_choice)
+        simplified_tool_choice = normalized_tool_choice.allowed_tools.mode
+    elif isinstance(normalized_tool_choice, NamedToolChoiceParam):
+        tool_name = normalized_tool_choice.function.name
+        function_tools = [tool for tool in function_tools if tool.function.name == tool_name]
+        if not function_tools:
+            raise ValueError(f"The tool with name '{tool_name}' is not found in the tools list.")
+        builtin_tools = []
+        simplified_tool_choice = "forced"
+    elif isinstance(normalized_tool_choice, BuiltinToolChoiceParam):
+        function_tools = []
+        builtin_tools = [tool for tool in builtin_tools if tool.type == normalized_tool_choice.type]
+        if len(builtin_tools) != 1:
+            raise ValueError(
+                f"Builtin tool choice must match exactly one builtin tool, got {len(builtin_tools)} matches."
+            )
+        simplified_tool_choice = "forced"
+    elif normalized_tool_choice == "none":
+        # The internal functions already treat auto with no tools as text-only.
+        function_tools = []
+        builtin_tools = []
+        simplified_tool_choice = "auto"
+    else:
+        simplified_tool_choice = normalized_tool_choice
+
+    if simplified_tool_choice == "required" and not function_tools and not builtin_tools:
+        raise ValueError("The 'tools' list is empty, which is not allowed when 'tool_choice' is 'required'.")
+    if simplified_tool_choice == "forced" and len(function_tools) + len(builtin_tools) != 1:
+        raise ValueError("Forced tool choice must resolve to exactly one tool.")
+
+    return function_tools, builtin_tools, simplified_tool_choice
+
+
+def _get_function_parameters(function: Union[FunctionDefinition, BuiltinToolParam]) -> Union[Dict[str, Any], bool]:
+    """Return the JSON schema used for constrained tool arguments.
+
+    ``None`` parameters and non-strict function tools are intentionally mapped
+    to ``True`` so the generated arguments remain syntactically constrained but
+    schema-unconstrained.
+    """
+
+    if isinstance(function, FunctionDefinition) and function.strict is False:
+        return True
+    if function.parameters is None:
+        return True
+    return function.parameters
+
+
+def _get_builtin_tool_name(tool: BuiltinToolParam) -> str:
+    """Return the model-output name for a builtin tool."""
+
+    return tool.name or tool.type
+
+
+def _text_excludes(exclude_special_tokens: bool, tokens: List[str]) -> List[str]:
+    """Resolve the tokens to forbid inside a structural tag's free-text spans.
+
+    Built-in structural tags normally forbid model special tokens (such as
+    ``<think>`` and ``</think>``) from appearing inside the free-text and
+    triggered-text spans, so the model cannot emit them as plain text. Some
+    downstream setups do not want this restriction. When
+    ``exclude_special_tokens`` is ``True`` (the default), this returns
+    *tokens* unchanged; when ``False``, it returns an empty list so nothing is
+    excluded.
+    """
+
+    return list(tokens) if exclude_special_tokens else []
+
+
+def _build_reasoning_prefix(
+    *,
+    reasoning_mode: Literal["enabled", "disabled", "auto"],
+    think_tag_begin: str,
+    think_tag_end: str,
+    exclude_special_tokens: bool,
+    reasoning_exclude_tokens: List[str],
+    prompt_end_with_think: bool = True,
+    reasoning_suffix: str = "",
+) -> Optional[Format]:
+    """Build a conventional leading reasoning block.
+
+    ``enabled`` continues an opener already present in the prompt by default.
+    ``auto`` makes a complete reasoning block optional. ``disabled`` omits the
+    block. Models with a different protocol keep their model-specific assembly.
+    """
+
+    if reasoning_mode not in ("enabled", "disabled", "auto"):
+        raise ValueError("The 'reasoning_mode' argument must be one of: 'enabled', 'disabled', 'auto'.")
+    if reasoning_mode == "disabled":
+        return None
+
+    begin = "" if reasoning_mode == "enabled" and prompt_end_with_think else think_tag_begin
+    prefix: Format = TagFormat(
+        begin=begin,
+        content=AnyTextFormat(excludes=_text_excludes(exclude_special_tokens, reasoning_exclude_tokens)),
+        end=think_tag_end,
+    )
+    if reasoning_suffix:
+        prefix = SequenceFormat(elements=[prefix, ConstStringFormat(value=reasoning_suffix)])
+    if reasoning_mode == "auto":
+        prefix = OptionalFormat(content=prefix)
+    return prefix
+
+
+def _assemble_structural_tag(prefix: Optional[Format], suffix: Format) -> StructuralTag:
+    """Assemble an optional reasoning prefix and a model-specific suffix."""
+
+    if prefix is None:
+        return StructuralTag(format=suffix)
+    return StructuralTag(format=SequenceFormat(elements=[prefix, suffix]))
+
+
+def _filter_allowed_tools(
+    tools: List[FunctionToolParam],
+    builtin_tools: List[BuiltinToolParam],
+    tool_choice: AllowedToolChoiceParam,
+) -> Tuple[List[FunctionToolParam], List[BuiltinToolParam]]:
+    """Filter tools according to a public allowed-tools tool choice."""
+
+    allowed_function_names = set()
+    allowed_builtin_types = set()
+    for allowed_tool in tool_choice.allowed_tools.tools:
+        if allowed_tool.type == "function":
+            if allowed_tool.function is None:
+                raise ValueError("Allowed function tool references must include 'function'.")
+            allowed_function_names.add(allowed_tool.function.name)
+        else:
+            allowed_builtin_types.add(allowed_tool.type)
+
+    missing_function_names = allowed_function_names - {tool.function.name for tool in tools}
+    if missing_function_names:
+        raise ValueError(f"Allowed function tools are not found in the tools list: {missing_function_names}.")
+
+    filtered_builtin_tools = [tool for tool in builtin_tools if tool.type in allowed_builtin_types]
+    matched_builtin_types = {tool.type for tool in filtered_builtin_tools}
+    missing_builtin_refs = allowed_builtin_types - matched_builtin_types
+    if missing_builtin_refs:
+        raise ValueError(f"Allowed builtin tools are not found in the tools list: {missing_builtin_refs}.")
+
+    filtered_tools = [tool for tool in tools if tool.function.name in allowed_function_names]
+    return filtered_tools, filtered_builtin_tools
+
+
+def register_model_structural_tag(name: str):
+    """Register a model-specific structural tag function under *name*.
+
+    The decorated function is stored in the internal registry so that
+    :func:`get_model_structural_tag` can look it up by the ``model``
+    argument. Use this to add support for a new model format.
+
+    Parameters
+    ----------
+    name : str
+        The model format key, e.g. ``"llama"``, ``"harmony"``.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        @register_model_structural_tag("my_model")
+        def get_my_model_structural_tag(
+            tools=None, builtin_tools=None, tool_choice="auto",
+            reasoning="enabled", **kwargs,
+        ):
+            ...
+    """
+
+    def decorator(func):
+        _structural_tag_registry[name] = func
+        return func
+
+    return decorator
+
+
+# ---------- Each Built-in Structural Tag Function ----------
+
+
+@register_model_structural_tag("llama")
+def get_llama_structural_tag(
+    tools: Optional[List[FunctionToolParam]] = None,
+    builtin_tools: Optional[List[BuiltinToolParam]] = None,
+    tool_choice: Literal["auto", "required", "forced"] = "auto",
+    reasoning: Literal["enabled", "disabled", "auto"] = "enabled",
+    any_order: bool = False,
+    exclude_special_tokens: bool = True,
+    max_whitespace_cnt: Optional[int] = None,
+    parallel_tool_calls: bool = True,
+    **kwargs: Any,
+) -> StructuralTag:
+    """Get Llama style structural tag format.
+
+    Corresponding model key: ``"llama"``.
+
+    Reference: https://www.llama.com/docs/model-cards-and-prompt-formats/llama3_1/
+
+    Parameters are normalized by :func:`get_model_structural_tag` before this
+    function is called:
+
+    - ``tools``: a list of function tools. Each tool should have a ``function``
+      object containing ``name`` and ``parameters`` fields.
+    - ``reasoning``: ignored because this format has no reasoning part.
+
+    Supported models:
+
+    - Meta-Llama-3
+    - Llama-3.1
+    - Llama-3.2
+
+    Returns
+    -------
+    StructuralTag
+        A structural tag for function calling format.
+        This format is used by Llama 3 and other models that follow the same style.
+    """
+    TOOL_NAME_PREFIX = '{"name": "'
+    PARAMETERS_FIELD_PREFIX = '", "parameters": '
+    TOOL_OBJECT_BEGIN_PREFIX = '{"name": "'
+    TOOL_OBJECT_PARAMETERS_PREFIX = '", "parameters": '
+    TOOLS_TRIGGER = '{"name": '
+    THINK_EXCLUDE_TOKENS = ["<think>", "</think>"]
+
+    tools = tools or []
+    builtin_tools = builtin_tools or []
+    if tool_choice == "auto":
+        tags = []
+        for tool in tools:
+            function = tool.function
+            parameters = _get_function_parameters(function)
+            name = function.name
+            tags.append(
+                TagFormat(
+                    begin=(TOOL_OBJECT_BEGIN_PREFIX + name + TOOL_OBJECT_PARAMETERS_PREFIX),
+                    content=JSONSchemaFormat(
+                        json_schema=parameters,
+                        any_order=any_order,
+                        max_whitespace_cnt=max_whitespace_cnt,
+                    ),
+                    end="}",
+                )
+            )
+
+        if len(tags) > 0:
+            suffix_tag = TriggeredTagsFormat(
+                triggers=[TOOLS_TRIGGER],
+                tags=tags,
+                excludes=_text_excludes(exclude_special_tokens, THINK_EXCLUDE_TOKENS),
+                stop_after_first=not parallel_tool_calls,
+            )
+        else:
+            suffix_tag = AnyTextFormat(excludes=_text_excludes(exclude_special_tokens, THINK_EXCLUDE_TOKENS))
+
+    elif tool_choice == "forced":
+        if not tools:
+            raise ValueError("Forced tool choice must resolve to exactly one tool.")
+        function = tools[0].function
+        suffix_tag = TagFormat(
+            begin=(TOOL_NAME_PREFIX + function.name + PARAMETERS_FIELD_PREFIX),
+            content=JSONSchemaFormat(
+                json_schema=_get_function_parameters(function),
+                any_order=any_order,
+                max_whitespace_cnt=max_whitespace_cnt,
+            ),
+            end="}",
+        )
+
+    elif tool_choice == "required":
+        tags = []
+        for tool in tools:
+            function = tool.function
+            parameters = _get_function_parameters(function)
+            name = function.name
+            tags.append(
+                TagFormat(
+                    begin=(TOOL_OBJECT_BEGIN_PREFIX + name + TOOL_OBJECT_PARAMETERS_PREFIX),
+                    content=JSONSchemaFormat(
+                        json_schema=parameters,
+                        any_order=any_order,
+                        max_whitespace_cnt=max_whitespace_cnt,
+                    ),
+                    end="}",
+                )
+            )
+        assert len(tags) > 0
+        suffix_tag = TriggeredTagsFormat(
+            triggers=[TOOLS_TRIGGER],
+            tags=tags,
+            excludes=_text_excludes(exclude_special_tokens, THINK_EXCLUDE_TOKENS),
+            at_least_one=True,
+            stop_after_first=not parallel_tool_calls,
+        )
+
+    return StructuralTag(format=suffix_tag)
+
+
+@register_model_structural_tag("kimi")
+def get_kimi_structural_tag(
+    tools: Optional[List[FunctionToolParam]] = None,
+    builtin_tools: Optional[List[BuiltinToolParam]] = None,
+    tool_choice: Literal["auto", "required", "forced"] = "auto",
+    reasoning: Literal["enabled", "disabled", "auto"] = "enabled",
+    any_order: bool = False,
+    exclude_special_tokens: bool = True,
+    max_whitespace_cnt: Optional[int] = None,
+    parallel_tool_calls: bool = True,
+    **kwargs: Any,
+) -> StructuralTag:
+    """Get Kimi-K2 style structural tag format.
+
+    Corresponding model key: ``"kimi"``.
+
+    Reference: https://huggingface.co/moonshotai/Kimi-K2-Instruct/blob/main/docs/tool_call_guidance.md
+
+    Parameters are normalized by :func:`get_model_structural_tag` before this
+    function is called:
+
+    - ``tools``: a list of function tools. Each tool should have a ``function``
+      object containing ``name`` and ``parameters`` fields.
+    - ``reasoning``: ``"enabled"`` keeps the reasoning part,
+      ``"disabled"`` removes it, and ``"auto"`` makes a complete reasoning
+      block optional.
+
+    Supported models:
+
+    - Kimi-K2
+    - Kimi-K2.5
+
+    Returns
+    -------
+    StructuralTag
+        A structural tag template.
+        This format is used by Kimi-K2 and other models that follow the same style.
+    """
+    TOOL_CALL_BEGIN = "<|tool_call_begin|>"
+    TOOL_CALL_BEGIN_PREFIX = f"{TOOL_CALL_BEGIN}functions."
+    TOOL_CALL_SUFFIX = ":"
+    TOOL_CALL_ARGUMENT_BEGIN = "<|tool_call_argument_begin|>"
+    TOOL_CALL_END = "<|tool_call_end|>"
+    TOOL_CALLS_SECTION_BEGIN = "<|tool_calls_section_begin|>"
+    TOOL_CALLS_SECTION_END = "<|tool_calls_section_end|>"
+    THINK_TAG_BEGIN = "<think>"
+    THINK_TAG_END = "</think>"
+    THINK_EXCLUDE_TOKENS = ["<think>", "</think>"]
+
+    tools = tools or []
+    builtin_tools = builtin_tools or []
+    if tool_choice == "auto":
+        tags = []
+        for tool in tools:
+            function = tool.function
+            parameters = _get_function_parameters(function)
+            name = function.name
+            tags.append(
+                TagFormat(
+                    begin=f"{TOOL_CALL_BEGIN_PREFIX}{name}{TOOL_CALL_SUFFIX}",
+                    content=SequenceFormat(
+                        elements=[
+                            RegexFormat(pattern=r"\d+"),
+                            ConstStringFormat(value=TOOL_CALL_ARGUMENT_BEGIN),
+                            JSONSchemaFormat(
+                                json_schema=parameters,
+                                any_order=any_order,
+                                max_whitespace_cnt=max_whitespace_cnt,
+                            ),
+                        ]
+                    ),
+                    end=TOOL_CALL_END,
+                )
+            )
+
+        if len(tags) > 0:
+            inner_tool_calls = TagsWithSeparatorFormat(
+                tags=tags, separator="", at_least_one=True, stop_after_first=not parallel_tool_calls
+            )
+            tool_calls = TagFormat(
+                begin=TOOL_CALLS_SECTION_BEGIN, content=inner_tool_calls, end=TOOL_CALLS_SECTION_END
+            )
+            suffix_tag = TriggeredTagsFormat(
+                triggers=[TOOL_CALLS_SECTION_BEGIN],
+                tags=[tool_calls],
+                excludes=_text_excludes(exclude_special_tokens, [*THINK_EXCLUDE_TOKENS, TOOL_CALL_BEGIN]),
+                stop_after_first=not parallel_tool_calls,
+            )
+        else:
+            suffix_tag = AnyTextFormat(excludes=_text_excludes(exclude_special_tokens, THINK_EXCLUDE_TOKENS))
+
+    elif tool_choice == "forced":
+        if not tools:
+            raise ValueError("Forced tool choice must resolve to exactly one tool.")
+        function = tools[0].function
+        suffix_tag = SequenceFormat(
+            elements=[
+                ConstStringFormat(value=TOOL_CALLS_SECTION_BEGIN),
+                TagFormat(
+                    begin=f"{TOOL_CALL_BEGIN_PREFIX}{function.name}{TOOL_CALL_SUFFIX}",
+                    content=SequenceFormat(
+                        elements=[
+                            RegexFormat(pattern=r"\d+"),
+                            ConstStringFormat(value=TOOL_CALL_ARGUMENT_BEGIN),
+                            JSONSchemaFormat(
+                                json_schema=_get_function_parameters(function),
+                                any_order=any_order,
+                                max_whitespace_cnt=max_whitespace_cnt,
+                            ),
+                        ]
+                    ),
+                    end=TOOL_CALL_END,
+                ),
+                ConstStringFormat(value=TOOL_CALLS_SECTION_END),
+            ]
+        )
+    elif tool_choice == "required":
+        tags = []
+        for tool in tools:
+            function = tool.function
+            parameters = _get_function_parameters(function)
+            name = function.name
+            tags.append(
+                TagFormat(
+                    begin=f"{TOOL_CALL_BEGIN_PREFIX}{name}{TOOL_CALL_SUFFIX}",
+                    content=SequenceFormat(
+                        elements=[
+                            RegexFormat(pattern=r"\d+"),
+                            ConstStringFormat(value=TOOL_CALL_ARGUMENT_BEGIN),
+                            JSONSchemaFormat(
+                                json_schema=parameters,
+                                any_order=any_order,
+                                max_whitespace_cnt=max_whitespace_cnt,
+                            ),
+                        ]
+                    ),
+                    end=TOOL_CALL_END,
+                )
+            )
+        assert len(tags) > 0
+        suffix_tag = SequenceFormat(
+            elements=[
+                ConstStringFormat(value=TOOL_CALLS_SECTION_BEGIN),
+                TagsWithSeparatorFormat(
+                    tags=tags,
+                    separator="",
+                    at_least_one=True,
+                    stop_after_first=not parallel_tool_calls,
+                ),
+                ConstStringFormat(value=TOOL_CALLS_SECTION_END),
+            ]
+        )
+
+    prefix_tag = _build_reasoning_prefix(
+        reasoning_mode=reasoning,
+        think_tag_begin=THINK_TAG_BEGIN,
+        think_tag_end=THINK_TAG_END,
+        exclude_special_tokens=exclude_special_tokens,
+        # Kimi-K2 does not prefill <think>; preserve enabled mode's acceptance of it.
+        reasoning_exclude_tokens=THINK_EXCLUDE_TOKENS if reasoning == "auto" else [],
+    )
+    return _assemble_structural_tag(prefix_tag, suffix_tag)
+
+
+@register_model_structural_tag("kimi_k3")
+def get_kimi_k3_structural_tag(
+    tools: Optional[List[FunctionToolParam]] = None,
+    builtin_tools: Optional[List[BuiltinToolParam]] = None,
+    tool_choice: Literal["auto", "required", "forced"] = "auto",
+    reasoning: Literal["enabled", "disabled", "auto"] = "enabled",
+    any_order: bool = False,
+    exclude_special_tokens: bool = True,
+    max_whitespace_cnt: Optional[int] = None,
+    parallel_tool_calls: bool = True,
+    **kwargs: Any,
+) -> StructuralTag:
+    r"""Get Kimi-K3 style structural tag format.
+
+    Corresponding model key: ``"kimi_k3"``.
+
+    Kimi-K3 uses a token-delimited block format instead of the Kimi-K2 style. An
+    assistant message looks like::
+
+        <|open|>think<|sep|>...<|close|>think<|sep|>
+        <|open|>response<|sep|>...<|close|>response<|sep|>
+        <|open|>tools<|sep|>
+            <|open|>call tool="NAME" index="1"<|sep|>
+                <|open|>argument key="KEY" type="TYPE"<|sep|>VALUE<|close|>argument<|sep|>
+                ...
+            <|close|>call<|sep|>
+            ...
+        <|close|>tools<|sep|>
+        <|close|>message<|sep|>
+
+    (line breaks above are for readability only; the blocks are emitted back to
+    back).
+
+    The chat template's generation prompt already ends with the opening marker of
+    the first block -- ``<|open|>think<|sep|>`` in thinking mode and
+    ``<|open|>response<|sep|>`` otherwise -- so the constrained output starts
+    *inside* that block's body and this structural tag does not include that
+    marker. Every later marker is generated by the model.
+
+    The tool-call arguments are emitted one tag per argument and are constrained
+    by :class:`JSONSchemaFormat` with ``style="kimi_k3_xml"``: string values are
+    raw text, and other value types remain JSON-style. With ``exclude_special_tokens=True``,
+    string values without ``pattern``/``format`` and property names exclude ``<|open|>``,
+    ``<|close|>``, and ``<|sep|>`` (see :class:`JSONSchemaFormat` for the exact rules);
+    argument and call wrappers remain outside this exclusion scope.
+
+    Parameters are normalized by :func:`get_model_structural_tag` before this
+    function is called:
+
+    - ``tools``: a list of function tools. Each tool should have a ``function``
+      object containing ``name`` and ``parameters`` fields.
+    - ``reasoning``: selects ``"enabled"``, ``"disabled"``, or adaptive
+      ``"auto"`` reasoning.
+
+    Supported models:
+
+    - Kimi-K3
+
+    Returns
+    -------
+    StructuralTag
+        A structural tag template.
+        This format is used by Kimi-K3 and other models that follow the same style.
+    """
+    OPEN = "<|open|>"
+    CLOSE = "<|close|>"
+    SEP = "<|sep|>"
+    THINK_BEGIN = f"{OPEN}think{SEP}"
+    THINK_END = f"{CLOSE}think{SEP}"
+    RESPONSE_BEGIN = f"{OPEN}response{SEP}"
+    RESPONSE_END = f"{CLOSE}response{SEP}"
+    TOOLS_SECTION_BEGIN = f"{OPEN}tools{SEP}"
+    TOOLS_SECTION_END = f"{CLOSE}tools{SEP}"
+    TOOL_CALL_BEGIN_PREFIX = f'{OPEN}call tool="'
+    TOOL_CALL_INDEX_PREFIX = '" index="'
+    TOOL_CALL_BEGIN_SUFFIX = f'"{SEP}'
+    TOOL_CALL_END = f"{CLOSE}call{SEP}"
+    MESSAGE_END = f"{CLOSE}message{SEP}"
+    SPECIAL_EXCLUDE_TOKENS = [OPEN, CLOSE]
+    XML_STYLE = "kimi_k3_xml"
+
+    def _make_call_tag(function: FunctionDefinition) -> TagFormat:
+        # <|open|>call tool="NAME" index="N"<|sep|>arguments<|close|>call<|sep|>
+        return TagFormat(
+            begin=f"{TOOL_CALL_BEGIN_PREFIX}{function.name}{TOOL_CALL_INDEX_PREFIX}",
+            content=SequenceFormat(
+                elements=[
+                    RegexFormat(pattern=r"\d+"),
+                    ConstStringFormat(value=TOOL_CALL_BEGIN_SUFFIX),
+                    JSONSchemaFormat(
+                        json_schema=_get_function_parameters(function),
+                        style=XML_STYLE,
+                        any_order=any_order,
+                        max_whitespace_cnt=max_whitespace_cnt,
+                        excludes=_text_excludes(exclude_special_tokens, [OPEN, CLOSE, SEP]),
+                    ),
+                ]
+            ),
+            end=TOOL_CALL_END,
+        )
+
+    tools = tools or []
+    builtin_tools = builtin_tools or []
+    tools_part: Optional[Any] = None
+    if tool_choice == "auto":
+        tags = [_make_call_tag(tool.function) for tool in tools]
+        if len(tags) > 0:
+            tools_part = OptionalFormat(
+                content=TagFormat(
+                    begin=TOOLS_SECTION_BEGIN,
+                    content=TagsWithSeparatorFormat(
+                        tags=tags,
+                        separator="",
+                        at_least_one=True,
+                        stop_after_first=not parallel_tool_calls,
+                    ),
+                    end=TOOLS_SECTION_END,
+                )
+            )
+
+    elif tool_choice == "forced":
+        if not tools:
+            raise ValueError("Forced tool choice must resolve to exactly one tool.")
+        tools_part = SequenceFormat(
+            elements=[
+                ConstStringFormat(value=TOOLS_SECTION_BEGIN),
+                _make_call_tag(tools[0].function),
+                ConstStringFormat(value=TOOLS_SECTION_END),
+            ]
+        )
+
+    elif tool_choice == "required":
+        tags = [_make_call_tag(tool.function) for tool in tools]
+        assert len(tags) > 0
+        tools_part = SequenceFormat(
+            elements=[
+                ConstStringFormat(value=TOOLS_SECTION_BEGIN),
+                TagsWithSeparatorFormat(
+                    tags=tags,
+                    separator="",
+                    at_least_one=True,
+                    stop_after_first=not parallel_tool_calls,
+                ),
+                ConstStringFormat(value=TOOLS_SECTION_END),
+            ]
+        )
+
+    # The generation prompt already emitted the first block's opening marker, so the
+    # constrained output starts inside its body: the think body in reasoning mode, the
+    # response body otherwise. Only the remaining markers are generated by the model.
+    prefix_tag = _build_reasoning_prefix(
+        reasoning_mode=reasoning,
+        think_tag_begin=THINK_BEGIN,
+        think_tag_end=THINK_END,
+        exclude_special_tokens=exclude_special_tokens,
+        reasoning_exclude_tokens=SPECIAL_EXCLUDE_TOKENS,
+    )
+    elements: List[Any] = []
+    if prefix_tag is not None:
+        elements.append(prefix_tag)
+    elements.append(
+        TagFormat(
+            begin="" if reasoning == "disabled" else RESPONSE_BEGIN,
+            content=AnyTextFormat(excludes=_text_excludes(exclude_special_tokens, SPECIAL_EXCLUDE_TOKENS)),
+            end=RESPONSE_END,
+        )
+    )
+    if tools_part is not None:
+        elements.append(tools_part)
+    # The message closes right after the last block;
+    elements.append(ConstStringFormat(value=MESSAGE_END))
+
+    return StructuralTag(format=SequenceFormat(elements=elements))
+
+
+@register_model_structural_tag("deepseek_r1")
+def get_deepseek_r1_structural_tag(
+    tools: Optional[List[FunctionToolParam]] = None,
+    builtin_tools: Optional[List[BuiltinToolParam]] = None,
+    tool_choice: Literal["auto", "required", "forced"] = "auto",
+    reasoning: Literal["enabled", "disabled", "auto"] = "enabled",
+    any_order: bool = False,
+    exclude_special_tokens: bool = True,
+    max_whitespace_cnt: Optional[int] = None,
+    parallel_tool_calls: bool = True,
+    **kwargs: Any,
+) -> StructuralTag:
+    """Get DeepSeek-R1 style structural tag format.
+
+    Corresponding model key: ``"deepseek_r1"``.
+
+    Reference: https://huggingface.co/deepseek-ai/DeepSeek-R1/blob/main/tokenizer_config.json
+
+    Supported models:
+
+    - DeepSeek-R1
+    - DeepSeek-R1-0528
+    """
+    TOOL_CALLS_BEGIN = "<｜tool▁calls▁begin｜>"
+    TOOL_CALLS_END = "<｜tool▁calls▁end｜>"
+    TOOL_CALL_BEGIN = "<｜tool▁call▁begin｜>"
+    TOOL_CALL_END = "<｜tool▁call▁end｜>"
+    TOOL_SEP = "<｜tool▁sep｜>"
+    JSON_RENDER_BEGIN = "\n```json\n"
+    JSON_RENDER_END = "\n```"
+    THINK_TAG_BEGIN = "<think>"
+    THINK_TAG_END = "</think>"
+    THINK_EXCLUDE_TOKENS = ["<think>", "</think>"]
+
+    tools = tools or []
+    builtin_tools = builtin_tools or []
+    if tool_choice == "auto":
+        tags = []
+        for tool in tools:
+            function = tool.function
+            parameters = _get_function_parameters(function)
+            name = function.name
+            tags.append(
+                TagFormat(
+                    begin=f"{TOOL_CALL_BEGIN}function{TOOL_SEP}{name}{JSON_RENDER_BEGIN}",
+                    content=JSONSchemaFormat(
+                        json_schema=parameters,
+                        any_order=any_order,
+                        max_whitespace_cnt=max_whitespace_cnt,
+                    ),
+                    end=f"{JSON_RENDER_END}{TOOL_CALL_END}",
+                )
+            )
+
+        if len(tags) > 0:
+            inner_tool_calls = TagsWithSeparatorFormat(
+                tags=tags,
+                separator="\n",
+                at_least_one=True,
+                stop_after_first=not parallel_tool_calls,
+            )
+            tool_calls = TagFormat(begin=TOOL_CALLS_BEGIN, content=inner_tool_calls, end=TOOL_CALLS_END)
+            suffix_tag = TriggeredTagsFormat(
+                triggers=[TOOL_CALLS_BEGIN],
+                tags=[tool_calls],
+                excludes=_text_excludes(exclude_special_tokens, THINK_EXCLUDE_TOKENS),
+                stop_after_first=not parallel_tool_calls,
+            )
+        else:
+            suffix_tag = AnyTextFormat(excludes=_text_excludes(exclude_special_tokens, THINK_EXCLUDE_TOKENS))
+
+    elif tool_choice == "forced":
+        if not tools:
+            raise ValueError("Forced tool choice must resolve to exactly one tool.")
+        function = tools[0].function
+        parameters = _get_function_parameters(function)
+        suffix_tag = TagFormat(
+            begin=f"{TOOL_CALLS_BEGIN}{TOOL_CALL_BEGIN}function{TOOL_SEP}{function.name}{JSON_RENDER_BEGIN}",
+            content=JSONSchemaFormat(
+                json_schema=parameters, any_order=any_order, max_whitespace_cnt=max_whitespace_cnt
+            ),
+            end=f"{JSON_RENDER_END}{TOOL_CALL_END}{TOOL_CALLS_END}",
+        )
+
+    elif tool_choice == "required":
+        tags = []
+        for tool in tools:
+            function = tool.function
+            parameters = _get_function_parameters(function)
+            name = function.name
+            tags.append(
+                TagFormat(
+                    begin=f"{TOOL_CALL_BEGIN}function{TOOL_SEP}{name}{JSON_RENDER_BEGIN}",
+                    content=JSONSchemaFormat(
+                        json_schema=parameters,
+                        any_order=any_order,
+                        max_whitespace_cnt=max_whitespace_cnt,
+                    ),
+                    end=f"{JSON_RENDER_END}{TOOL_CALL_END}",
+                )
+            )
+
+        assert len(tags) > 0
+        inner_tool_calls = TagsWithSeparatorFormat(
+            tags=tags, separator="\n", at_least_one=True, stop_after_first=not parallel_tool_calls
+        )
+        suffix_tag = TagFormat(begin=TOOL_CALLS_BEGIN, content=inner_tool_calls, end=TOOL_CALLS_END)
+
+    prefix_tag = _build_reasoning_prefix(
+        reasoning_mode=reasoning,
+        think_tag_begin=THINK_TAG_BEGIN,
+        think_tag_end=THINK_TAG_END,
+        exclude_special_tokens=exclude_special_tokens,
+        reasoning_exclude_tokens=THINK_EXCLUDE_TOKENS,
+    )
+    return _assemble_structural_tag(prefix_tag, suffix_tag)
+
+
+@register_model_structural_tag("deepseek_v3_1")
+def get_deepseek_v3_1_structural_tag(
+    tools: Optional[List[FunctionToolParam]] = None,
+    builtin_tools: Optional[List[BuiltinToolParam]] = None,
+    tool_choice: Literal["auto", "required", "forced"] = "auto",
+    reasoning: Literal["enabled", "disabled", "auto"] = "enabled",
+    any_order: bool = False,
+    exclude_special_tokens: bool = True,
+    max_whitespace_cnt: Optional[int] = None,
+    parallel_tool_calls: bool = True,
+    **kwargs: Any,
+) -> StructuralTag:
+    """Get DeepSeek-V3.1 style structural tag format.
+
+    Corresponding model key: ``"deepseek_v3_1"``.
+
+    Reference: https://huggingface.co/deepseek-ai/DeepSeek-V3.1/blob/main/tokenizer_config.json
+
+    Supported models:
+
+    - DeepSeek-V3.1
+    - DeepSeek-V3.2-Exp
+    """
+    TOOL_CALLS_BEGIN = "<｜tool▁calls▁begin｜>"
+    TOOL_CALLS_END = "<｜tool▁calls▁end｜>"
+    TOOL_CALL_BEGIN = "<｜tool▁call▁begin｜>"
+    TOOL_CALL_END = "<｜tool▁call▁end｜>"
+    TOOL_SEP = "<｜tool▁sep｜>"
+    THINK_TAG_BEGIN = "<think>"
+    THINK_TAG_END = "</think>"
+    THINK_EXCLUDE_TOKENS = ["<think>", "</think>"]
+
+    tools = tools or []
+    builtin_tools = builtin_tools or []
+    if tool_choice == "auto":
+        tags = []
+        for tool in tools:
+            function = tool.function
+            parameters = _get_function_parameters(function)
+            name = function.name
+            tags.append(
+                TagFormat(
+                    begin=f"{TOOL_CALL_BEGIN}{name}{TOOL_SEP}",
+                    content=JSONSchemaFormat(
+                        json_schema=parameters,
+                        any_order=any_order,
+                        max_whitespace_cnt=max_whitespace_cnt,
+                    ),
+                    end=TOOL_CALL_END,
+                )
+            )
+
+        if len(tags) > 0:
+            inner_tool_calls = TagsWithSeparatorFormat(
+                tags=tags, separator="", at_least_one=True, stop_after_first=not parallel_tool_calls
+            )
+            tool_calls = TagFormat(begin=TOOL_CALLS_BEGIN, content=inner_tool_calls, end=TOOL_CALLS_END)
+            suffix_tag = TriggeredTagsFormat(
+                triggers=[TOOL_CALLS_BEGIN],
+                tags=[tool_calls],
+                excludes=_text_excludes(exclude_special_tokens, THINK_EXCLUDE_TOKENS),
+                stop_after_first=not parallel_tool_calls,
+            )
+        else:
+            suffix_tag = AnyTextFormat(excludes=_text_excludes(exclude_special_tokens, THINK_EXCLUDE_TOKENS))
+
+    elif tool_choice == "forced":
+        if not tools:
+            raise ValueError("Forced tool choice must resolve to exactly one tool.")
+        function = tools[0].function
+        parameters = _get_function_parameters(function)
+        suffix_tag = TagFormat(
+            begin=f"{TOOL_CALLS_BEGIN}{TOOL_CALL_BEGIN}{function.name}{TOOL_SEP}",
+            content=JSONSchemaFormat(
+                json_schema=parameters, any_order=any_order, max_whitespace_cnt=max_whitespace_cnt
+            ),
+            end=f"{TOOL_CALL_END}{TOOL_CALLS_END}",
+        )
+
+    elif tool_choice == "required":
+        tags = []
+        for tool in tools:
+            function = tool.function
+            parameters = _get_function_parameters(function)
+            name = function.name
+            tags.append(
+                TagFormat(
+                    begin=f"{TOOL_CALL_BEGIN}{name}{TOOL_SEP}",
+                    content=JSONSchemaFormat(
+                        json_schema=parameters,
+                        any_order=any_order,
+                        max_whitespace_cnt=max_whitespace_cnt,
+                    ),
+                    end=TOOL_CALL_END,
+                )
+            )
+
+        assert len(tags) > 0
+        inner_tool_calls = TagsWithSeparatorFormat(
+            tags=tags, separator="", at_least_one=True, stop_after_first=not parallel_tool_calls
+        )
+        suffix_tag = TagFormat(begin=TOOL_CALLS_BEGIN, content=inner_tool_calls, end=TOOL_CALLS_END)
+
+    prefix_tag = _build_reasoning_prefix(
+        reasoning_mode=reasoning,
+        think_tag_begin=THINK_TAG_BEGIN,
+        think_tag_end=THINK_TAG_END,
+        exclude_special_tokens=exclude_special_tokens,
+        reasoning_exclude_tokens=THINK_EXCLUDE_TOKENS,
+    )
+    return _assemble_structural_tag(prefix_tag, suffix_tag)
+
+
+@register_model_structural_tag("qwen_3_5")
+@register_model_structural_tag("qwen_3_coder")
+def get_qwen_3_5_structural_tag(
+    tools: Optional[List[FunctionToolParam]] = None,
+    builtin_tools: Optional[List[BuiltinToolParam]] = None,
+    tool_choice: Literal["auto", "required", "forced"] = "auto",
+    reasoning: Literal["enabled", "disabled", "auto"] = "enabled",
+    any_order: bool = False,
+    exclude_special_tokens: bool = True,
+    max_whitespace_cnt: Optional[int] = None,
+    parallel_tool_calls: bool = True,
+    **kwargs: Any,
+) -> StructuralTag:
+    """Get Qwen XML tool-call structural tag format.
+
+    Corresponding model keys: ``"qwen_3_5"`` and ``"qwen_3_coder"``.
+
+    Reference: https://huggingface.co/Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8/blob/main/chat_template.jinja
+
+    Parameters are normalized by :func:`get_model_structural_tag` before this
+    function is called:
+
+    - ``tools``: a list of function tools. Each tool should have a ``function``
+      object containing ``name`` and ``parameters`` fields.
+    - ``reasoning``: controls whether the reasoning prefix is required,
+      omitted, or optional before the tool/text suffix.
+
+    Supported models:
+
+    - Qwen3.5
+    - Qwen3.6
+    - Qwen3-Coder
+    - Qwen3-Coder-Next
+
+    Returns
+    -------
+    StructuralTag
+        A structural tag for Qwen XML function calling format.
+    """
+    TOOL_CALL_BEGIN_PREFIX = "<tool_call>\n<function="
+    TOOL_CALL_BEGIN_SUFFIX = ">\n"
+    TOOL_CALL_END = "\n</function>\n</tool_call>"
+    TOOL_CALL_TRIGGER = "<tool_call>\n<function="
+    THINK_TAG_BEGIN = "<think>"
+    THINK_TAG_END = "</think>"
+    THINK_SUFFIX = "\n\n"
+    THINK_EXCLUDE_TOKENS = ["<think>", "</think>"]
+    tools = tools or []
+    builtin_tools = builtin_tools or []
+    if tool_choice == "auto":
+        tags = []
+        for tool in tools:
+            function = tool.function
+            parameters = _get_function_parameters(function)
+            name = function.name
+            tags.append(
+                TagFormat(
+                    begin=f"{TOOL_CALL_BEGIN_PREFIX}{name}{TOOL_CALL_BEGIN_SUFFIX}",
+                    content=JSONSchemaFormat(
+                        json_schema=parameters,
+                        style="qwen_xml",
+                        any_order=any_order,
+                        max_whitespace_cnt=max_whitespace_cnt,
+                    ),
+                    end=TOOL_CALL_END,
+                )
+            )
+
+        if len(tags) > 0:
+            suffix_tag = TriggeredTagsFormat(
+                triggers=[TOOL_CALL_TRIGGER],
+                tags=tags,
+                excludes=_text_excludes(exclude_special_tokens, THINK_EXCLUDE_TOKENS),
+                stop_after_first=not parallel_tool_calls,
+            )
+        else:
+            suffix_tag = AnyTextFormat(excludes=_text_excludes(exclude_special_tokens, THINK_EXCLUDE_TOKENS))
+
+    elif tool_choice == "forced":
+        if not tools:
+            raise ValueError("Forced tool choice must resolve to exactly one tool.")
+        function = tools[0].function
+        suffix_tag = TagFormat(
+            begin=f"{TOOL_CALL_BEGIN_PREFIX}{function.name}{TOOL_CALL_BEGIN_SUFFIX}",
+            content=JSONSchemaFormat(
+                json_schema=_get_function_parameters(function),
+                style="qwen_xml",
+                any_order=any_order,
+                max_whitespace_cnt=max_whitespace_cnt,
+            ),
+            end=TOOL_CALL_END,
+        )
+
+    elif tool_choice == "required":
+        tags = []
+        for tool in tools:
+            function = tool.function
+            parameters = _get_function_parameters(function)
+            name = function.name
+            tags.append(
+                TagFormat(
+                    begin=f"{TOOL_CALL_BEGIN_PREFIX}{name}{TOOL_CALL_BEGIN_SUFFIX}",
+                    content=JSONSchemaFormat(
+                        json_schema=parameters,
+                        style="qwen_xml",
+                        any_order=any_order,
+                        max_whitespace_cnt=max_whitespace_cnt,
+                    ),
+                    end=TOOL_CALL_END,
+                )
+            )
+
+        assert len(tags) > 0
+        suffix_tag = TriggeredTagsFormat(
+            triggers=[TOOL_CALL_TRIGGER],
+            tags=tags,
+            excludes=_text_excludes(exclude_special_tokens, THINK_EXCLUDE_TOKENS),
+            at_least_one=True,
+            stop_after_first=not parallel_tool_calls,
+        )
+
+    prefix_tag = _build_reasoning_prefix(
+        reasoning_mode=reasoning,
+        think_tag_begin=THINK_TAG_BEGIN,
+        think_tag_end=THINK_TAG_END,
+        exclude_special_tokens=exclude_special_tokens,
+        reasoning_exclude_tokens=THINK_EXCLUDE_TOKENS,
+        reasoning_suffix=THINK_SUFFIX,
+    )
+    return _assemble_structural_tag(prefix_tag, suffix_tag)
+
+
+get_qwen_3_coder_structural_tag = get_qwen_3_5_structural_tag
+"""Deprecated alias for :func:`get_qwen_3_5_structural_tag`."""
+
+
+@register_model_structural_tag("mimo")
+def get_mimo_structural_tag(
+    tools: Optional[List[FunctionToolParam]] = None,
+    builtin_tools: Optional[List[BuiltinToolParam]] = None,
+    tool_choice: Literal["auto", "required", "forced"] = "auto",
+    reasoning: Literal["enabled", "disabled", "auto"] = "enabled",
+    any_order: bool = False,
+    exclude_special_tokens: bool = True,
+    max_whitespace_cnt: Optional[int] = None,
+    parallel_tool_calls: bool = True,
+    **kwargs: Any,
+) -> StructuralTag:
+    """Get MiMo-V2.6 style structural tag format.
+
+    Corresponding model key: ``"mimo"``.
+
+    Reference: https://huggingface.co/XiaomiMiMo/MiMo-V2.6-Pro-RL/blob/main/chat_template.jinja
+
+    MiMo uses the Qwen XML parameter format, but without the newlines that
+    Qwen3-Coder puts between the wrapper tags::
+
+        <tool_call><function=NAME><parameter=KEY>VALUE</parameter></function></tool_call>
+
+    String arguments are raw text; other values are JSON. Arguments are
+    constrained by :class:`JSONSchemaFormat` with ``style="qwen_xml"``.
+
+    With ``enable_thinking=True`` the chat template ends the generation prompt
+    at ``<|im_start|>assistant\\n``, so ``reasoning="enabled"`` generates the
+    complete ``<think>...</think>`` block. With ``enable_thinking=False`` the
+    template renders ``<think></think>`` into the prompt; use
+    ``reasoning="disabled"``, also when the serving engine manages reasoning
+    itself.
+
+    Parameters are normalized by :func:`get_model_structural_tag` before this
+    function is called:
+
+    - ``tools``: a list of function tools. Each tool should have a ``function``
+      object containing ``name`` and ``parameters`` fields.
+    - ``reasoning``: selects ``"enabled"``, ``"disabled"``, or adaptive
+      ``"auto"`` reasoning.
+
+    Supported models:
+
+    - MiMo-V2.6-Pro-RL
+    - MiMo-V2.6-Flash-RL
+
+    Returns
+    -------
+    StructuralTag
+        A structural tag for MiMo function calling format.
+    """
+    if builtin_tools:
+        raise ValueError("MiMo does not support builtin tools.")
+
+    tool_start = "<tool_call>"
+    text_excludes = ["<think>", "</think>", "</tool_call>", "<function="]
+    reasoning_excludes = [tool_start, *text_excludes]
+    tags = [
+        TagFormat(
+            begin=f"{tool_start}<function={tool.function.name}>",
+            content=JSONSchemaFormat(
+                json_schema=_get_function_parameters(tool.function),
+                style="qwen_xml",
+                any_order=any_order,
+                max_whitespace_cnt=max_whitespace_cnt,
+            ),
+            end="</function></tool_call>",
+        )
+        for tool in tools or []
+    ]
+    if tool_choice == "forced":
+        if not tags:
+            raise ValueError("Forced tool choice must resolve to exactly one tool.")
+        suffix_tag = tags[0]
+    elif tool_choice in ("auto", "required"):
+        if tool_choice == "required" and not tags:
+            raise ValueError("Required tool choice needs at least one function tool.")
+        if tags:
+            suffix_tag = TriggeredTagsFormat(
+                triggers=[tool_start],
+                tags=tags,
+                excludes=_text_excludes(exclude_special_tokens, text_excludes),
+                at_least_one=tool_choice == "required",
+                stop_after_first=not parallel_tool_calls,
+            )
+        else:
+            suffix_tag = AnyTextFormat(excludes=_text_excludes(exclude_special_tokens, reasoning_excludes))
+    else:
+        raise ValueError(f"Unsupported tool choice: {tool_choice}")
+
+    prefix_tag = _build_reasoning_prefix(
+        reasoning_mode=reasoning,
+        think_tag_begin="<think>",
+        think_tag_end="</think>",
+        exclude_special_tokens=exclude_special_tokens,
+        reasoning_exclude_tokens=reasoning_excludes,
+        prompt_end_with_think=False,
+    )
+    return _assemble_structural_tag(prefix_tag, suffix_tag)
+
+
+@register_model_structural_tag("qwen_3")
+def get_qwen_3_structural_tag(
+    tools: Optional[List[FunctionToolParam]] = None,
+    builtin_tools: Optional[List[BuiltinToolParam]] = None,
+    tool_choice: Literal["auto", "required", "forced"] = "auto",
+    reasoning: Literal["enabled", "disabled", "auto"] = "enabled",
+    any_order: bool = False,
+    exclude_special_tokens: bool = True,
+    max_whitespace_cnt: Optional[int] = None,
+    parallel_tool_calls: bool = True,
+    **kwargs: Any,
+) -> StructuralTag:
+    """Get Qwen3 style structural tag format.
+
+    Corresponding model key: ``"qwen_3"``.
+
+    Reference: https://qwen.readthedocs.io/en/latest/framework/function_call.html
+
+    Parameters are normalized by :func:`get_model_structural_tag` before this
+    function is called:
+
+    - ``tools``: a list of function tools. Each tool should have a ``function``
+      object containing ``name`` and ``parameters`` fields.
+    - ``reasoning``: controls whether the reasoning block is required,
+      omitted, or optional.
+
+    Supported models:
+
+    - Qwen3
+    - Qwen3-Next
+
+    Returns
+    -------
+    StructuralTag
+        A structural tag template.
+        This format is used by Qwen3 and other models that follow the same style.
+    """
+    TOOL_CALL_BEGIN_PREFIX = '<tool_call>\n{"name": "'
+    ARGUMENTS_FIELD_PREFIX = '", "arguments": '
+    TOOL_CALL_END = "}\n</tool_call>"
+    TOOL_CALL_TRIGGER = "<tool_call>"
+    THINK_TAG_BEGIN = "<think>"
+    THINK_TAG_END = "</think>"
+    THINK_SUFFIX = "\n\n"
+    THINK_EXCLUDE_TOKENS = ["<think>", "</think>"]
+
+    tools = tools or []
+    builtin_tools = builtin_tools or []
+    if tool_choice == "auto":
+        tags = []
+        for tool in tools:
+            function = tool.function
+            parameters = _get_function_parameters(function)
+            name = function.name
+            tags.append(
+                TagFormat(
+                    begin=(TOOL_CALL_BEGIN_PREFIX + name + ARGUMENTS_FIELD_PREFIX),
+                    content=JSONSchemaFormat(
+                        json_schema=parameters,
+                        any_order=any_order,
+                        max_whitespace_cnt=max_whitespace_cnt,
+                    ),
+                    end=TOOL_CALL_END,
+                )
+            )
+        if len(tags) > 0:
+            suffix_tag = TriggeredTagsFormat(
+                triggers=[TOOL_CALL_TRIGGER],
+                tags=tags,
+                excludes=_text_excludes(exclude_special_tokens, THINK_EXCLUDE_TOKENS),
+                stop_after_first=not parallel_tool_calls,
+            )
+        else:
+            suffix_tag = AnyTextFormat(excludes=_text_excludes(exclude_special_tokens, THINK_EXCLUDE_TOKENS))
+
+    elif tool_choice == "forced":
+        if not tools:
+            raise ValueError("Forced tool choice must resolve to exactly one tool.")
+        function = tools[0].function
+        suffix_tag = TagFormat(
+            begin=(TOOL_CALL_BEGIN_PREFIX + function.name + ARGUMENTS_FIELD_PREFIX),
+            content=JSONSchemaFormat(
+                json_schema=_get_function_parameters(function),
+                any_order=any_order,
+                max_whitespace_cnt=max_whitespace_cnt,
+            ),
+            end=TOOL_CALL_END,
+        )
+
+    elif tool_choice == "required":
+        tags = []
+        for tool in tools:
+            function = tool.function
+            parameters = _get_function_parameters(function)
+            name = function.name
+            tags.append(
+                TagFormat(
+                    begin=(TOOL_CALL_BEGIN_PREFIX + name + ARGUMENTS_FIELD_PREFIX),
+                    content=JSONSchemaFormat(
+                        json_schema=parameters,
+                        any_order=any_order,
+                        max_whitespace_cnt=max_whitespace_cnt,
+                    ),
+                    end=TOOL_CALL_END,
+                )
+            )
+
+        assert len(tags) > 0
+        suffix_tag = TriggeredTagsFormat(
+            triggers=[TOOL_CALL_TRIGGER],
+            tags=tags,
+            excludes=_text_excludes(exclude_special_tokens, THINK_EXCLUDE_TOKENS),
+            at_least_one=True,
+            stop_after_first=not parallel_tool_calls,
+        )
+
+    prefix_tag = _build_reasoning_prefix(
+        reasoning_mode=reasoning,
+        think_tag_begin=THINK_TAG_BEGIN,
+        think_tag_end=THINK_TAG_END,
+        exclude_special_tokens=exclude_special_tokens,
+        reasoning_exclude_tokens=THINK_EXCLUDE_TOKENS,
+        reasoning_suffix=THINK_SUFFIX,
+    )
+    return _assemble_structural_tag(prefix_tag, suffix_tag)
+
+
+@register_model_structural_tag("harmony")
+def get_harmony_structural_tag(
+    tools: Optional[List[FunctionToolParam]] = None,
+    builtin_tools: Optional[List[BuiltinToolParam]] = None,
+    tool_choice: Literal["auto", "required", "forced"] = "auto",
+    reasoning: Literal["enabled", "disabled", "auto"] = "enabled",
+    any_order: bool = False,
+    exclude_special_tokens: bool = True,
+    max_whitespace_cnt: Optional[int] = None,
+    parallel_tool_calls: bool = True,
+    **kwargs: Any,
+) -> StructuralTag:
+    """Get harmony(gpt-oss) style structural tag format.
+
+    Corresponding model key: ``"harmony"``.
+
+    Reference: https://developers.openai.com/cookbook/articles/openai-harmony
+    Reference: https://huggingface.co/openai/gpt-oss-120b/blob/main/chat_template.jinja
+
+    Parameters are normalized by :func:`get_model_structural_tag` before this
+    function is called:
+
+    - ``tools``: a list of function tools. Each tool should have a ``function``
+      object containing ``name`` and ``parameters`` fields.
+    - ``builtin_tools``: a list of builtin tools. Each builtin tool should
+      provide ``type``, optional ``name``, and ``parameters`` fields.
+    - ``reasoning``: controls whether the analysis channel is available.
+
+    Supported models:
+
+    - gpt-oss
+
+    Returns
+    -------
+    StructuralTag
+        A structural tag template.
+        This format is in OpenAI Harmony Response Format, which is used by GPT-oss
+        and other models that follow the same style.
+    """
+    CALL_END = "<|call|>"
+    FINAL_BEGIN = "<|channel|>final<|message|>"
+    FINAL_END = ["<|end|>", "<|return|>"]
+    ANALYSIS_BEGIN = "<|channel|>analysis<|message|>"
+    TAG_SEPARATOR = "<|start|>assistant"
+
+    def _function_tool_tags(name, parameters):
+        """Generate tags for all supported harmony function tool call formats."""
+        content = JSONSchemaFormat(json_schema=parameters, any_order=any_order, max_whitespace_cnt=max_whitespace_cnt)
+        return [
+            TagFormat(
+                begin=f"<|channel|>commentary to=functions.{name}<|constrain|>json<|message|>",
+                content=content,
+                end=CALL_END,
+            ),
+            TagFormat(
+                begin=f" to=functions.{name}<|channel|>commentary <|constrain|>json<|message|>",
+                content=content,
+                end=CALL_END,
+            ),
+            TagFormat(
+                begin=f" to=functions.{name}<|channel|>commentary json<|message|>",
+                content=content,
+                end=CALL_END,
+            ),
+        ]
+
+    def _builtin_tool_tags(name, parameters):
+        """Generate tags for supported harmony builtin tool call formats."""
+        content = JSONSchemaFormat(json_schema=parameters, any_order=any_order, max_whitespace_cnt=max_whitespace_cnt)
+        return [
+            TagFormat(
+                begin=f"<|channel|>commentary to={name} code<|message|>",
+                content=content,
+                end=CALL_END,
+            ),
+            TagFormat(
+                begin=f" to={name}<|channel|>commentary code<|message|>",
+                content=content,
+                end=CALL_END,
+            ),
+        ]
+
+    tools = tools or []
+    builtin_tools = builtin_tools or []
+    tags = []
+
+    if tool_choice == "auto":
+        for tool in tools:
+            function = tool.function
+            parameters = _get_function_parameters(function)
+            tags.extend(_function_tool_tags(function.name, parameters))
+
+        for tool in builtin_tools:
+            parameters = _get_function_parameters(tool)
+            name = _get_builtin_tool_name(tool)
+            tags.extend(_builtin_tool_tags(name, parameters))
+
+        final_tag = TagFormat(begin=FINAL_BEGIN, content=AnyTextFormat(), end=FINAL_END)
+        tags.append(final_tag)
+
+    elif tool_choice == "forced":
+        if builtin_tools:
+            tags.extend(
+                _builtin_tool_tags(
+                    _get_builtin_tool_name(builtin_tools[0]),
+                    _get_function_parameters(builtin_tools[0]),
+                )
+            )
+        elif tools:
+            function = tools[0].function
+            tags.extend(_function_tool_tags(function.name, _get_function_parameters(function)))
+        else:
+            raise ValueError("Forced tool choice must resolve to exactly one tool.")
+
+    elif tool_choice == "required":
+        for tool in builtin_tools:
+            parameters = _get_function_parameters(tool)
+            name = _get_builtin_tool_name(tool)
+            tags.extend(_builtin_tool_tags(name, parameters))
+        for tool in tools:
+            function = tool.function
+            parameters = _get_function_parameters(function)
+            tags.extend(_function_tool_tags(function.name, parameters))
+        assert len(tags) > 0
+
+    if reasoning != "disabled":
+        analysis_tag = TagFormat(begin=ANALYSIS_BEGIN, content=AnyTextFormat(), end=FINAL_END)
+        tags.append(analysis_tag)
+
+    call_tags = [tag for tag in tags if tag.end == CALL_END]
+    message_tags = [tag for tag in tags if tag.end != CALL_END]
+    if parallel_tool_calls or not call_tags:
+        tags_with_separator = TagsWithSeparatorFormat(tags=tags, separator=TAG_SEPARATOR)
+        return StructuralTag(format=tags_with_separator)
+
+    # Harmony carries tool calls, analysis and final messages in one message stream, so
+    # capping the stream at a single message would also forbid an ordinary reasoning or
+    # final message. Cap the tool-call messages alone: any number of other messages, then
+    # at most one tool call, which ends the turn.
+    one_call = TagsWithSeparatorFormat(
+        tags=call_tags, separator=TAG_SEPARATOR, at_least_one=True, stop_after_first=True
+    )
+    if not message_tags:
+        return StructuralTag(format=OptionalFormat(content=one_call))
+    messages_then_call = SequenceFormat(
+        elements=[
+            TagsWithSeparatorFormat(tags=message_tags, separator=TAG_SEPARATOR, at_least_one=True),
+            ConstStringFormat(value=TAG_SEPARATOR),
+            one_call,
+        ]
+    )
+    return StructuralTag(
+        format=OrFormat(
+            elements=[
+                TagsWithSeparatorFormat(tags=message_tags, separator=TAG_SEPARATOR),
+                one_call,
+                messages_then_call,
+            ]
+        )
+    )
+
+
+@register_model_structural_tag("deepseek_v3_2")
+def get_deepseek_v3_2_structural_tag(
+    tools: Optional[List[FunctionToolParam]] = None,
+    builtin_tools: Optional[List[BuiltinToolParam]] = None,
+    tool_choice: Literal["auto", "required", "forced"] = "auto",
+    reasoning: Literal["enabled", "disabled", "auto"] = "enabled",
+    any_order: bool = False,
+    exclude_special_tokens: bool = True,
+    max_whitespace_cnt: Optional[int] = None,
+    parallel_tool_calls: bool = True,
+    **kwargs: Any,
+) -> StructuralTag:
+    """Get DeepSeek-V3.2 style structural tag format.
+
+    Corresponding model key: ``"deepseek_v3_2"``.
+
+    Supported models:
+
+    - DeepSeek-V3.2
+    """
+    INVOKE_BEGIN_PREFIX = '<｜DSML｜invoke name="'
+    INVOKE_BEGIN_SUFFIX = '">\n'
+    # INVOKE_END keeps a trailing "\n" so the final invoke is followed by a
+    # single "\n" before </｜DSML｜function_calls>, matching the official
+    # DeepSeek-V3.2 chat template. The separator between consecutive invokes
+    # is intentionally empty: the chat template joins tool calls with a single
+    # "\n" and that "\n" is already supplied by INVOKE_END.
+    INVOKE_END = "</｜DSML｜invoke>\n"
+    INVOKE_SEPARATOR = ""
+    TOOL_CALLS_PREFIX = "\n\n"
+    FUNCTION_CALLS_BEGIN = "<｜DSML｜function_calls>\n"
+    FUNCTION_CALLS_END = "</｜DSML｜function_calls>"
+    FUNCTION_CALLS_TRIGGER = "<｜DSML｜function_calls>"
+    THINK_TAG_BEGIN = "<think>"
+    THINK_TAG_END = "</think>"
+    THINK_EXCLUDE_TOKENS = ["<think>", "</think>"]
+    XML_STYLE = "deepseek_xml"
+
+    tools = tools or []
+    builtin_tools = builtin_tools or []
+    if tool_choice == "auto":
+        tags = []
+        for tool in tools:
+            function = tool.function
+            parameters = _get_function_parameters(function)
+            name = function.name
+            tags.append(
+                TagFormat(
+                    begin=(INVOKE_BEGIN_PREFIX + name + INVOKE_BEGIN_SUFFIX),
+                    content=JSONSchemaFormat(
+                        json_schema=parameters,
+                        style=XML_STYLE,
+                        any_order=any_order,
+                        max_whitespace_cnt=max_whitespace_cnt,
+                    ),
+                    end=INVOKE_END,
+                )
+            )
+
+        # generate function calling triggered tag
+        if len(tags) > 0:
+            function_calling_tags = TagsWithSeparatorFormat(
+                tags=tags,
+                separator=INVOKE_SEPARATOR,
+                at_least_one=True,
+                stop_after_first=not parallel_tool_calls,
+            )
+
+            suffix_tag = TriggeredTagsFormat(
+                triggers=[FUNCTION_CALLS_TRIGGER],
+                tags=[
+                    TagFormat(
+                        begin=FUNCTION_CALLS_BEGIN,
+                        content=function_calling_tags,
+                        end=FUNCTION_CALLS_END,
+                    )
+                ],
+                excludes=_text_excludes(exclude_special_tokens, THINK_EXCLUDE_TOKENS),
+                stop_after_first=not parallel_tool_calls,
+            )
+        else:
+            suffix_tag = AnyTextFormat(excludes=_text_excludes(exclude_special_tokens, THINK_EXCLUDE_TOKENS))
+
+    elif tool_choice == "forced":
+        if not tools:
+            raise ValueError("Forced tool choice must resolve to exactly one tool.")
+        function = tools[0].function
+        suffix_tag = SequenceFormat(
+            elements=[
+                ConstStringFormat(value=TOOL_CALLS_PREFIX + FUNCTION_CALLS_BEGIN),
+                TagFormat(
+                    begin=(INVOKE_BEGIN_PREFIX + function.name + INVOKE_BEGIN_SUFFIX),
+                    content=JSONSchemaFormat(
+                        json_schema=_get_function_parameters(function),
+                        style=XML_STYLE,
+                        any_order=any_order,
+                        max_whitespace_cnt=max_whitespace_cnt,
+                    ),
+                    end=INVOKE_END,
+                ),
+                ConstStringFormat(value=FUNCTION_CALLS_END),
+            ]
+        )
+    elif tool_choice == "required":
+        tags = []
+        for tool in tools:
+            function = tool.function
+            parameters = _get_function_parameters(function)
+            name = function.name
+            tags.append(
+                TagFormat(
+                    begin=(INVOKE_BEGIN_PREFIX + name + INVOKE_BEGIN_SUFFIX),
+                    content=JSONSchemaFormat(
+                        json_schema=parameters,
+                        style=XML_STYLE,
+                        any_order=any_order,
+                        max_whitespace_cnt=max_whitespace_cnt,
+                    ),
+                    end=INVOKE_END,
+                )
+            )
+        assert len(tags) > 0
+        suffix_tag = SequenceFormat(
+            elements=[
+                ConstStringFormat(value=TOOL_CALLS_PREFIX + FUNCTION_CALLS_BEGIN),
+                TagsWithSeparatorFormat(
+                    tags=tags,
+                    separator=INVOKE_SEPARATOR,
+                    at_least_one=True,
+                    stop_after_first=not parallel_tool_calls,
+                ),
+                ConstStringFormat(value=FUNCTION_CALLS_END),
+            ]
+        )
+
+    prefix_tag = _build_reasoning_prefix(
+        reasoning_mode=reasoning,
+        think_tag_begin=THINK_TAG_BEGIN,
+        think_tag_end=THINK_TAG_END,
+        exclude_special_tokens=exclude_special_tokens,
+        reasoning_exclude_tokens=THINK_EXCLUDE_TOKENS,
+    )
+    return _assemble_structural_tag(prefix_tag, suffix_tag)
+
+
+@register_model_structural_tag("minimax")
+def get_minimax_structural_tag(
+    tools: Optional[List[FunctionToolParam]] = None,
+    builtin_tools: Optional[List[BuiltinToolParam]] = None,
+    tool_choice: Literal["auto", "required", "forced"] = "auto",
+    reasoning: Literal["enabled", "disabled", "auto"] = "enabled",
+    any_order: bool = False,
+    exclude_special_tokens: bool = True,
+    max_whitespace_cnt: Optional[int] = None,
+    parallel_tool_calls: bool = True,
+    **kwargs: Any,
+) -> StructuralTag:
+    """Get MiniMax-M2.5 style structural tag format.
+
+    Corresponding model key: ``"minimax"``.
+
+    Supported models:
+
+    - MiniMax-M2.5
+    - MiniMax-M2.7
+
+    Returns
+    -------
+    StructuralTag
+        A structural tag for MiniMax function calling format.
+    """
+    INVOKE_BEGIN_PREFIX = '<invoke name="'
+    INVOKE_BEGIN_SUFFIX = '">\n'
+    INVOKE_END = "</invoke>\n"
+    TOOL_CALL_BEGIN = "<minimax:tool_call>\n"
+    TOOL_CALL_END = "</minimax:tool_call>"
+    TOOL_CALL_TRIGGER = "<minimax:tool_call>"
+    THINK_TAG_BEGIN = "<think>"
+    THINK_TAG_END = "</think>"
+    THINK_SUFFIX = "\n\n"
+    EMPTY_THINK_CONTENT = "\n</think>\n\n"
+    THINK_EXCLUDE_TOKENS = ["<think>", "</think>"]
+    XML_STYLE = "minimax_xml"
+
+    tools = tools or []
+    builtin_tools = builtin_tools or []
+    if tool_choice == "auto":
+        tags = []
+        for tool in tools:
+            function = tool.function
+            parameters = _get_function_parameters(function)
+            name = function.name
+            tags.append(
+                TagFormat(
+                    begin=(INVOKE_BEGIN_PREFIX + name + INVOKE_BEGIN_SUFFIX),
+                    content=JSONSchemaFormat(
+                        json_schema=parameters,
+                        style=XML_STYLE,
+                        any_order=any_order,
+                        max_whitespace_cnt=max_whitespace_cnt,
+                    ),
+                    end=INVOKE_END,
+                )
+            )
+
+        # generate function calling triggered tag
+        if len(tags) > 0:
+            function_calling_tags = TagsWithSeparatorFormat(
+                tags=tags, separator="", at_least_one=True, stop_after_first=not parallel_tool_calls
+            )
+
+            suffix_tag = TriggeredTagsFormat(
+                triggers=[TOOL_CALL_TRIGGER],
+                tags=[TagFormat(begin=TOOL_CALL_BEGIN, content=function_calling_tags, end=TOOL_CALL_END)],
+                excludes=_text_excludes(exclude_special_tokens, THINK_EXCLUDE_TOKENS),
+                stop_after_first=not parallel_tool_calls,
+            )
+        else:
+            suffix_tag = AnyTextFormat(excludes=_text_excludes(exclude_special_tokens, THINK_EXCLUDE_TOKENS))
+
+    elif tool_choice == "forced":
+        if not tools:
+            raise ValueError("Forced tool choice must resolve to exactly one tool.")
+        function = tools[0].function
+        suffix_tag = SequenceFormat(
+            elements=[
+                ConstStringFormat(value="\n" + TOOL_CALL_BEGIN),
+                TagFormat(
+                    begin=(INVOKE_BEGIN_PREFIX + function.name + INVOKE_BEGIN_SUFFIX),
+                    content=JSONSchemaFormat(
+                        json_schema=_get_function_parameters(function),
+                        style=XML_STYLE,
+                        any_order=any_order,
+                        max_whitespace_cnt=max_whitespace_cnt,
+                    ),
+                    end=INVOKE_END,
+                ),
+                ConstStringFormat(value=TOOL_CALL_END),
+            ]
+        )
+    elif tool_choice == "required":
+        tags = []
+        for tool in tools:
+            function = tool.function
+            parameters = _get_function_parameters(function)
+            name = function.name
+            tags.append(
+                TagFormat(
+                    begin=(INVOKE_BEGIN_PREFIX + name + INVOKE_BEGIN_SUFFIX),
+                    content=JSONSchemaFormat(
+                        json_schema=parameters,
+                        style=XML_STYLE,
+                        any_order=any_order,
+                        max_whitespace_cnt=max_whitespace_cnt,
+                    ),
+                    end=INVOKE_END,
+                )
+            )
+        assert len(tags) > 0
+        suffix_tag = SequenceFormat(
+            elements=[
+                ConstStringFormat(value="\n" + TOOL_CALL_BEGIN),
+                TagsWithSeparatorFormat(
+                    tags=tags,
+                    separator="",
+                    at_least_one=True,
+                    stop_after_first=not parallel_tool_calls,
+                ),
+                ConstStringFormat(value=TOOL_CALL_END),
+            ]
+        )
+
+    if reasoning == "disabled":
+        return StructuralTag(
+            format=SequenceFormat(
+                elements=[
+                    ConstStringFormat(value=EMPTY_THINK_CONTENT),
+                    ConstStringFormat(value=THINK_SUFFIX),
+                    suffix_tag,
+                ]
+            )
+        )
+
+    prefix_tag = _build_reasoning_prefix(
+        reasoning_mode=reasoning,
+        think_tag_begin=THINK_TAG_BEGIN,
+        think_tag_end=THINK_TAG_END,
+        exclude_special_tokens=exclude_special_tokens,
+        reasoning_exclude_tokens=[] if reasoning == "enabled" else THINK_EXCLUDE_TOKENS,
+        reasoning_suffix=THINK_SUFFIX,
+    )
+    return _assemble_structural_tag(prefix_tag, suffix_tag)
+
+
+@register_model_structural_tag("minimax_m3")
+def get_minimax_m3_structural_tag(
+    tools: Optional[List[FunctionToolParam]] = None,
+    builtin_tools: Optional[List[BuiltinToolParam]] = None,
+    tool_choice: Literal["auto", "required", "forced"] = "auto",
+    reasoning: Literal["enabled", "disabled", "auto"] = "auto",
+    any_order: bool = False,
+    exclude_special_tokens: bool = True,
+    max_whitespace_cnt: Optional[int] = None,
+    parallel_tool_calls: bool = True,
+    **kwargs: Any,
+) -> StructuralTag:
+    """Get MiniMax-M3 style structural tag format.
+
+    MiniMax M3 recursively encodes tool arguments as namespace-prefixed XML.
+    With ``reasoning="enabled"``, the matching generation prompt has
+    already emitted ``<mm:think>`` and constrained output starts inside its
+    body. ``"disabled"`` starts directly at the response body after the matching
+    prompt. ``"auto"`` matches the ``adaptive`` prompt and accepts
+    either a complete reasoning block or a direct response/tool call, optionally
+    prefixed by ``</mm:think>`` when skipping reasoning. ``"auto"`` is the default
+    for this model-specific builder.
+
+    Corresponding model key: ``"minimax_m3"``.
+
+    Supported models:
+
+    - MiniMax-M3
+
+    Returns
+    -------
+    StructuralTag
+        A structural tag for MiniMax M3 reasoning and function calling.
+    """
+    NAMESPACE = "]<]minimax[>["
+    INVOKE_BEGIN_PREFIX = NAMESPACE + '<invoke name="'
+    INVOKE_BEGIN_SUFFIX = '">'
+    INVOKE_END = NAMESPACE + "</invoke>\n"
+    TOOL_CALL_BEGIN = NAMESPACE + "<tool_call>\n"
+    TOOL_CALL_END = NAMESPACE + "</tool_call>"
+    TOOL_CALL_TRIGGER = NAMESPACE + "<tool_call>"
+    THINK_TAG_BEGIN = "<mm:think>"
+    THINK_TAG_END = "</mm:think>"
+    XML_STYLE = "minimax_m3_xml"
+
+    # Do not exclude the bare namespace: every M3 element and the tool-call trigger share it.
+    stray_tool_markers = [TOOL_CALL_END, NAMESPACE + "<invoke", NAMESPACE + "</invoke>"]
+    suffix_excludes = [THINK_TAG_BEGIN, THINK_TAG_END, *stray_tool_markers]
+    reasoning_excludes = [TOOL_CALL_TRIGGER, *suffix_excludes]
+
+    tools = tools or []
+    builtin_tools = builtin_tools or []
+    if builtin_tools:
+        raise ValueError("MiniMax M3 does not support builtin tools.")
+
+    invoke_tags = [
+        TagFormat(
+            begin=INVOKE_BEGIN_PREFIX + tool.function.name + INVOKE_BEGIN_SUFFIX,
+            content=JSONSchemaFormat(
+                json_schema=_get_function_parameters(tool.function),
+                style=XML_STYLE,
+                any_order=any_order,
+                max_whitespace_cnt=max_whitespace_cnt,
+            ),
+            end=INVOKE_END,
+        )
+        for tool in tools
+    ]
+
+    def make_tool_call_tag(tags: List[TagFormat], *, allow_multiple: bool = True) -> TagFormat:
+        content = (
+            TagsWithSeparatorFormat(
+                tags=tags, separator="", at_least_one=True, stop_after_first=not parallel_tool_calls
+            )
+            if allow_multiple
+            else tags[0]
+        )
+        return TagFormat(begin=TOOL_CALL_BEGIN, content=content, end=TOOL_CALL_END)
+
+    if tool_choice == "auto":
+        if invoke_tags:
+            suffix_tag = TriggeredTagsFormat(
+                triggers=[TOOL_CALL_TRIGGER],
+                tags=[make_tool_call_tag(invoke_tags)],
+                excludes=_text_excludes(exclude_special_tokens, suffix_excludes),
+                stop_after_first=not parallel_tool_calls,
+            )
+        else:
+            suffix_tag = AnyTextFormat(
+                excludes=_text_excludes(exclude_special_tokens, [TOOL_CALL_TRIGGER, *suffix_excludes])
+            )
+    elif tool_choice == "forced":
+        if not invoke_tags:
+            raise ValueError("Forced tool choice must resolve to exactly one tool.")
+        suffix_tag = make_tool_call_tag([invoke_tags[0]], allow_multiple=False)
+    elif tool_choice == "required":
+        if not invoke_tags:
+            raise ValueError("Required tool choice needs at least one function tool.")
+        suffix_tag = TriggeredTagsFormat(
+            triggers=[TOOL_CALL_TRIGGER],
+            tags=[make_tool_call_tag(invoke_tags)],
+            excludes=_text_excludes(exclude_special_tokens, suffix_excludes),
+            at_least_one=True,
+            stop_after_first=not parallel_tool_calls,
+        )
+    else:
+        raise ValueError(f"Unsupported tool choice: {tool_choice}")
+
+    # The generation prompt already emitted the first block's opening marker, so the
+    # constrained output starts inside its body: the think body in reasoning mode, the
+    # response body otherwise. Only the remaining markers are generated by the model.
+    prefix_tag = _build_reasoning_prefix(
+        reasoning_mode=reasoning,
+        think_tag_begin=THINK_TAG_BEGIN,
+        think_tag_end=THINK_TAG_END,
+        exclude_special_tokens=exclude_special_tokens,
+        reasoning_exclude_tokens=reasoning_excludes,
+    )
+    if isinstance(prefix_tag, OptionalFormat):
+        # The adaptive template emits a lone closing marker when skipping reasoning.
+        prefix_tag.content = OrFormat(elements=[prefix_tag.content, ConstStringFormat(value=THINK_TAG_END)])
+    return _assemble_structural_tag(prefix_tag, suffix_tag)
+
+
+@register_model_structural_tag("glm_4_7")
+def get_glm_4_7_structural_tag(
+    tools: Optional[List[FunctionToolParam]] = None,
+    builtin_tools: Optional[List[BuiltinToolParam]] = None,
+    tool_choice: Literal["auto", "required", "forced"] = "auto",
+    reasoning: Literal["enabled", "disabled", "auto"] = "enabled",
+    any_order: bool = False,
+    exclude_special_tokens: bool = True,
+    max_whitespace_cnt: Optional[int] = None,
+    parallel_tool_calls: bool = True,
+    **kwargs: Any,
+) -> StructuralTag:
+    """Get GLM-4.7/GLM-5 style structural tag format.
+
+    The GLM tool calling format uses XML-like tags:
+    ``<tool_call>function_name``
+    ``<arg_key>key</arg_key><arg_value>value</arg_value>``
+    ``</tool_call>``
+
+    Corresponding model key: ``"glm_4_7"``.
+
+    Parameters are normalized by :func:`get_model_structural_tag` before this
+    function is called:
+
+    - ``tools``: a list of function tools. Each tool should have a ``function``
+      object containing ``name`` and ``parameters`` fields.
+    - ``reasoning``: selects enabled, disabled, or automatic reasoning mode.
+
+    Supported models:
+
+    - GLM-5
+    - GLM-4.7
+
+    Returns
+    -------
+    StructuralTag
+        A structural tag for GLM function calling format.
+    """
+    TOOL_CALL_BEGIN_PREFIX = "<tool_call>"
+    TOOL_CALL_END = "</tool_call>"
+    TOOL_CALL_TRIGGER = "<tool_call>"
+    THINK_TAG_BEGIN = "<think>"
+    THINK_TAG_END = "</think>"
+    THINK_EXCLUDE_TOKENS = ["<think>", "</think>"]
+    XML_STYLE = "glm_xml"
+
+    # GLM tool-call control tokens are reserved special tokens that are only
+    # valid inside a tool call. They must never appear in reasoning or free-form
+    # text, otherwise the model can emit a stray control token that downstream
+    # parsers mis-interpret. Exclude them from every free-text region.
+    ARG_TOKENS = ["<arg_key>", "</arg_key>", "<arg_value>", "</arg_value>"]
+    # Reasoning contains no tool calls at all -> exclude every control token.
+    REASONING_EXCLUDES = THINK_EXCLUDE_TOKENS + [TOOL_CALL_BEGIN_PREFIX, TOOL_CALL_END] + ARG_TOKENS
+    # Free text after </think> may *start* a tool call via the <tool_call>
+    # trigger, so that trigger stays allowed; every other control token is not.
+    TEXT_EXCLUDES = THINK_EXCLUDE_TOKENS + [TOOL_CALL_END] + ARG_TOKENS
+
+    tools = tools or []
+    builtin_tools = builtin_tools or []
+    if tool_choice == "auto":
+        tags = []
+        for tool in tools:
+            function = tool.function
+            parameters = _get_function_parameters(function)
+            name = function.name
+            tags.append(
+                TagFormat(
+                    begin=f"{TOOL_CALL_BEGIN_PREFIX}{name}",
+                    content=JSONSchemaFormat(
+                        json_schema=parameters,
+                        style=XML_STYLE,
+                        any_order=any_order,
+                        max_whitespace_cnt=max_whitespace_cnt,
+                    ),
+                    end=TOOL_CALL_END,
+                )
+            )
+
+        if len(tags) > 0:
+            suffix_tag = TriggeredTagsFormat(
+                triggers=[TOOL_CALL_TRIGGER],
+                tags=tags,
+                excludes=_text_excludes(exclude_special_tokens, TEXT_EXCLUDES),
+                stop_after_first=not parallel_tool_calls,
+            )
+        else:
+            suffix_tag = AnyTextFormat(excludes=_text_excludes(exclude_special_tokens, REASONING_EXCLUDES))
+
+    elif tool_choice == "forced":
+        if not tools:
+            raise ValueError("Forced tool choice must resolve to exactly one tool.")
+        function = tools[0].function
+        suffix_tag = TagFormat(
+            begin=f"{TOOL_CALL_BEGIN_PREFIX}{function.name}",
+            content=JSONSchemaFormat(
+                json_schema=_get_function_parameters(function),
+                style=XML_STYLE,
+                any_order=any_order,
+                max_whitespace_cnt=max_whitespace_cnt,
+            ),
+            end=TOOL_CALL_END,
+        )
+    elif tool_choice == "required":
+        tags = []
+        for tool in tools:
+            function = tool.function
+            parameters = _get_function_parameters(function)
+            name = function.name
+            tags.append(
+                TagFormat(
+                    begin=f"{TOOL_CALL_BEGIN_PREFIX}{name}",
+                    content=JSONSchemaFormat(
+                        json_schema=parameters,
+                        style=XML_STYLE,
+                        any_order=any_order,
+                        max_whitespace_cnt=max_whitespace_cnt,
+                    ),
+                    end=TOOL_CALL_END,
+                )
+            )
+        assert len(tags) > 0
+        suffix_tag = TriggeredTagsFormat(
+            triggers=[TOOL_CALL_TRIGGER],
+            tags=tags,
+            excludes=_text_excludes(exclude_special_tokens, TEXT_EXCLUDES),
+            at_least_one=True,
+            stop_after_first=not parallel_tool_calls,
+        )
+
+    prefix_tag = _build_reasoning_prefix(
+        reasoning_mode=reasoning,
+        think_tag_begin=THINK_TAG_BEGIN,
+        think_tag_end=THINK_TAG_END,
+        exclude_special_tokens=exclude_special_tokens,
+        reasoning_exclude_tokens=REASONING_EXCLUDES,
+    )
+    return _assemble_structural_tag(prefix_tag, suffix_tag)
+
+
+# TODO: We are dropping Gemma support because its parameter format is special and not supported
+# yet: the string are wrapped by <|"|> instead of ". We will support it later and get it back.
+# @register_model_structural_tag("gemma_4")
+def _get_gemma_4_structural_tag(
+    tools: Optional[List[FunctionToolParam]] = None,
+    builtin_tools: Optional[List[BuiltinToolParam]] = None,
+    tool_choice: Literal["auto", "required", "forced"] = "auto",
+    reasoning: Literal["enabled", "disabled", "auto"] = "enabled",
+    any_order: bool = False,
+    exclude_special_tokens: bool = True,
+    max_whitespace_cnt: Optional[int] = None,
+    parallel_tool_calls: bool = True,
+    **kwargs: Any,
+) -> StructuralTag:
+    """Get Gemma 4 style structural tag format.
+
+    Gemma 4 uses channel markers for reasoning and tool calls instead of
+    ``<think>``/``</think>``:
+
+    - Thinking: ``<|channel>thought\\n...thinking...<channel|>``
+    - Tool calls: ``<|tool_call>call:func_name{...}<tool_call|>``
+    - Turn end: ``<turn|>``
+
+    Corresponding model key: ``"gemma_4"``.
+
+    Reference: https://ai.google.dev/gemma/docs/core/prompt-formatting-gemma4
+
+    Parameters are normalized by :func:`get_model_structural_tag` before this
+    function is called:
+
+    - ``tools``: a list of function tools. Each tool should have a
+      ``function`` object containing ``name`` and ``parameters`` fields.
+    - ``reasoning``: controls whether the reasoning channel is required,
+      omitted, or optional.
+    - ``tool_choice``: ``"auto"`` or ``"required"``. ``"required"`` forces at
+      least one tool call.
+
+    Supported models:
+
+    - Gemma-4
+    - gemma-4-12b-it
+    - gemma-4-26b-a4b-it
+    - gemma-4-31b-it
+    - gemma-4-e2b-it
+
+    Returns
+    -------
+    StructuralTag
+        A structural tag for Gemma 4 function calling format.
+    """
+    TOOL_CALL_BEGIN_PREFIX = "<|tool_call>call:"
+    TOOL_CALL_END = "<tool_call|>"
+    TOOL_CALL_TRIGGER = "<|tool_call>"
+    THINK_TAG_BEGIN = "<|channel>thought\n"
+    THINK_TAG_END = "<channel|>"
+    GEMMA4_EXCLUDE_TOKENS = ["<|channel>", "<channel|>"]
+
+    tools = tools or []
+    builtin_tools = builtin_tools or []
+    if tool_choice == "auto":
+        tags = []
+        for tool in tools:
+            function = tool.function
+            parameters = _get_function_parameters(function)
+            name = function.name
+            tags.append(
+                TagFormat(
+                    begin=TOOL_CALL_BEGIN_PREFIX + name,
+                    content=JSONSchemaFormat(
+                        json_schema=parameters,
+                        any_order=any_order,
+                        max_whitespace_cnt=max_whitespace_cnt,
+                    ),
+                    end=TOOL_CALL_END,
+                )
+            )
+
+        if len(tags) > 0:
+            suffix_tag = TriggeredTagsFormat(
+                triggers=[TOOL_CALL_TRIGGER],
+                tags=tags,
+                excludes=_text_excludes(exclude_special_tokens, GEMMA4_EXCLUDE_TOKENS),
+                stop_after_first=not parallel_tool_calls,
+            )
+        else:
+            suffix_tag = AnyTextFormat(excludes=_text_excludes(exclude_special_tokens, GEMMA4_EXCLUDE_TOKENS))
+
+    elif tool_choice == "forced":
+        if not tools:
+            raise ValueError("Forced tool choice must resolve to exactly one tool.")
+        function = tools[0].function
+        suffix_tag = TagFormat(
+            begin=TOOL_CALL_BEGIN_PREFIX + function.name,
+            content=JSONSchemaFormat(
+                json_schema=_get_function_parameters(function),
+                any_order=any_order,
+                max_whitespace_cnt=max_whitespace_cnt,
+            ),
+            end=TOOL_CALL_END,
+        )
+
+    elif tool_choice == "required":
+        tags = []
+        for tool in tools:
+            function = tool.function
+            parameters = _get_function_parameters(function)
+            name = function.name
+            tags.append(
+                TagFormat(
+                    begin=TOOL_CALL_BEGIN_PREFIX + name,
+                    content=JSONSchemaFormat(
+                        json_schema=parameters,
+                        any_order=any_order,
+                        max_whitespace_cnt=max_whitespace_cnt,
+                    ),
+                    end=TOOL_CALL_END,
+                )
+            )
+        assert len(tags) > 0
+        suffix_tag = TriggeredTagsFormat(
+            triggers=[TOOL_CALL_TRIGGER],
+            tags=tags,
+            excludes=_text_excludes(exclude_special_tokens, GEMMA4_EXCLUDE_TOKENS),
+            at_least_one=True,
+            stop_after_first=not parallel_tool_calls,
+        )
+
+    prefix_tag = _build_reasoning_prefix(
+        reasoning_mode=reasoning,
+        think_tag_begin=THINK_TAG_BEGIN,
+        think_tag_end=THINK_TAG_END,
+        exclude_special_tokens=exclude_special_tokens,
+        reasoning_exclude_tokens=GEMMA4_EXCLUDE_TOKENS,
+        prompt_end_with_think=False,
+    )
+    return _assemble_structural_tag(prefix_tag, suffix_tag)
+
+
+@register_model_structural_tag("deepseek_v4")
+def get_deepseek_v4_structural_tag(
+    tools: Optional[List[FunctionToolParam]] = None,
+    builtin_tools: Optional[List[BuiltinToolParam]] = None,
+    tool_choice: Literal["auto", "required", "forced"] = "auto",
+    reasoning: Literal["enabled", "disabled", "auto"] = "enabled",
+    any_order: bool = False,
+    exclude_special_tokens: bool = True,
+    max_whitespace_cnt: Optional[int] = None,
+    parallel_tool_calls: bool = True,
+    **kwargs: Any,
+) -> StructuralTag:
+    """Get DeepSeek-V4 style structural tag format.
+
+    Corresponding model key: ``"deepseek_v4"``.
+
+    Supported models:
+
+    - DeepSeek-V4
+    """
+    return _get_deepseek_v4_structural_tag(
+        tools,
+        tool_choice,
+        reasoning,
+        any_order,
+        exclude_special_tokens,
+        max_whitespace_cnt,
+        parallel_tool_calls,
+        v4_1=False,
+    )
+
+
+@register_model_structural_tag("deepseek_v4_1")
+def get_deepseek_v4_1_structural_tag(
+    tools: Optional[List[FunctionToolParam]] = None,
+    builtin_tools: Optional[List[BuiltinToolParam]] = None,
+    tool_choice: Literal["auto", "required", "forced"] = "auto",
+    reasoning: Literal["enabled", "disabled", "auto"] = "enabled",
+    any_order: bool = False,
+    exclude_special_tokens: bool = True,
+    max_whitespace_cnt: Optional[int] = None,
+    parallel_tool_calls: bool = True,
+    **kwargs: Any,
+) -> StructuralTag:
+    """Get DeepSeek-V4.1-Flash reasoning and tool-call structural tag format.
+
+    Corresponding model key: ``"deepseek_v4_1"``.
+
+    Reference: https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash/blob/main/encoding/encoding.py
+
+    V4.1 uses ``<｜DSML｜ calls>`` with space-prefixed ``invoke`` and
+    ``parameter`` tags. String arguments are raw text; other values are JSON.
+    Namespace-qualified tools use ``namespace::name`` as the function name.
+
+    Apply this tag after the generation prompt, which already ends in
+    ``<think>`` (reasoning) or ``</think>`` (chat). EOS is handled by the
+    tokenizer's stop token. Reasoning effort and image inputs are encoded
+    in the prompt and do not change the output grammar.
+    """
+    return _get_deepseek_v4_structural_tag(
+        tools,
+        tool_choice,
+        reasoning,
+        any_order,
+        exclude_special_tokens,
+        max_whitespace_cnt,
+        parallel_tool_calls,
+        v4_1=True,
+    )
+
+
+def _get_deepseek_v4_structural_tag(
+    tools: Optional[List[FunctionToolParam]],
+    tool_choice: Literal["auto", "required", "forced"],
+    reasoning: Literal["enabled", "disabled", "auto"],
+    any_order: bool,
+    exclude_special_tokens: bool,
+    max_whitespace_cnt: Optional[int],
+    parallel_tool_calls: bool,
+    *,
+    v4_1: bool,
+) -> StructuralTag:
+    invoke = " invoke" if v4_1 else "invoke"
+    calls = " calls" if v4_1 else "tool_calls"
+    INVOKE_BEGIN_PREFIX = f'<｜DSML｜{invoke} name="'
+    INVOKE_BEGIN_SUFFIX = '">\n'
+    # See get_deepseek_v3_2_structural_tag for the rationale on INVOKE_END +
+    # INVOKE_SEPARATOR splitting the single "\n" join that the chat template
+    # uses between consecutive <｜DSML｜invoke> blocks.
+    INVOKE_END = f"</｜DSML｜{invoke}>\n"
+    INVOKE_SEPARATOR = ""
+    TOOL_CALLS_PREFIX = "\n\n"
+    FUNCTION_CALLS_BEGIN = f"<｜DSML｜{calls}>\n"
+    FUNCTION_CALLS_END = f"</｜DSML｜{calls}>"
+    FUNCTION_CALLS_TRIGGER = f"<｜DSML｜{calls}>"
+    THINK_TAG_BEGIN = "<think>"
+    THINK_TAG_END = "</think>"
+    THINK_EXCLUDE_TOKENS = ["<think>", "</think>"]
+    XML_STYLE = "deepseek_v4_1_xml" if v4_1 else "deepseek_xml"
+
+    tools = tools or []
+    if tool_choice == "auto":
+        tags = []
+        for tool in tools:
+            function = tool.function
+            parameters = _get_function_parameters(function)
+            name = function.name
+            tags.append(
+                TagFormat(
+                    begin=(INVOKE_BEGIN_PREFIX + name + INVOKE_BEGIN_SUFFIX),
+                    content=JSONSchemaFormat(
+                        json_schema=parameters,
+                        style=XML_STYLE,
+                        any_order=any_order,
+                        max_whitespace_cnt=max_whitespace_cnt,
+                    ),
+                    end=INVOKE_END,
+                )
+            )
+
+        # generate function calling triggered tag
+        if len(tags) > 0:
+            function_calling_tags = TagsWithSeparatorFormat(
+                tags=tags,
+                separator=INVOKE_SEPARATOR,
+                at_least_one=True,
+                stop_after_first=not parallel_tool_calls,
+            )
+
+            suffix_tag = TriggeredTagsFormat(
+                triggers=[FUNCTION_CALLS_TRIGGER],
+                tags=[
+                    TagFormat(
+                        begin=FUNCTION_CALLS_BEGIN,
+                        content=function_calling_tags,
+                        end=FUNCTION_CALLS_END,
+                    )
+                ],
+                excludes=_text_excludes(exclude_special_tokens, THINK_EXCLUDE_TOKENS),
+                stop_after_first=not parallel_tool_calls,
+            )
+        else:
+            excludes = _text_excludes(exclude_special_tokens, THINK_EXCLUDE_TOKENS)
+            if v4_1:
+                # With no available tools (including tool_choice="none"), a calls block
+                # must not slip through as unconstrained text.
+                excludes = [*excludes, FUNCTION_CALLS_TRIGGER]
+            suffix_tag = AnyTextFormat(excludes=excludes)
+
+    elif tool_choice == "forced":
+        if not tools:
+            raise ValueError("Forced tool choice must resolve to exactly one tool.")
+        function = tools[0].function
+        suffix_tag = SequenceFormat(
+            elements=[
+                ConstStringFormat(value=TOOL_CALLS_PREFIX + FUNCTION_CALLS_BEGIN),
+                TagFormat(
+                    begin=(INVOKE_BEGIN_PREFIX + function.name + INVOKE_BEGIN_SUFFIX),
+                    content=JSONSchemaFormat(
+                        json_schema=_get_function_parameters(function),
+                        style=XML_STYLE,
+                        any_order=any_order,
+                        max_whitespace_cnt=max_whitespace_cnt,
+                    ),
+                    end=INVOKE_END,
+                ),
+                ConstStringFormat(value=FUNCTION_CALLS_END),
+            ]
+        )
+    elif tool_choice == "required":
+        tags = []
+        for tool in tools:
+            function = tool.function
+            parameters = _get_function_parameters(function)
+            name = function.name
+            tags.append(
+                TagFormat(
+                    begin=(INVOKE_BEGIN_PREFIX + name + INVOKE_BEGIN_SUFFIX),
+                    content=JSONSchemaFormat(
+                        json_schema=parameters,
+                        style=XML_STYLE,
+                        any_order=any_order,
+                        max_whitespace_cnt=max_whitespace_cnt,
+                    ),
+                    end=INVOKE_END,
+                )
+            )
+        assert len(tags) > 0
+        suffix_tag = SequenceFormat(
+            elements=[
+                ConstStringFormat(value=TOOL_CALLS_PREFIX + FUNCTION_CALLS_BEGIN),
+                TagsWithSeparatorFormat(
+                    tags=tags,
+                    separator=INVOKE_SEPARATOR,
+                    at_least_one=True,
+                    stop_after_first=not parallel_tool_calls,
+                ),
+                ConstStringFormat(value=FUNCTION_CALLS_END),
+            ]
+        )
+
+    prefix_tag = _build_reasoning_prefix(
+        reasoning_mode=reasoning,
+        think_tag_begin=THINK_TAG_BEGIN,
+        think_tag_end=THINK_TAG_END,
+        exclude_special_tokens=exclude_special_tokens,
+        reasoning_exclude_tokens=THINK_EXCLUDE_TOKENS,
+    )
+    return _assemble_structural_tag(prefix_tag, suffix_tag)
+
+
+@register_model_structural_tag("cohere")
+def get_cohere_structural_tag(
+    tools: Optional[List[FunctionToolParam]] = None,
+    builtin_tools: Optional[List[BuiltinToolParam]] = None,
+    tool_choice: Literal["auto", "required", "forced"] = "auto",
+    reasoning: Literal["enabled", "disabled", "auto"] = "enabled",
+    any_order: bool = False,
+    exclude_special_tokens: bool = True,
+    max_whitespace_cnt: Optional[int] = None,
+    parallel_tool_calls: bool = True,
+    **kwargs: Any,
+) -> StructuralTag:
+    """Get Cohere style structural tag format.
+
+    Corresponding model key: ``"cohere"``.
+
+    Supported models:
+
+    - Cohere Command models using XML tool calls.
+    """
+    TOOL_CALL_BEGIN_PREFIX = '<cofl:tool_call id="'
+    TOOL_CALL_NAME_PREFIX = '" name="'
+    TOOL_CALL_BEGIN_SUFFIX = '">'
+    TOOL_CALL_END = "</cofl:tool_call>"
+    TOOL_CALLS_PREFIX = ""
+    TOOL_CALLS_BEGIN = "<cofl:tool_calls>"
+    TOOL_CALLS_END = "</cofl:tool_calls>"
+    TOOL_CALLS_TRIGGER = "<cofl:tool_calls>"
+    THINK_TAG_BEGIN = "<|START_THINKING|>"
+    THINK_TAG_END = "<|END_THINKING|>"
+    THINK_EXCLUDE_TOKENS = ["<|START_THINKING|>", "<|END_THINKING|>"]
+    XML_STYLE = "cohere_xml"
+
+    def make_tool_call_tag(function: FunctionDefinition) -> TagFormat:
+        return TagFormat(
+            begin=TOOL_CALL_BEGIN_PREFIX,
+            content=SequenceFormat(
+                elements=[
+                    RegexFormat(pattern=r"\d+"),
+                    ConstStringFormat(value=(TOOL_CALL_NAME_PREFIX + function.name + TOOL_CALL_BEGIN_SUFFIX)),
+                    JSONSchemaFormat(
+                        json_schema=_get_function_parameters(function),
+                        style=XML_STYLE,
+                        any_order=any_order,
+                        max_whitespace_cnt=max_whitespace_cnt,
+                    ),
+                ]
+            ),
+            end=TOOL_CALL_END,
+        )
+
+    tools = tools or []
+    builtin_tools = builtin_tools or []
+    if tool_choice == "auto":
+        tags = [make_tool_call_tag(tool.function) for tool in tools]
+
+        if len(tags) > 0:
+            tool_calls = TagFormat(
+                begin=TOOL_CALLS_BEGIN,
+                content=TagsWithSeparatorFormat(
+                    tags=tags,
+                    separator="",
+                    at_least_one=True,
+                    stop_after_first=not parallel_tool_calls,
+                ),
+                end=TOOL_CALLS_END,
+            )
+            suffix_tag = TriggeredTagsFormat(
+                triggers=[TOOL_CALLS_TRIGGER],
+                tags=[tool_calls],
+                excludes=_text_excludes(exclude_special_tokens, THINK_EXCLUDE_TOKENS),
+                stop_after_first=not parallel_tool_calls,
+            )
+        else:
+            suffix_tag = AnyTextFormat(excludes=_text_excludes(exclude_special_tokens, THINK_EXCLUDE_TOKENS))
+
+    elif tool_choice == "forced":
+        if not tools:
+            raise ValueError("Forced tool choice must resolve to exactly one tool.")
+        suffix_tag = SequenceFormat(
+            elements=[
+                ConstStringFormat(value=TOOL_CALLS_PREFIX + TOOL_CALLS_BEGIN),
+                make_tool_call_tag(tools[0].function),
+                ConstStringFormat(value=TOOL_CALLS_END),
+            ]
+        )
+
+    elif tool_choice == "required":
+        tags = [make_tool_call_tag(tool.function) for tool in tools]
+        assert len(tags) > 0
+        suffix_tag = SequenceFormat(
+            elements=[
+                ConstStringFormat(value=TOOL_CALLS_PREFIX + TOOL_CALLS_BEGIN),
+                TagsWithSeparatorFormat(
+                    tags=tags,
+                    separator="",
+                    at_least_one=True,
+                    stop_after_first=not parallel_tool_calls,
+                ),
+                ConstStringFormat(value=TOOL_CALLS_END),
+            ]
+        )
+
+    prefix_tag = _build_reasoning_prefix(
+        reasoning_mode=reasoning,
+        think_tag_begin=THINK_TAG_BEGIN,
+        think_tag_end=THINK_TAG_END,
+        exclude_special_tokens=exclude_special_tokens,
+        reasoning_exclude_tokens=[] if reasoning == "enabled" else THINK_EXCLUDE_TOKENS,
+    )
+    return _assemble_structural_tag(prefix_tag, suffix_tag)
+
+
+@register_model_structural_tag("exaone")
+def get_exaone_structural_tag(
+    tools: Optional[List[FunctionToolParam]] = None,
+    builtin_tools: Optional[List[BuiltinToolParam]] = None,
+    tool_choice: Literal["auto", "required", "forced"] = "auto",
+    reasoning: Literal["enabled", "disabled", "auto"] = "enabled",
+    any_order: bool = False,
+    exclude_special_tokens: bool = True,
+    max_whitespace_cnt: Optional[int] = None,
+    parallel_tool_calls: bool = True,
+    **kwargs: Any,
+) -> StructuralTag:
+    """Get EXAONE 4.0 style structural tag format.
+
+    Corresponding model key: ``"exaone"``.
+
+    Reference: https://huggingface.co/LGAI-EXAONE/EXAONE-4.0-32B
+
+    Supported models:
+
+    - EXAONE-4.0-32B
+    - EXAONE-4.0-1.2B
+    """
+    TOOL_CALL_BEGIN_PREFIX = '<tool_call>{"name": "'
+    ARGUMENTS_FIELD_PREFIX = '", "arguments": '
+    TOOL_CALL_END = "}</tool_call>"
+    TOOL_CALL_TRIGGER = "<tool_call>"
+    THINK_TAG_BEGIN = "<think>"
+    THINK_TAG_END = "</think>"
+    THINK_SUFFIX = "\n\n"
+    THINK_EXCLUDE_TOKENS = ["<think>", "</think>"]
+
+    tools = tools or []
+    builtin_tools = builtin_tools or []
+    if tool_choice == "auto":
+        tags = []
+        for tool in tools:
+            function = tool.function
+            parameters = _get_function_parameters(function)
+            name = function.name
+            tags.append(
+                TagFormat(
+                    begin=(TOOL_CALL_BEGIN_PREFIX + name + ARGUMENTS_FIELD_PREFIX),
+                    content=JSONSchemaFormat(
+                        json_schema=parameters,
+                        any_order=any_order,
+                        max_whitespace_cnt=max_whitespace_cnt,
+                    ),
+                    end=TOOL_CALL_END,
+                )
+            )
+
+        if len(tags) > 0:
+            suffix_tag = TriggeredTagsFormat(
+                triggers=[TOOL_CALL_TRIGGER],
+                tags=tags,
+                excludes=_text_excludes(exclude_special_tokens, THINK_EXCLUDE_TOKENS),
+                stop_after_first=not parallel_tool_calls,
+            )
+        else:
+            suffix_tag = AnyTextFormat(excludes=_text_excludes(exclude_special_tokens, THINK_EXCLUDE_TOKENS))
+
+    elif tool_choice == "forced":
+        if not tools:
+            raise ValueError("Forced tool choice must resolve to exactly one tool.")
+        function = tools[0].function
+        suffix_tag = TagFormat(
+            begin=(TOOL_CALL_BEGIN_PREFIX + function.name + ARGUMENTS_FIELD_PREFIX),
+            content=JSONSchemaFormat(
+                json_schema=_get_function_parameters(function),
+                any_order=any_order,
+                max_whitespace_cnt=max_whitespace_cnt,
+            ),
+            end=TOOL_CALL_END,
+        )
+
+    elif tool_choice == "required":
+        tags = []
+        for tool in tools:
+            function = tool.function
+            parameters = _get_function_parameters(function)
+            name = function.name
+            tags.append(
+                TagFormat(
+                    begin=(TOOL_CALL_BEGIN_PREFIX + name + ARGUMENTS_FIELD_PREFIX),
+                    content=JSONSchemaFormat(
+                        json_schema=parameters,
+                        any_order=any_order,
+                        max_whitespace_cnt=max_whitespace_cnt,
+                    ),
+                    end=TOOL_CALL_END,
+                )
+            )
+        assert len(tags) > 0
+        suffix_tag = TriggeredTagsFormat(
+            triggers=[TOOL_CALL_TRIGGER],
+            tags=tags,
+            excludes=_text_excludes(exclude_special_tokens, THINK_EXCLUDE_TOKENS),
+            at_least_one=True,
+            stop_after_first=not parallel_tool_calls,
+        )
+
+    prefix_tag = _build_reasoning_prefix(
+        reasoning_mode=reasoning,
+        think_tag_begin=THINK_TAG_BEGIN,
+        think_tag_end=THINK_TAG_END,
+        exclude_special_tokens=exclude_special_tokens,
+        reasoning_exclude_tokens=[] if reasoning == "enabled" else THINK_EXCLUDE_TOKENS,
+        reasoning_suffix=THINK_SUFFIX,
+    )
+    return _assemble_structural_tag(prefix_tag, suffix_tag)
+
+
+# Backward-compatible alias
+get_builtin_structural_tag = get_model_structural_tag
+"""Alias for :func:`get_model_structural_tag`. Deprecated."""

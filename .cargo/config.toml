@@ -1,4 +1,6 @@
-[env]
-# Force dynamic CRT for all C/C++ builds spawned by build scripts (cc/cmake)
-CFLAGS_x86_64_pc_windows_msvc = "/MD"
-CXXFLAGS_x86_64_pc_windows_msvc = "/MD"
+[alias]
+tools = "run --quiet -p cli-tools --"
+
+# For wasm32-unknown-unknown, getrandom needs the wasm_js feature flag.
+[target.wasm32-unknown-unknown]
+rustflags = []

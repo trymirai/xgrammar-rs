@@ -1,0 +1,55 @@
+[package]
+name = "xgrammar-rs"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+description = "Efficient, Flexible and Portable Structured Generation for Rust — pure-Rust XGrammar."
+keywords = ["llm", "grammar", "structured-generation", "json-schema", "parser"]
+categories = ["parsing", "text-processing"]
+readme = "../../README.md"
+# Integration tests are aggregated per-suite via main.rs (cpp gtest port), so disable
+# auto-discovery and declare them explicitly. Upstream Python tests run via pytest
+# against bindings/python (see README / CI), not as a Rust re-port.
+autotests = false
+
+[lib]
+name = "xgrammar"
+
+[features]
+default = []
+# HuggingFace tokenizer integration (pulls in the `tokenizers` crate).
+tokenizers = ["dep:tokenizers"]
+# Backwards-compatible alias for `tokenizers`.
+hf = ["tokenizers"]
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+ahash = { workspace = true }
+smallvec = { workspace = true }
+rayon = { workspace = true }
+# Needed by ahash on wasm32-unknown-unknown (enables JS random source).
+getrandom = { workspace = true }
+tokenizers = { version = "0.22", default-features = false, features = ["fancy-regex"], optional = true }
+
+[dev-dependencies]
+serde_json = { version = "1", features = ["preserve_order"] }
+# Downloads the upstream release for the Python suite. Path-only, so `cargo publish` drops it.
+xgrammar-upstream = { path = "../xgrammar-upstream" }
+
+[lints]
+workspace = true
+
+# Ported upstream C++ gtest suite (external/xgrammar/tests/cpp/), file-for-file.
+[[test]]
+name = "cpp"
+path = "tests/cpp/main.rs"
+
+[[test]]
+name = "rust_api"
+path = "tests/rust_api.rs"

@@ -1,0 +1,314 @@
+//! The [`Grammar`] type: the BNF abstract syntax tree (AST) in flat CSR form.
+//!
+//! This class stores the AST of the Backus–Naur Form (BNF) grammar. The BNF definition here is
+//! standard BNF, and the characters are represented using regex-style character classes (e.g.
+//! `[a-z]`, `[^a-z]`).
+
+use super::{
+    grammar_expr::GrammarExpr, grammar_expr_type::GrammarExprType, rule::Rule, suffix_stop_info::SuffixStopInfo,
+};
+use crate::{
+    fsm::{CompactFsm, CompactFsmWithStartEndWithSize},
+    support::Compact2dArray,
+};
+
+/// Stores the abstract syntax tree (AST) of a Backus–Naur Form (BNF) grammar.
+///
+/// The BNF definition is standard BNF; characters are represented using regex-style character
+/// classes (e.g. `[a-z]`, `[^a-z]`). Rules and [`GrammarExpr`]s are stored in CSR-matrix
+/// style: each expression occupies one row of `exprs`, laid out as `[type_tag, data.]`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Grammar {
+    rules: Vec<Rule>,
+    /// Suffix/stop metadata, sorted by rule id and omitted for ordinary rules.
+    suffix_stop_infos: Vec<SuffixStopInfo>,
+    exprs: Compact2dArray<i32>,
+    root_rule_id: i32,
+    /// The complete FSM produced by the grammar optimizer (empty until optimized).
+    complete_fsm: CompactFsm,
+    /// Per-rule compiled FSMs, usually sharing [`Self::complete_fsm`] (empty until optimized).
+    per_rule_fsms: Vec<Option<CompactFsmWithStartEndWithSize>>,
+    /// Per-rule FSM structural hashes (set by the FSM hasher; compile-time only).
+    per_rule_fsm_hashes: Vec<Option<u64>>,
+    /// Per-rule original→normalized state id pairs (set by the FSM hasher; compile-time only).
+    per_rule_fsm_new_state_ids: Vec<Vec<(i32, i32)>>,
+    /// Ids of rules that can match the empty string (set by the allow-empty analyzer).
+    allow_empty_rule_ids: Vec<i32>,
+    /// Whether the grammar optimizer has run (FSMs built).
+    optimized: bool,
+}
+
+impl Grammar {
+    /// Assembles a grammar from its parts (used by [`super::GrammarBuilder`]).
+    #[must_use]
+    pub(crate) fn from_parts(
+        rules: Vec<Rule>,
+        exprs: Compact2dArray<i32>,
+        root_rule_id: i32,
+    ) -> Self {
+        Self {
+            rules,
+            suffix_stop_infos: Vec::new(),
+            exprs,
+            root_rule_id,
+            complete_fsm: CompactFsm::default(),
+            per_rule_fsms: Vec::new(),
+            per_rule_fsm_hashes: Vec::new(),
+            per_rule_fsm_new_state_ids: Vec::new(),
+            allow_empty_rule_ids: Vec::new(),
+            optimized: false,
+        }
+    }
+
+    /// The shared complete FSM (valid only after optimization).
+    #[must_use]
+    #[inline]
+    pub fn complete_fsm(&self) -> &CompactFsm {
+        &self.complete_fsm
+    }
+
+    /// State-cache offsets for distinct FSM storage. Shared rule views reuse one state range.
+    #[must_use]
+    pub fn fsm_state_offsets(&self) -> Vec<usize> {
+        let mut storage = vec![(&self.complete_fsm, 0)];
+        let mut next_offset = self.complete_fsm.num_states() as usize;
+        self.per_rule_fsms
+            .iter()
+            .map(|view| {
+                let Some(view) = view else {
+                    return 0;
+                };
+                let fsm = view.fsm().fsm();
+                if let Some((_, offset)) = storage.iter().find(|(shared, _)| fsm.shares_storage(shared)) {
+                    return *offset;
+                }
+                let offset = next_offset;
+                next_offset += fsm.num_states() as usize;
+                storage.push((fsm, offset));
+                offset
+            })
+            .collect()
+    }
+
+    /// The compiled FSM for `rule_id`, if built.
+    #[must_use]
+    #[inline]
+    pub fn per_rule_fsm(
+        &self,
+        rule_id: i32,
+    ) -> Option<&CompactFsmWithStartEndWithSize> {
+        self.per_rule_fsms.get(rule_id as usize).and_then(Option::as_ref)
+    }
+
+    /// The structural hash of the per-rule FSM for `rule_id`, if computed.
+    #[must_use]
+    pub fn per_rule_fsm_hash(
+        &self,
+        rule_id: i32,
+    ) -> Option<u64> {
+        self.per_rule_fsm_hashes.get(rule_id as usize).and_then(|hash| *hash)
+    }
+
+    /// Original→normalized state id mapping for `rule_id`'s FSM, if computed.
+    #[must_use]
+    pub fn per_rule_fsm_new_state_ids(
+        &self,
+        rule_id: i32,
+    ) -> &[(i32, i32)] {
+        self.per_rule_fsm_new_state_ids.get(rule_id as usize).map(Vec::as_slice).unwrap_or(&[])
+    }
+
+    /// Installs per-rule FSM hashes and state-id mappings (used by the FSM hasher).
+    pub(crate) fn set_fsm_hash_data(
+        &mut self,
+        hashes: Vec<Option<u64>>,
+        new_state_ids: Vec<Vec<(i32, i32)>>,
+    ) {
+        self.per_rule_fsm_hashes = hashes;
+        self.per_rule_fsm_new_state_ids = new_state_ids;
+    }
+
+    /// The ids of rules that can match the empty string.
+    #[must_use]
+    pub fn allow_empty_rule_ids(&self) -> &[i32] {
+        &self.allow_empty_rule_ids
+    }
+
+    /// Whether the grammar optimizer has run.
+    #[must_use]
+    pub fn is_optimized(&self) -> bool {
+        self.optimized
+    }
+
+    /// Installs the compiled FSMs (used by the grammar FSM builder).
+    pub(crate) fn set_fsms(
+        &mut self,
+        complete_fsm: CompactFsm,
+        per_rule_fsms: Vec<Option<CompactFsmWithStartEndWithSize>>,
+    ) {
+        self.complete_fsm = complete_fsm;
+        self.per_rule_fsms = per_rule_fsms;
+    }
+
+    /// Sets the empty-rule ids (used by the allow-empty analyzer).
+    pub(crate) fn set_allow_empty_rule_ids(
+        &mut self,
+        ids: Vec<i32>,
+    ) {
+        self.allow_empty_rule_ids = ids;
+    }
+
+    /// Marks the grammar as optimized.
+    pub(crate) fn set_optimized(
+        &mut self,
+        optimized: bool,
+    ) {
+        self.optimized = optimized;
+    }
+
+    /// Per-rule compiled FSM slices (empty until optimized).
+    pub(crate) fn per_rule_fsms_slice(&self) -> &[Option<CompactFsmWithStartEndWithSize>] {
+        &self.per_rule_fsms
+    }
+
+    /// A mutable reference to a rule (used by in-place passes like the repetition normalizer).
+    pub(crate) fn rule_mut(
+        &mut self,
+        rule_id: i32,
+    ) -> &mut Rule {
+        &mut self.rules[rule_id as usize]
+    }
+
+    /// Overwrites the `index`-th data element of an expression in place.
+    pub(crate) fn set_expr_data(
+        &mut self,
+        expr_id: i32,
+        index: usize,
+        value: i32,
+    ) {
+        self.exprs.row_mut(expr_id as usize)[1 + index] = value;
+    }
+
+    /// All rules, indexed by rule id.
+    #[must_use]
+    pub fn rules(&self) -> &[Rule] {
+        &self.rules
+    }
+
+    /// The flat expression store.
+    #[must_use]
+    pub(crate) fn exprs(&self) -> &Compact2dArray<i32> {
+        &self.exprs
+    }
+
+    /// The rules, expression store, and suffix/stop table, for editing the grammar in place
+    /// through [`super::GrammarBuilder::edit_in_place`].
+    pub fn storage_mut(&mut self) -> (&mut Vec<Rule>, &mut Compact2dArray<i32>, &mut Vec<SuffixStopInfo>) {
+        (&mut self.rules, &mut self.exprs, &mut self.suffix_stop_infos)
+    }
+
+    /// Number of rules.
+    #[must_use]
+    pub fn num_rules(&self) -> i32 {
+        self.rules.len() as i32
+    }
+
+    /// The rule with the given id.
+    ///
+    /// # Panics
+    /// Panics if `rule_id` is out of bounds.
+    #[must_use]
+    #[inline]
+    pub fn rule(
+        &self,
+        rule_id: i32,
+    ) -> &Rule {
+        &self.rules[rule_id as usize]
+    }
+
+    /// Renames a rule in place (used by the root-rule renamer pass).
+    ///
+    /// # Panics
+    /// Panics if `rule_id` is out of bounds.
+    pub(crate) fn rename_rule(
+        &mut self,
+        rule_id: i32,
+        new_name: String,
+    ) {
+        self.rules[rule_id as usize].name = new_name;
+    }
+
+    /// All suffix/stop metadata entries, sorted by rule id.
+    #[must_use]
+    pub fn suffix_stop_infos(&self) -> &[SuffixStopInfo] {
+        &self.suffix_stop_infos
+    }
+
+    /// The suffix/stop metadata of `rule_id`, if any.
+    #[must_use]
+    pub fn suffix_stop_info(
+        &self,
+        rule_id: i32,
+    ) -> Option<&SuffixStopInfo> {
+        self.suffix_stop_infos
+            .binary_search_by_key(&rule_id, |info| info.rule_id)
+            .ok()
+            .map(|index| &self.suffix_stop_infos[index])
+    }
+
+    /// Replaces the suffix/stop metadata table (entries must be sorted by rule id).
+    pub fn set_suffix_stop_infos(
+        &mut self,
+        suffix_stop_infos: Vec<SuffixStopInfo>,
+    ) {
+        self.suffix_stop_infos = suffix_stop_infos;
+    }
+
+    /// The root rule id.
+    #[must_use]
+    pub fn root_rule_id(&self) -> i32 {
+        self.root_rule_id
+    }
+
+    /// The root rule.
+    ///
+    /// # Panics
+    /// Panics if the root rule id is unset/out of bounds.
+    #[must_use]
+    pub fn root_rule(&self) -> &Rule {
+        self.rule(self.root_rule_id)
+    }
+
+    /// Number of grammar expressions.
+    #[must_use]
+    pub fn num_exprs(&self) -> i32 {
+        self.exprs.len() as i32
+    }
+
+    /// The expression with the given id, as a borrowed view.
+    ///
+    /// # Panics
+    /// Panics if `expr_id` is out of bounds or the stored type tag is invalid.
+    #[must_use]
+    #[inline]
+    pub fn expr(
+        &self,
+        expr_id: i32,
+    ) -> GrammarExpr<'_> {
+        let row = self.exprs.row(expr_id as usize);
+        let ty = GrammarExprType::try_from(row[0]).expect("grammar stores valid expr type tags");
+        GrammarExpr {
+            ty,
+            data: &row[1..],
+        }
+    }
+
+    /// The byte string of a [`GrammarExprType::ByteString`] expression.
+    #[must_use]
+    pub fn byte_string(
+        &self,
+        expr_id: i32,
+    ) -> Vec<u8> {
+        self.expr(expr_id).byte_string()
+    }
+}

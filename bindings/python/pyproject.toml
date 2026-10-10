@@ -1,0 +1,69 @@
+[build-system]
+requires = ["maturin>=1.7,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "xgrammar"
+version = "0.3.0"
+description = "Efficient, Flexible and Portable Structured Generation — pure-Rust XGrammar."
+license = "Apache-2.0"
+requires-python = ">=3.8,<4"
+dependencies = [
+    "pydantic",
+    "torch>=1.10.0",
+    "transformers>=4.38.0",
+    "triton; platform_system == 'Linux' and platform_machine == 'x86_64'",
+    "numpy",
+    "typing-extensions>=4.9.0",
+]
+classifiers = [
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+readme = { file = "../../README.md", content-type = "text/markdown" }
+authors = [{ name = "Eugene Bokhan", email = "eugenebokhan@gmail.com" }]
+keywords = [
+    "llm",
+    "grammar",
+    "structured-generation",
+    "json-schema",
+    "parser",
+]
+
+[project.optional-dependencies]
+test = [
+    "cohere_melody==0.13.0; python_version >= '3.10'",
+    "huggingface-hub[cli]",
+    "protobuf",
+    "pytest",
+    "sentencepiece<0.2.2; python_version < '3.10'",
+    "sentencepiece; python_version >= '3.10'",
+    "tiktoken",
+    "ruff>=0.14.0",
+]
+metal = ["mlx-lm; platform_system == 'Darwin' and platform_machine == 'arm64'"]
+
+[project.urls]
+Homepage = "https://github.com/trymirai/xgrammar-rs"
+Repository = "https://github.com/trymirai/xgrammar-rs"
+Issues = "https://github.com/trymirai/xgrammar-rs/issues"
+
+[tool.maturin]
+module-name = "xgrammar.xgrammar_rs"
+manifest-path = "../../crates/xgrammar-py/Cargo.toml"
+features = ["bindings-pyo3"]
+python-source = "."
+
+[tool.ruff]
+target-version = "py38"
+line-length = 119
+
+[tool.ruff.lint]
+# The package mirrors upstream's Python facade, so it is linted with upstream's rule set
+# (mlc-ai/xgrammar pyproject.toml), which keeps upstream syncs conflict-free.
+select = ["C", "E", "F", "W"]
+ignore = ["C901", "E501", "E741", "F402", "F823", "E731"]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]

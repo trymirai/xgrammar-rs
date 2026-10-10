@@ -1,0 +1,24 @@
+//! Error raised by the structural-tag converter.
+
+/// A structural-tag conversion failure.
+// The variants mirror the upstream exception classes (`InvalidJSONError`, ...).
+#[allow(clippy::enum_variant_names)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum StructuralTagError {
+    /// The input was not valid JSON.
+    #[error("Invalid JSON error: {0}")]
+    InvalidJson(String),
+    /// An embedded JSON schema was invalid.
+    #[error("Invalid JSON schema error: {0}")]
+    InvalidJsonSchema(String),
+    /// The structural tag was well-formed JSON but semantically invalid.
+    #[error("Invalid structural tag error: {0}")]
+    InvalidStructuralTag(String),
+}
+
+impl StructuralTagError {
+    /// Builds an [`StructuralTagError::InvalidStructuralTag`] error.
+    pub fn invalid(message: impl Into<String>) -> Self {
+        Self::InvalidStructuralTag(message.into())
+    }
+}

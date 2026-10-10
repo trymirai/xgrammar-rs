@@ -21,3 +21,21 @@ target
 #.idea/
 *.DS_Store
 .cache
+
+# Python bindings build artifacts (maturin / venv)
+.venv/
+**/*.so
+**/__pycache__/
+
+# Generated UniFFI / cargo-swift outputs (rebuild via cargo swift package)
+crates/xgrammar-py/generated/
+crates/xgrammar-py/xgrammar_rs/
+bindings/swift/xgrammar_rs.xcframework/
+
+# SwiftPM / local build artifacts
+.build/
+Package.resolved
+
+# TypeScript / NAPI local install and native addon binaries
+bindings/typescript/node_modules/
+**/*.node

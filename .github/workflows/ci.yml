@@ -8,101 +8,194 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  test:
-    name: Test
+  quality:
+    name: Rust quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rustfmt, clippy
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo +nightly fmt --all -- --check
+      # Warnings are errors everywhere: every crate, every target, and the docs.
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - run: cargo clippy -p xgrammar-rs --all-targets --features tokenizers --locked -- -D warnings
+      - run: cargo doc --workspace --no-deps --locked
+        env:
+          RUSTDOCFLAGS: -D warnings
+      - run: cargo doc -p xgrammar-rs --no-deps --features tokenizers --locked
+        env:
+          RUSTDOCFLAGS: -D warnings
+      # The published crate must build from its own files, without the test-only submodule.
+      - run: cargo publish -p xgrammar-rs --dry-run --locked
+
+  # Ported upstream C++ gtest suite (external/xgrammar/tests/cpp/) on the same OS matrix.
+  rust-tests:
+    name: Rust tests (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
-        # TODO: test wasi builds on MacOS, too
-        os: [ubuntu-latest]
-        # TODO: add wasm32-wasip1-threads when supported
-        target: [native, wasm32-wasip1, wasm32-wasip1-threads, wasm32-wasip2]
-        include:
-          - os: macos-latest
-            target: native
-
+        os:
+          - ubuntu-latest
+          - ubuntu-24.04-arm
+          - windows-latest
+          - macos-14
+          - macos-15-intel
     runs-on: ${{ matrix.os }}
-
     steps:
-      - uses: actions/checkout@v6
-        with:
-          submodules: recursive
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test -p xgrammar-rs --locked
+      - run: cargo test -p xgrammar-rs --locked --features tokenizers --test rust_api
 
-      - name: Install WASI sysroot
-        if: startsWith(matrix.target, 'wasm32-wasi')
+  targets:
+    name: Core target (${{ matrix.target }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+          - os: windows-latest
+            target: aarch64-pc-windows-msvc
+          - os: macos-14
+            target: aarch64-apple-darwin
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+          - os: macos-14
+            target: aarch64-apple-ios
+          - os: macos-14
+            target: aarch64-apple-ios-sim
+          - os: ubuntu-latest
+            target: wasm32-unknown-unknown
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+      - run: cargo check -p xgrammar-rs --locked --target ${{ matrix.target }}
+
+  bindings:
+    name: Generated binding backends
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.8"
+      # Each backend separately, with warnings as errors.
+      - run: cargo clippy -p xgrammar-py --all-targets --locked --no-default-features --features bindings-pyo3 -- -D warnings
+      - run: cargo clippy -p xgrammar-py --all-targets --locked --no-default-features --features bindings-napi -- -D warnings
+      - run: cargo clippy -p xgrammar-py --all-targets --locked --no-default-features --features bindings-uniffi -- -D warnings
+      - run: cargo clippy -p xgrammar-py --locked --target wasm32-unknown-unknown --no-default-features --features bindings-wasm -- -D warnings
+
+  python-lint:
+    name: Python lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - run: uvx ruff@0.16.10 check bindings/python
+      - run: uvx ruff@0.16.10 format --check bindings/python
+
+  # Untouched upstream Python suite (external/xgrammar/tests/python) against our Rust extension.
+  # Matrix mirrors mlc-ai/xgrammar `.github/workflows/unit_test.yaml`.
+  python-tests:
+    name: Python ${{ matrix.python }} (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm, windows-latest, macos-14, macos-15-intel]
+        python: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13", "3.14", "3.14t"]
+        exclude:
+          - os: macos-14
+            python: "3.14t"
+          - os: macos-15-intel
+            python: "3.13"
+          - os: macos-15-intel
+            python: "3.14"
+          - os: macos-15-intel
+            python: "3.14t"
+    runs-on: ${{ matrix.os }}
+    steps:
+      # The upstream reference (tests + C++ sources) is the pinned `external/xgrammar` submodule.
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: python-${{ matrix.os }}-${{ matrix.python }}
+
+      - uses: astral-sh/setup-uv@v4
+        with:
+          python-version: ${{ matrix.python }}
+          enable-cache: true
+
+      - name: Cache Hugging Face hub
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/huggingface
+          key: huggingface-${{ matrix.os }}-python-${{ matrix.python }}
+
+      - name: Build and install the mixed Rust/Python package
+        shell: bash
         run: |
-          # The prebuilt sysroot is "dual": stock clang doesn't auto-select
-          # the exception-enabled (eh/) C++ runtime, so overlay it.
-          curl -fsSL -o /tmp/wasi-sysroot.tar.gz https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-33/wasi-sysroot-33.0+m.tar.gz
-          echo "063bc1b56582b9923e08ac9b89e58789618d851763f01530b3ff20b9e5df0ca3  /tmp/wasi-sysroot.tar.gz" | sha256sum -c
-          sudo mkdir -p /opt
-          sudo tar xzf /tmp/wasi-sysroot.tar.gz -C /opt
-          sysroot=/opt/wasi-sysroot-33.0+m
-          for t in wasm32-wasi wasm32-wasi-threads wasm32-wasip1 wasm32-wasip1-threads wasm32-wasip2; do
-            sudo cp -r "$sysroot/include/$t/eh/c++" "$sysroot/include/$t/"
-            sudo cp "$sysroot/lib/$t/eh/"*.a "$sysroot/lib/$t/"
-          done
-          echo "WASI_SYSROOT=$sysroot" >> "$GITHUB_ENV"
+          set -euo pipefail
+          extras=(--extra test)
+          # Match upstream: MLX optional on macOS arm64 (skip free-threaded).
+          if [ "${{ matrix.os }}" = "macos-14" ] && [[ "${{ matrix.python }}" != *t ]]; then
+            extras+=(--extra metal)
+          fi
+          uv sync --project bindings/python "${extras[@]}"
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-wasip1,wasm32-wasip1-threads,wasm32-wasip2
-
-      - name: Install CMake
-        if: startsWith(matrix.os, 'macos-')
-        run: brew install cmake
-
-      - name: Install llvm clang with wasm support
-        if: startsWith(matrix.os, 'ubuntu-')
+      - name: Check that tests import this repository's xgrammar
+        shell: bash
         run: |
-          wget https://apt.llvm.org/llvm.sh
-          chmod +x ./llvm.sh
-          sudo ./llvm.sh
-          sudo apt install libclang-rt-22-dev-wasm32
+          uv run --project bindings/python python -c "import pathlib, xgrammar; p = pathlib.Path(xgrammar.__file__).resolve(); root = pathlib.Path('bindings/python').resolve(); assert str(p).startswith(str(root)), p"
 
-          # The following snippet fixes what seems to be a Ubuntu/LLVM packaging bug:
-          # `wasm-ld` is looking for libclang_rt under a different name.
-          for target in wasm32-unknown-wasi{p1,p1-threads,p2}; do
-            sudo mkdir -p /usr/lib/llvm-22/lib/clang/22/lib/"$target"/
-            sudo ln -s ../wasi/libclang_rt.builtins-wasm32.a /usr/lib/llvm-22/lib/clang/22/lib/"$target"/libclang_rt.builtins.a
-          done
-
-          echo CC=clang-22 >> "$GITHUB_ENV"
-          echo CXX=clang++-22 >> "$GITHUB_ENV"
-
-      - name: Install wasm-component-ld
-        if: startsWith(matrix.target, 'wasm32')
-        run: |
-          cargo install wasm-component-ld
-          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
-
-      - name: Cache cargo registry
-        uses: actions/cache@v5
-        with:
-          path: ~/.cargo/registry
-          key: ${{ matrix.os }}_${{ matrix.target }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Cache cargo index
-        uses: actions/cache@v5
-        with:
-          path: ~/.cargo/git
-          key: ${{ matrix.os }}_${{ matrix.target }}-cargo-git-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Run tests (without HF feature)
-        if: matrix.target == 'native'
-        run: cargo test --locked --verbose
-
-      - name: Run tests (with HF feature)
-        if: matrix.target == 'native'
+      - name: Run upstream Python suite
+        shell: bash
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        run: cargo test --locked --features hf --verbose
+          HUGGING_FACE_HUB_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_HUB_DOWNLOAD_TIMEOUT: 60
+        run: |
+          set -euo pipefail
+          # Same gate as upstream unit_test.yaml: full suite when token is present.
+          if [ -n "${HF_TOKEN:-}" ]; then
+            uv run --project bindings/python python -m pytest external/xgrammar/tests/python
+          else
+            uv run --project bindings/python python -m pytest external/xgrammar/tests/python \
+              -m "not hf_token_required"
+          fi
 
-      - name: Build documentation
-        if: matrix.target == 'native'
-        run: cargo doc --locked --no-deps --features hf
-
-      - name: "Cross-compile for: ${{ matrix.target }}"
-        if: matrix.target != 'native'
-        run: cargo build --locked --all-features --target ${{ matrix.target }}
+      - name: Run suite under pytest-run-parallel (free-threaded)
+        if: matrix.python == '3.14t'
+        shell: bash
+        env:
+          PYTHON_GIL: 0
+        run: |
+          set -euo pipefail
+          uv run --project bindings/python --with pytest-run-parallel python -m pytest \
+            external/xgrammar/tests/python -m "not hf_token_required" --parallel-threads=8

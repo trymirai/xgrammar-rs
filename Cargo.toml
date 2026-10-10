@@ -1,42 +1,85 @@
-[package]
-name = "xgrammar-rs"
-version = "0.2.3"
+[workspace]
+resolver = "3"
+members = [
+    "crates/xgrammar",
+    "crates/bindings",
+    "crates/bindings-types",
+    "crates/xgrammar-py",
+    "crates/cli-tools",
+]
+# Upstream C++/Python reference: the test-only `external/xgrammar` submodule.
+exclude = ["external"]
+
+[workspace.package]
+version = "0.3.0"
 edition = "2024"
-rust-version = "1.88"
-build = "build.rs"
-links = "xgrammar"
-authors = ["Eugene Bokhan <eugenebokhan@gmail.com>"]
-description = "Efficient, Flexible and Portable Structured Generation for Rust - Rust bindings for XGrammar"
+rust-version = "1.85"
 license = "Apache-2.0"
 repository = "https://github.com/trymirai/xgrammar-rs"
 homepage = "https://github.com/trymirai/xgrammar-rs"
-documentation = "https://docs.rs/xgrammar-rs"
+authors = ["Eugene Bokhan <eugenebokhan@gmail.com>"]
+description = "Efficient, Flexible and Portable Structured Generation — pure-Rust XGrammar."
 readme = "README.md"
-keywords = ["llm", "grammar", "structured-gen", "json-schema", "parser"]
-categories = ["parsing", "text-processing"]
+keywords = ["llm", "grammar", "structured-generation", "json-schema", "parser"]
 
-[lib]
-name = "xgrammar"
+[workspace.dependencies]
+clap = { version = "4.6", features = ["derive"] }
+anyhow = "1.0"
+toml = "1.1"
+toml_edit = "0.25"
+indexmap = { version = "2.13", features = ["serde"] }
+colored = "3.1"
+minijinja = { version = "2.17", features = ["json", "preserve_order"] }
+regex = "1"
+getrandom = { version = "0.3", features = ["wasm_js"] }
+xgrammar = { package = "xgrammar-rs", path = "crates/xgrammar", version = "0.3.0" }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order", "unbounded_depth"] }
+thiserror = "2"
+ahash = "0.8"
+smallvec = { version = "1", features = ["serde", "union"] }
+rayon = "1"
+dlpark = "0.7"
 
-[dependencies]
-cxx = { version = "1", git = "https://github.com/trymirai/cxx.git", branch = "master", features = ["compile-builtins-at-bridge-stage"] }
-tokenizers = { version = "0.22", features = ["fancy-regex"], default-features = false, optional = true }
-serde_json = "1.0"
+# Cross-language bindings (uzu `#[bindings::export]` approach).
+bindings = { path = "crates/bindings", version = "0.3.0" }
+bindings-types = { path = "crates/bindings-types", version = "0.3.0" }
+# proc-macro deps for the `bindings` crate.
+heck = "0.5.0"
+proc-macro2 = "1.0"
+quote = "1.0"
+syn = { version = "2.0", features = ["full", "fold"] }
+# Backend deps (activated only by the matching `bindings-*` feature).
+pyo3 = { version = "0.28.3", features = [
+    "extension-module",
+    "abi3-py38",
+    "experimental-async",
+    "multiple-pymethods",
+] }
+pyo3-build-config = "0.28.3"
+pyo3-async-runtimes = { version = "0.28.0", features = ["tokio-runtime"] }
+inventory = "0.3.24"
+uniffi = { version = "0.31.1", features = ["tokio"] }
+napi = { version = "3.8.3", features = ["napi10", "object_indexmap", "tokio_rt"] }
+napi-derive = "3.5.2"
+napi-build = "2.3.1"
+wasm-bindgen = { version = "0.2.114", features = ["serde-serialize"] }
+serde-wasm-bindgen = "0.6.5"
+wasm-bindgen-futures = "0.4.64"
+tsify = { version = "0.5.6", features = ["js"] }
 
-[build-dependencies]
-cc = "1.2.65"
-cmake = "0.1"
-cxx-build = { version = "1", git = "https://github.com/trymirai/cxx.git", branch = "master" }
-walkdir = "2.5"
+[workspace.lints.clippy]
+correctness = { level = "deny", priority = -1 }
+# The one-type-per-file convention names a file after its type, which can match the
+# containing feature module (e.g. `grammar/grammar.rs`). That is intentional.
+module_inception = "allow"
 
-[dev-dependencies]
-hf-hub = { version = "0.5" }
-schemars = "1.2"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-serial_test = "3.4"
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+strip = true
 
-[features]
-default = []
-tokenizers = ["dep:tokenizers"]
-hf = ["tokenizers"] # `hf` only remains for compatibility, it is synonymous to `tokenizers`
+# Optimize dependencies even in dev builds — the parsing/automata tests are heavy.
+[profile.dev.package."*"]
+opt-level = 3

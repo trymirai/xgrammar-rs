@@ -1,0 +1,32 @@
+{
+  "name": "xgrammar",
+  "version": "0.3.0",
+  "description": "TypeScript / NAPI bindings for pure-Rust XGrammar",
+  "license": "Apache-2.0",
+  "packageManager": "pnpm@10.18.1",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "build": "echo skip-ts-build",
+    "fix": "echo skip-ts-format",
+    "tsn": "tsx",
+    "test": "echo no-typescript-tests-yet"
+  },
+  "napi": {
+    "binaryName": "xgrammar_rs",
+    "targets": [
+      "aarch64-apple-darwin",
+      "x86_64-apple-darwin",
+      "aarch64-unknown-linux-gnu",
+      "x86_64-unknown-linux-gnu",
+      "aarch64-pc-windows-msvc",
+      "x86_64-pc-windows-msvc"
+    ]
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "3.1.2",
+    "@types/node": "^20.17.6",
+    "tsx": "^4.19.0",
+    "typescript": "5.8.3"
+  }
+}

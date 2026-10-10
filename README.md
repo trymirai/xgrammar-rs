@@ -1,184 +1,149 @@
 <div align="center" id="top">
 
-<img src="https://raw.githubusercontent.com/mlc-ai/xgrammar/main/assets/logo.svg" alt="logo" width="400" margin="10px"></img>
+<img src="https://raw.githubusercontent.com/mlc-ai/xgrammar/main/assets/logo.svg" alt="XGrammar" width="400">
 
 [![License](https://img.shields.io/badge/license-apache_2-blue)](LICENSE)
 [![Crates.io](https://img.shields.io/crates/v/xgrammar-rs)](https://crates.io/crates/xgrammar-rs)
 [![Documentation](https://docs.rs/xgrammar-rs/badge.svg)](https://docs.rs/xgrammar-rs)
 
-**Efficient, Flexible and Portable Structured Generation for Rust**
-
-Rust bindings for [XGrammar](https://github.com/mlc-ai/xgrammar)
+**Pure-Rust XGrammar with generated Python, Swift, Node, and WebAssembly bindings**
 
 </div>
 
-## Overview
-
 XGrammar is an open-source library for efficient, flexible, and portable structured generation.
+It uses constrained decoding to ensure structural correctness of model output. It supports
+general context-free grammars, including JSON, regular expressions, and custom EBNF. XGrammar
+achieves near-zero overhead in JSON generation, making it one of the fastest structured
+generation engines available.
 
-It leverages constrained decoding to ensure **100% structural correctness** of the output. It supports general context-free grammar to enable a broad range of structures, including **JSON**, **regex**, **custom context-free grammar**, etc.
+This repository ports the upstream [`mlc-ai/xgrammar`](https://github.com/mlc-ai/xgrammar) core
+to safe Rust. The main crate has no C or C++ build dependency. EBNF and Lark grammar parsing, JSON
+Schema, regex, and structural-tag conversion, compilation, matching, token masks, serialization,
+and tokenizer metadata all run in Rust.
 
-XGrammar uses careful optimizations to achieve extremely low overhead in structured generation. It has achieved **near-zero overhead** in JSON generation, making it one of the fastest structured generation engines available.
+The upstream tree is a test-only git submodule at `external/xgrammar`, pinned to the release this
+port tracks. Its original Python tests are kept unchanged and run against this Rust extension in
+CI. The published crate never includes it.
 
-XGrammar features **universal deployment**. It supports:
-* **Platforms**: Linux, macOS, Windows
-* **Hardware**: CPU, NVIDIA GPU, AMD GPU, Apple Silicon, TPU, etc.
-* **Models**: Qwen, Llama, DeepSeek, Phi, Gemma, etc.
+## Packages
 
-## Features
+- `xgrammar-rs`: the pure-Rust core; imported as `xgrammar` in Rust code.
+- `xgrammar`: the Python package, built as an ABI3 extension for Python 3.8 and newer.
+- `xgrammar-py`: the shared binding layer. Uzu-style `#[bindings::export]` annotations generate
+  PyO3, UniFFI, NAPI, and wasm-bindgen glue from the same Rust definitions.
 
-## Installation
+## Supported targets
 
-Add this to your `Cargo.toml`:
+| Surface | Targets |
+| --- | --- |
+| Rust core | Linux x86-64/Arm64, macOS x86-64/Arm64, Windows x86-64/Arm64, iOS device/simulator, `wasm32-unknown-unknown` |
+| Python | Linux x86-64/Arm64, macOS x86-64/Arm64, Windows x86-64/Arm64 |
+| Swift/UniFFI | macOS Arm64, iOS Arm64, iOS Arm64 simulator |
+| Node/NAPI | Linux, macOS, and Windows on x86-64/Arm64 |
+| Browser wasm | `wasm32-unknown-unknown` |
+
+This includes every desktop OS supported by the upstream C++ package and adds iOS and browser
+WebAssembly.
+
+## Rust quick start
 
 ```toml
 [dependencies]
-xgrammar-rs = "0.1"
+xgrammar-rs = "0.3"
 ```
 
-For HuggingFace tokenizer support:
+```rust
+use xgrammar::{
+    Grammar, GrammarCompiler, GrammarMatcher, TokenizerInfo, VocabType,
+    allocate_token_bitmask, get_bitmask_size,
+};
+
+let grammar = Grammar::from_json_schema(
+    r#"{"type":"object","properties":{"name":{"type":"string"}},"required":["name"]}"#,
+    true,
+    None,
+    None,
+    true,
+    None,
+)?;
+
+let vocab = vec!["{".to_owned(), "}".to_owned(), "</s>".to_owned()];
+let tokenizer = TokenizerInfo::new(&vocab, VocabType::RAW, None, None, false)?;
+let compiler = GrammarCompiler::with_defaults(tokenizer.clone());
+let compiled = compiler.compile_grammar(&grammar)?;
+let mut matcher = GrammarMatcher::from_compiled_grammar(&compiled, false);
+let mut bitmask = allocate_token_bitmask(1, tokenizer.vocab_size());
+let shape = [1, get_bitmask_size(tokenizer.vocab_size()).into()];
+matcher.fill_next_token_bitmask(&mut bitmask, &shape, 0)?;
+
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+Enable direct Hugging Face `tokenizers::Tokenizer` support with:
 
 ```toml
-[dependencies]
-xgrammar-rs = { version = "0.1", features = ["tokenizers"] }
+xgrammar-rs = { version = "0.3", features = ["tokenizers"] }
 ```
 
-## Quick Start
+Then use `TokenizerInfo::from_huggingface(&tokenizer, vocab_size, stop_token_ids)`.
 
-### JSON Schema Generation
+## Development
 
-```rust
-use xgrammar::{Grammar, GrammarCompiler, GrammarMatcher, TokenizerInfo, VocabType};
+Fetch the pinned upstream reference (C++ sources + Python tests). It is only needed for the
+Python suite and for reading the C++ sources; the Rust crate builds and tests without it:
 
-fn main() -> Result<(), String> {
-    // Define your JSON schema
-    let schema = r#"{
-        "type": "object",
-        "properties": {
-            "name": {"type": "string"},
-            "age": {"type": "integer"}
-        },
-        "required": ["name", "age"]
-    }"#;
-
-    // Create grammar from JSON schema
-    let grammar = Grammar::from_json_schema(
-        schema,
-        true,  // any_whitespace
-        None,  // indent
-        Some((",", ":")),  // separators
-        true,  // strict_mode
-        None,  // max_whitespace_cnt
-        false, // print_converted_ebnf
-    )?;
-
-    // Create tokenizer info (example with empty vocab)
-    let vocab: Vec<&str> = vec![];
-    let tokenizer_info = TokenizerInfo::new(&vocab, VocabType::RAW, &None, false)?;
-
-    // Compile grammar
-    let mut compiler = GrammarCompiler::new(&tokenizer_info, 8, true, -1)?;
-    let compiled_grammar = compiler.compile_grammar(&grammar)?;
-
-    // Create matcher
-    let mut matcher = GrammarMatcher::new(&compiled_grammar, None, true, -1)?;
-
-    // Use the matcher to validate strings
-    assert!(matcher.accept_string(r#"{"name":"John","age":30}"#, false));
-    assert!(matcher.is_terminated());
-    
-    Ok(())
-}
+```bash
+git submodule update --init external/xgrammar
 ```
 
-### EBNF Grammar
+Do not pass `--recursive`: upstream's own submodules (googletest, dlpack, ...) are not used.
 
-```rust
-use xgrammar::Grammar;
+Initial setup (installs rustup / uv / pnpm when missing):
 
-let ebnf = r#"
-root ::= expression
-expression ::= term ("+" term | "-" term)*
-term ::= factor ("*" factor | "/" factor)*
-factor ::= number | "(" expression ")"
-number ::= [0-9]+
-"#;
-
-let grammar = Grammar::from_ebnf(ebnf, "root")?;
+```bash
+cargo tools setup
 ```
 
-### Regular Expression
+Language tooling and builds (driven by [`platforms.toml`](platforms.toml)):
 
-```rust
-use xgrammar::Grammar;
-
-let regex = r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}";
-let grammar = Grammar::from_regex(regex, false)?;
+```bash
+cargo tools install python   # maturin, …
+cargo tools install swift    # cargo-swift, …
+cargo tools build rust --targets host
+cargo tools build python --targets host
+cargo tools build swift --targets host
+cargo tools test rust
+cargo tools test python
+cargo tools test swift
 ```
 
-### With HuggingFace Tokenizers (requires `hf` feature)
+Run the Rust suites directly (C++ gtest port + rust_api):
 
-```rust
-use xgrammar::{Grammar, GrammarCompiler, GrammarMatcher, TokenizerInfo, allocate_token_bitmask};
-
-// Load tokenizer from HuggingFace
-let tokenizer = tokenizers::Tokenizer::from_file("tokenizer.json")?;
-let tokenizer_info = TokenizerInfo::from_huggingface(&tokenizer, None, None)?;
-
-// Create and compile grammar
-let grammar = Grammar::builtin_json_grammar();
-let mut compiler = GrammarCompiler::new(&tokenizer_info, 8, true, -1)?;
-let compiled_grammar = compiler.compile_grammar(&grammar)?;
-
-// Create matcher and use for token-level generation
-let mut matcher = GrammarMatcher::new(&compiled_grammar, None, true, -1)?;
-
-// Allocate token bitmask for batch generation
-let mut bitmask_data = allocate_token_bitmask(1, tokenizer_info.vocab_size());
-
-// For string-based generation (simpler approach)
-assert!(matcher.accept_string(r#"{"key":"value"}"#, false));
-assert!(matcher.is_terminated());
+```bash
+cargo test -p xgrammar-rs
+cargo test -p xgrammar-rs --features tokenizers
 ```
 
-## API Documentation
+Python tests are the untouched upstream suite under `external/xgrammar/tests/python/`
+(run via bindings, not a Rust re-port):
 
-For detailed API documentation, visit [docs.rs/xgrammar-rs](https://docs.rs/xgrammar-rs).
-
-## WebAssembly support
-
-The library supports Rust's wasm32-wasi* targets. When compiling for wasi targets,
-a WASI sysroot with C++ exceptions support is required. xgrammar-rs does not
-download or build one implicitly: set the `WASI_SYSROOT` environment variable to
-its location, e.g.:
-
-```sh
-export WASI_SYSROOT=/opt/wasi-sdk/share/wasi-sysroot
+```bash
+uv sync --project bindings/python --extra test
+uv run --project bindings/python python -m pytest external/xgrammar/tests/python -m "not hf_token_required"
 ```
 
-The exception-enabled C++ runtime must live at the standard sysroot locations,
-so that every crate that compiles C++ finds it through the plain `--sysroot`
-mechanism. The prebuilt `wasi-sysroot` artifacts from
-[wasi-sdk](https://github.com/WebAssembly/wasi-sdk) releases 33 and newer are
-"dual": the exception-enabled variant sits in `eh/` subdirectories that stock
-clang does not select automatically. Overlay it onto the standard locations
-once after extraction:
+Check each generated binding backend independently:
 
-```sh
-sysroot=/path/to/wasi-sysroot
-for t in wasm32-wasi wasm32-wasi-threads wasm32-wasip1 wasm32-wasip1-threads wasm32-wasip2; do
-  cp -r "$sysroot/include/$t/eh/c++" "$sysroot/include/$t/"
-  cp "$sysroot/lib/$t/eh/"*.a "$sysroot/lib/$t/"
-done
+```bash
+cargo check -p xgrammar-py --no-default-features --features bindings-pyo3
+cargo check -p xgrammar-py --no-default-features --features bindings-uniffi
+cargo check -p xgrammar-py --no-default-features --features bindings-napi
+cargo check -p xgrammar-py --target wasm32-unknown-unknown --no-default-features --features bindings-wasm
 ```
 
-Alternatively, build a sysroot from source with `-DWASI_SDK_EXCEPTIONS=ON`,
-which installs the exception-enabled runtime at the standard locations
-directly. Additionally, the system must have:
-- clang compiler version 22 or newer, supporting the corresponding wasi target
-  (including the "compiler runtime libraries for clang" for WASI, aka wasi-compiler-rt);
-- [wasm-component-ld](https://github.com/bytecodealliance/wasm-component-ld).
+The authoritative platform list used by `cargo tools` lives in
+[`platforms.toml`](platforms.toml).
 
 ## License
 
-This project is licensed under the Apache License - see the [LICENSE](LICENSE) file for details.
+Apache-2.0. See [LICENSE](LICENSE).

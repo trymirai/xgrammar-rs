@@ -11,7 +11,7 @@ use std::{
 use pyo3::{exceptions::PyRuntimeError, prelude::*, types::PyModuleMethods};
 use xgrammar::{MatcherError, matcher::bitmask_row_range};
 
-use crate::{bitmask_util::with_writable_buffer, error::map_error, matcher::GrammarMatcher};
+use crate::{bitmask_util::with_writable_buffer, error::map_error, grammar_matcher::GrammarMatcher};
 
 /// Batched matcher front-end. `batch_fill_next_token_bitmask` fills bitmask rows in parallel on a
 /// persistent rayon pool (upstream rebuilds its pool on every call) — each matcher writes its own
@@ -40,7 +40,7 @@ impl BatchGrammarMatcher {
     fn batch_fill_next_token_bitmask(
         &self,
         py: Python<'_>,
-        matchers: Vec<PyRefMut<'_, GrammarMatcher>>,
+        matchers: Vec<PyRef<'_, GrammarMatcher>>,
         bitmask: &Bound<'_, PyAny>,
         indices: Option<Vec<i32>>,
         _debug_print: bool,
@@ -67,7 +67,7 @@ impl BatchGrammarMatcher {
                 }
                 row_indices.push(index);
             }
-            let handles: Vec<_> = matchers.iter().map(|matcher| Arc::clone(&matcher.inner)).collect();
+            let handles: Vec<_> = matchers.iter().map(|matcher| Arc::clone(matcher.as_ref())).collect();
             // Release the GIL while doing the Rust work.
             py.detach(|| fill_rows(&handles, &row_indices, buf, shape, self.pool.as_ref())).map_err(map_error)
         })
@@ -99,7 +99,7 @@ impl BatchGrammarMatcher {
     #[staticmethod]
     #[pyo3(name = "batch_accept_token")]
     fn batch_accept_token(
-        matchers: Vec<PyRefMut<'_, GrammarMatcher>>,
+        matchers: Vec<PyRef<'_, GrammarMatcher>>,
         tokens: Vec<i32>,
         _debug_print: bool,
     ) -> PyResult<Vec<bool>> {
@@ -116,7 +116,7 @@ impl BatchGrammarMatcher {
     #[staticmethod]
     #[pyo3(name = "batch_accept_string")]
     fn batch_accept_string(
-        matchers: Vec<PyRefMut<'_, GrammarMatcher>>,
+        matchers: Vec<PyRef<'_, GrammarMatcher>>,
         strings: Vec<Bound<'_, PyAny>>,
         _debug_print: bool,
     ) -> PyResult<Vec<bool>> {
@@ -142,7 +142,7 @@ impl BatchGrammarMatcher {
     #[staticmethod]
     #[pyo3(name = "batch_rollback")]
     fn batch_rollback(
-        matchers: Vec<PyRefMut<'_, GrammarMatcher>>,
+        matchers: Vec<PyRef<'_, GrammarMatcher>>,
         num_tokens: Vec<i32>,
     ) -> PyResult<()> {
         if matchers.len() != num_tokens.len() {

@@ -2,7 +2,7 @@
 
 use pyo3::{exceptions::PyRuntimeError, prelude::*, types::PyModuleMethods};
 
-use crate::{compiler::CompiledGrammar, error::map_error, grammar::Grammar};
+use crate::{compiled_grammar::CompiledGrammar, error::map_error, grammar::Grammar};
 
 /// Registers testing helpers on `m`.
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -63,7 +63,7 @@ fn _ebnf_to_grammar_no_normalization(
     ebnf_string: String,
     root_rule_name: &str,
 ) -> PyResult<Grammar> {
-    Ok(Grammar::wrap(
+    Ok(Grammar::from(
         xgrammar::parser::ebnf_to_grammar_no_normalization(&ebnf_string, root_rule_name).map_err(map_error)?,
     ))
 }
@@ -120,7 +120,7 @@ fn with_raw_bitmask_row<R>(
 
 #[pyfunction]
 fn _get_allow_empty_rule_ids(compiled_grammar: &CompiledGrammar) -> Vec<i32> {
-    compiled_grammar.inner.grammar().allow_empty_rule_ids().to_vec()
+    compiled_grammar.as_ref().grammar().allow_empty_rule_ids().to_vec()
 }
 
 #[pyfunction]
@@ -143,7 +143,7 @@ fn _generate_float_regex(
 
 #[pyfunction]
 fn _print_grammar_fsms(grammar: &Grammar) -> PyResult<String> {
-    xgrammar::testing::print_grammar_fsms(&grammar.inner).map_err(map_error)
+    xgrammar::testing::print_grammar_fsms(grammar.as_ref()).map_err(map_error)
 }
 
 #[pyfunction]
@@ -152,5 +152,5 @@ fn _is_rule_fsm_accept_string(
     rule_id: i32,
     input_str: String,
 ) -> PyResult<bool> {
-    xgrammar::testing::is_rule_fsm_accept_string(&grammar.inner, rule_id, &input_str).map_err(map_error)
+    xgrammar::testing::is_rule_fsm_accept_string(grammar.as_ref(), rule_id, &input_str).map_err(map_error)
 }

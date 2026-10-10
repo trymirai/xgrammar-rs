@@ -1,68 +1,19 @@
+mod cli;
+mod commands;
+
 use anyhow::{Result, anyhow};
-use clap::{CommandFactory, Parser, Subcommand};
+use clap::{CommandFactory, Parser};
 use cli_tools::{
-    configs::{HOST_TARGET, PlatformsConfig},
+    configs::PlatformsConfig,
     languages::{
         LanguageBackend, PythonLanguageBackend, RustLanguageBackend, SwiftLanguageBackend, TypeScriptLanguageBackend,
     },
     release::run_release,
     sync::run_sync,
-    types::{Capability, Command, Configuration, Language},
+    types::{Command, Configuration, Language},
 };
 
-#[derive(Parser)]
-#[command(name = "xgrammar-tools", bin_name = "xgrammar-tools")]
-struct Cli {
-    #[command(subcommand)]
-    command: Option<Commands>,
-}
-
-#[derive(Subcommand)]
-enum Commands {
-    /// Install rustup / uv / pnpm and required targets
-    Setup {
-        #[arg(long)]
-        include_platform_specific: bool,
-    },
-    /// Install tools for a specific language
-    Install {
-        #[arg(value_enum)]
-        language: Language,
-    },
-    /// Build for a specific language
-    Build {
-        #[arg(value_enum, default_value = "rust")]
-        language: Language,
-        #[arg(value_enum, default_value = "release")]
-        configuration: Configuration,
-        #[arg(long, value_delimiter = ',', default_value = HOST_TARGET)]
-        targets: Vec<String>,
-        #[arg(long, value_enum, value_delimiter = ',')]
-        capabilities: Vec<Capability>,
-    },
-    /// Run tests for a specific language
-    Test {
-        #[arg(value_enum)]
-        language: Language,
-    },
-    /// Run an example for a specific language
-    Example {
-        #[arg(value_enum)]
-        language: Language,
-        name: String,
-    },
-    /// Synchronize project files with platforms.toml
-    Sync {
-        #[arg(long)]
-        check: bool,
-    },
-    /// Verify that the working tree has no uncommitted changes after building each language
-    Verify,
-    /// Bump version, sync, build all languages, and stage release artifacts
-    Release {
-        version: String,
-    },
-}
+use crate::{cli::Cli, commands::Commands};
 
 fn run_setup(include_platform_specific: bool) -> Result<()> {
     if include_platform_specific && cfg!(target_vendor = "apple") {

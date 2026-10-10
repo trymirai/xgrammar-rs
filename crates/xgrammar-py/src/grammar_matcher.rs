@@ -2,22 +2,27 @@
 
 use std::sync::{Arc, Mutex, MutexGuard};
 
-// Used by the `new` constructor signature. Only PyO3 emits a constructor companion; the other
-// backends drop the (extracted) constructor, leaving this import unused there.
-#[cfg_attr(not(feature = "bindings-pyo3"), allow(unused_imports))]
-use crate::compiler::CompiledGrammar;
-use crate::error::map_error;
+use xgrammar::matcher::{allocate_token_bitmask, get_bitmask_size};
+
+use crate::{capture::Capture, error::map_error, token_bitmask::TokenBitmask, tokenizer_info::TokenizerInfo};
 
 /// Drives constrained decoding over a compiled grammar.
 #[bindings::export(Class)]
 #[derive(Debug, Clone)]
 pub struct GrammarMatcher {
-    pub(crate) inner: Arc<Mutex<xgrammar::matcher::GrammarMatcher>>,
+    inner: Arc<Mutex<xgrammar::matcher::GrammarMatcher>>,
 }
 
 impl GrammarMatcher {
-    pub(crate) fn lock(&self) -> MutexGuard<'_, xgrammar::matcher::GrammarMatcher> {
+    /// Locks the core matcher.
+    pub fn lock(&self) -> MutexGuard<'_, xgrammar::matcher::GrammarMatcher> {
         self.inner.lock().expect("grammar matcher mutex poisoned")
+    }
+}
+
+impl AsRef<Arc<Mutex<xgrammar::matcher::GrammarMatcher>>> for GrammarMatcher {
+    fn as_ref(&self) -> &Arc<Mutex<xgrammar::matcher::GrammarMatcher>> {
+        &self.inner
     }
 }
 
@@ -30,14 +35,14 @@ impl GrammarMatcher {
     /// temperature used when no active grammar rule specifies one.
     #[bindings::export(Method(Constructor))]
     pub fn new(
-        compiled_grammar: &CompiledGrammar,
+        compiled_grammar: &crate::compiled_grammar::CompiledGrammar,
         override_stop_tokens: Option<Vec<i32>>,
         terminate_without_stop_token: bool,
         _max_rollback_tokens: i32,
         default_temperature: Option<f64>,
     ) -> Result<GrammarMatcher, crate::error::BindingError> {
         let matcher = xgrammar::matcher::GrammarMatcher::with_options(
-            &compiled_grammar.inner,
+            compiled_grammar.as_ref(),
             override_stop_tokens,
             terminate_without_stop_token,
             default_temperature.map(|temperature| temperature as f32),
@@ -76,6 +81,55 @@ impl GrammarMatcher {
         _debug_print: bool,
     ) -> bool {
         self.lock().accept_bytes(&input)
+    }
+
+    /// Accepts the stop token, terminating the matcher. Returns whether it was accepted.
+    #[bindings::export(Method)]
+    pub fn accept_stop_token(&self) -> bool {
+        self.lock().accept_stop_token()
+    }
+
+    /// The tokens acceptable next, as an owned bitmask row.
+    #[bindings::export(Method)]
+    pub fn next_token_bitmask(&self) -> Result<TokenBitmask, crate::error::BindingError> {
+        let mut matcher = self.lock();
+        let vocab_size = matcher.tokenizer_info().vocab_size();
+        let mut words = allocate_token_bitmask(1, vocab_size);
+        let shape = [1, i64::from(get_bitmask_size(vocab_size))];
+        let need_apply = matcher.fill_next_token_bitmask(&mut words, &shape, 0).map_err(map_error)?;
+        Ok(TokenBitmask {
+            words,
+            need_apply,
+        })
+    }
+
+    /// The longest byte string that will be valid according to the current syntax, for
+    /// jump-forward decoding. Does not change the matcher state.
+    #[bindings::export(Method)]
+    pub fn find_jump_forward_bytes(&self) -> Result<Vec<u8>, crate::error::BindingError> {
+        self.lock().find_jump_forward_string().map_err(map_error)
+    }
+
+    /// The jump-forward bytes as a string; fails when they are not valid UTF-8.
+    #[bindings::export(Method)]
+    pub fn find_jump_forward_string(&self) -> Result<String, crate::error::BindingError> {
+        String::from_utf8(self.find_jump_forward_bytes()?).map_err(map_error)
+    }
+
+    /// The values captured so far, in completion order. With `deduplicate`, only the last
+    /// (longest) completion of each rule occurrence is kept.
+    #[bindings::export(Method)]
+    pub fn capture_values(
+        &self,
+        deduplicate: bool,
+    ) -> Vec<Capture> {
+        self.lock().get_captures(deduplicate).into_iter().map(Capture::from).collect()
+    }
+
+    /// The tokenizer info the matcher was built with.
+    #[bindings::export(Method)]
+    pub fn tokenizer_info(&self) -> TokenizerInfo {
+        TokenizerInfo::from(self.lock().tokenizer_info().clone())
     }
 
     /// Whether the matcher has reached an accepting terminal state.
@@ -134,7 +188,6 @@ mod matcher_pyo3_ext {
     use crate::{
         bitmask_util::{read_i64_1d, with_writable_buffer},
         error::map_error,
-        tokenizer_info::TokenizerInfo,
     };
 
     #[pyo3::pymethods]
@@ -152,25 +205,9 @@ mod matcher_pyo3_ext {
             })
         }
 
-        #[pyo3(name = "tokenizer_info")]
-        fn tokenizer_info_py(&self) -> TokenizerInfo {
-            TokenizerInfo::wrap(self.lock().tokenizer_info().clone())
-        }
-
-        #[pyo3(name = "accept_stop_token")]
-        fn accept_stop_token_py(&self) -> bool {
-            self.lock().accept_stop_token()
-        }
-
         #[pyo3(name = "_debug_print_internal_state")]
         fn debug_print_internal_state_py(&self) -> String {
             self.lock().debug_print_internal_state()
-        }
-
-        #[pyo3(name = "find_jump_forward_string")]
-        fn find_jump_forward_string_py(&self) -> PyResult<String> {
-            let bytes = self.lock().find_jump_forward_string().map_err(map_error)?;
-            String::from_utf8(bytes).map_err(map_error)
         }
 
         #[pyo3(name = "get_captures")]

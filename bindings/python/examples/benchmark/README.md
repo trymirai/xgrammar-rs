@@ -11,17 +11,19 @@ lm-format-enforcer                0.10.6
 ```
 
 #### Run
+From the repository root:
 ```bash
-python3 bench_grammar_compile_mask_gen.py [-h] [--backend {xgrammar,outlines,lmformatenforcer}]
-                                          [--num_iters NUM_ITERS] [--num_warmup NUM_WARMUP]
+uv run --project bindings/python bindings/python/examples/benchmark/bench_grammar_compile_mask_gen.py \
+    [-h] [--backend {xgrammar,outlines,lmformatenforcer}] [--num_iters NUM_ITERS] [--num_warmup NUM_WARMUP]
 ```
 
 
 ### Benchmark Apply Token Bitmask Inplace Kernels
 
 #### Run
+From the repository root:
 ```bash
-python3 examples/benchmark/bench_apply_token_bitmask_inplace.py
+uv run --project bindings/python bindings/python/examples/benchmark/bench_apply_token_bitmask_inplace.py
 ```
 
 #### Results

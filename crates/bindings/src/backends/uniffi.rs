@@ -3,7 +3,7 @@ use quote::{format_ident, quote};
 use syn::Ident;
 
 use crate::{
-    backends::Backend,
+    backends::{Backend, replace_self_in_return},
     contexts::{
         ClassContext, EnumerationContext, ErrorContext, ImplementationContext, MethodMetadata, StructureContext,
     },
@@ -194,37 +194,5 @@ fn factory_with_callback_expansion(
                 std::sync::Arc::new(#body)
             }
         }
-    }
-}
-
-fn replace_self_in_return(
-    output: &syn::ReturnType,
-    self_type: &syn::Type,
-) -> syn::ReturnType {
-    use syn::fold::Fold;
-    let mut folder = SelfReplacer {
-        self_type: self_type.clone(),
-    };
-    folder.fold_return_type(output.clone())
-}
-
-struct SelfReplacer {
-    self_type: syn::Type,
-}
-
-impl syn::fold::Fold for SelfReplacer {
-    fn fold_type(
-        &mut self,
-        ty: syn::Type,
-    ) -> syn::Type {
-        if let syn::Type::Path(path) = &ty
-            && path.qself.is_none()
-            && path.path.segments.len() == 1
-            && path.path.segments[0].ident == "Self"
-            && path.path.segments[0].arguments.is_empty()
-        {
-            return self.self_type.clone();
-        }
-        syn::fold::fold_type(self, ty)
     }
 }

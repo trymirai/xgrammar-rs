@@ -1,0 +1,137 @@
+//! `GrammarCompiler` binding.
+
+use std::sync::Arc;
+
+use crate::{compiled_grammar::CompiledGrammar, error::map_error, grammar::Grammar, named_grammars::NamedGrammars};
+
+/// Compiles grammars against a tokenizer, with a result cache.
+#[bindings::export(Class)]
+#[derive(Clone)]
+pub struct GrammarCompiler {
+    inner: Arc<xgrammar::compiler::GrammarCompiler>,
+}
+
+#[bindings::export(Implementation)]
+impl GrammarCompiler {
+    /// Creates a compiler bound to `tokenizer_info`.
+    #[bindings::export(Method(Constructor))]
+    pub fn new(
+        tokenizer_info: &crate::tokenizer_info::TokenizerInfo,
+        max_threads: i32,
+        cache_enabled: bool,
+        cache_limit_bytes: i64,
+    ) -> GrammarCompiler {
+        GrammarCompiler {
+            inner: Arc::new(xgrammar::compiler::GrammarCompiler::new(
+                tokenizer_info.as_ref().clone(),
+                max_threads,
+                cache_enabled,
+                cache_limit_bytes,
+            )),
+        }
+    }
+
+    /// Compiles an existing [`Grammar`].
+    #[bindings::export(Method)]
+    pub fn compile_grammar_ebnf(
+        &self,
+        grammar: &Grammar,
+    ) -> Result<CompiledGrammar, crate::error::BindingError> {
+        self.inner.compile_grammar(grammar.as_ref()).map(CompiledGrammar::from).map_err(map_error)
+    }
+
+    /// Compiles a grammar from an EBNF string.
+    #[bindings::export(Method)]
+    pub fn compile_grammar_from_strings(
+        &self,
+        ebnf_string: String,
+        root_rule_name: String,
+    ) -> Result<CompiledGrammar, crate::error::BindingError> {
+        self.inner.compile_grammar_ebnf(&ebnf_string, &root_rule_name).map(CompiledGrammar::from).map_err(map_error)
+    }
+
+    /// Compiles a JSON Schema string.
+    #[bindings::export(Method)]
+    #[allow(clippy::too_many_arguments)]
+    pub fn compile_json_schema(
+        &self,
+        schema: String,
+        any_whitespace: bool,
+        indent: Option<i32>,
+        separator_item: Option<String>,
+        separator_kv: Option<String>,
+        strict_mode: bool,
+        max_whitespace_cnt: Option<i32>,
+        any_order: bool,
+    ) -> Result<CompiledGrammar, crate::error::BindingError> {
+        let seps = match (&separator_item, &separator_kv) {
+            (Some(a), Some(b)) => Some((a.as_str(), b.as_str())),
+            _ => None,
+        };
+        self.inner
+            .compile_json_schema_with_any_order(
+                &schema,
+                any_whitespace,
+                indent,
+                seps,
+                strict_mode,
+                max_whitespace_cnt,
+                any_order,
+            )
+            .map(CompiledGrammar::from)
+            .map_err(map_error)
+    }
+
+    /// Compiles a regular expression.
+    #[bindings::export(Method)]
+    pub fn compile_regex(
+        &self,
+        regex: String,
+    ) -> Result<CompiledGrammar, crate::error::BindingError> {
+        self.inner.compile_regex(&regex).map(CompiledGrammar::from).map_err(map_error)
+    }
+
+    /// Compiles a structural-tag JSON document.
+    #[bindings::export(Method)]
+    pub fn compile_structural_tag(
+        &self,
+        structural_tag_json: String,
+    ) -> Result<CompiledGrammar, crate::error::BindingError> {
+        self.inner.compile_structural_tag(&structural_tag_json).map(CompiledGrammar::from).map_err(map_error)
+    }
+
+    /// Compiles a grammar from Lark syntax, resolving named special tokens against the
+    /// compiler's tokenizer info; `named_grammars` resolves its `@name` references.
+    #[bindings::export(Method)]
+    pub fn compile_lark(
+        &self,
+        lark_string: String,
+        named_grammars: &NamedGrammars,
+    ) -> Result<CompiledGrammar, crate::error::BindingError> {
+        self.inner.compile_lark(&lark_string, &named_grammars.entries()).map(CompiledGrammar::from).map_err(map_error)
+    }
+
+    /// Compiles the built-in JSON grammar.
+    #[bindings::export(Method)]
+    pub fn compile_builtin_json_grammar(&self) -> CompiledGrammar {
+        CompiledGrammar::from(self.inner.compile_builtin_json_grammar())
+    }
+
+    /// Clears the result cache.
+    #[bindings::export(Method)]
+    pub fn clear_cache(&self) {
+        self.inner.clear_cache();
+    }
+
+    /// The current cache memory usage, in bytes.
+    #[bindings::export(Method)]
+    pub fn get_cache_size_bytes(&self) -> i64 {
+        self.inner.get_cache_size_bytes()
+    }
+
+    /// The cache memory limit, in bytes.
+    #[bindings::export(Method)]
+    pub fn cache_limit_bytes(&self) -> i64 {
+        self.inner.cache_limit_bytes()
+    }
+}

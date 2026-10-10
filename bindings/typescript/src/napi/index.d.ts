@@ -24,6 +24,8 @@ export declare class Grammar {
   static from_regex(regexString: string, printConvertedEbnf: boolean): Grammar
   static from_structural_tag(structuralTagJson: string): Grammar
   static from_structural_tag_with_tokenizer(structuralTagJson: string, tokenizerInfo: TokenizerInfo): Grammar
+  static from_lark(larkString: string, namedGrammars: NamedGrammars): Grammar
+  static from_lark_with_tokenizer(larkString: string, tokenizerInfo: TokenizerInfo, namedGrammars: NamedGrammars): Grammar
   static builtin_json_grammar(): Grammar
   static union(grammars: Array<string>): Grammar
   static concat(grammars: Array<string>): Grammar
@@ -42,6 +44,11 @@ export declare class GrammarCompiler {
   compileRegex(regex: string): CompiledGrammar
   /** Compiles a structural-tag JSON document. */
   compileStructuralTag(structuralTagJson: string): CompiledGrammar
+  /**
+   * Compiles a grammar from Lark syntax, resolving named special tokens against the
+   * compiler's tokenizer info; `named_grammars` resolves its `@name` references.
+   */
+  compileLark(larkString: string, namedGrammars: NamedGrammars): CompiledGrammar
   /** Compiles the built-in JSON grammar. */
   compileBuiltinJsonGrammar(): CompiledGrammar
   /** Clears the result cache. */
@@ -61,6 +68,24 @@ export declare class GrammarMatcher {
   acceptString(input: string, debugPrint: boolean): boolean
   /** Accepts raw bytes, advancing the matcher. Returns whether it was accepted. */
   acceptBytes(input: Array<number>, debugPrint: boolean): boolean
+  /** Accepts the stop token, terminating the matcher. Returns whether it was accepted. */
+  acceptStopToken(): boolean
+  /** The tokens acceptable next, as an owned bitmask row. */
+  nextTokenBitmask(): TokenBitmask
+  /**
+   * The longest byte string that will be valid according to the current syntax, for
+   * jump-forward decoding. Does not change the matcher state.
+   */
+  findJumpForwardBytes(): Array<number>
+  /** The jump-forward bytes as a string; fails when they are not valid UTF-8. */
+  findJumpForwardString(): string
+  /**
+   * The values captured so far, in completion order. With `deduplicate`, only the last
+   * (longest) completion of each rule occurrence is kept.
+   */
+  captureValues(deduplicate: boolean): Array<Capture>
+  /** The tokenizer info the matcher was built with. */
+  tokenizerInfo(): TokenizerInfo
   /** Whether the matcher has reached an accepting terminal state. */
   isTerminated(): boolean
   /** Whether the grammar is fully matched (root completed). */
@@ -76,6 +101,18 @@ export declare class GrammarMatcher {
   /** The stop token ids the matcher accepts as terminators. */
   stopTokenIds(): Array<number>
   constructor(compiledGrammar: CompiledGrammar, overrideStopTokens: Array<number> | undefined | null, terminateWithoutStopToken: boolean, maxRollbackTokens: number, defaultTemperature?: number | undefined | null)
+}
+
+/**
+ * Grammars and Lark sources referenced by name from a Lark grammar, passed to
+ * `Grammar.from_lark` and `GrammarCompiler.compile_lark`.
+ */
+export declare class NamedGrammars {
+  /** Adds `grammar`, referenced as `@name` (without the `@`). */
+  addGrammar(name: string, grammar: Grammar): void
+  /** Adds a Lark source with its own `start` rule, referenced as `@name` (without the `@`). */
+  addLark(name: string, source: string): void
+  constructor()
 }
 
 /** A thin opaque wrapper over [`xgrammar::tokenizer::TokenizerInfo`]. */
@@ -108,11 +145,35 @@ export declare class TokenizerInfo {
 }
 
 /**
+ * The text matched by a capturing rule, as raw bytes: a capture may end inside a UTF-8
+ * character.
+ */
+export interface Capture {
+  /** The capture name. */
+  name: string
+  /** The captured bytes. */
+  value: Array<number>
+}
+
+/**
+ * The tokens a matcher accepts next, as one bitmask row.
+ *
+ * `words` holds `ceil(vocab_size / 32)` words; token `k` is allowed when bit `k % 32` of word
+ * `k / 32` is set. The signed words are raw bit patterns, so a set bit 31 reads as a negative
+ * number. Bits at or beyond `vocab_size` carry no meaning.
+ */
+export interface TokenBitmask {
+  /** The packed mask words. */
+  words: Array<number>
+  /** Whether the mask must be applied, i.e. some token is rejected. */
+  needApply: boolean
+}
+
+/**
  * How a tokenizer vocabulary is encoded (RAW, BYTE_FALLBACK, BYTE_LEVEL).
  *
  * No explicit discriminants — NAPI's string-enum codegen rejects them. The numeric
- * mapping (0/1/2) lives in [`VocabType::to_core`] / [`VocabType::from_core`] and the
- * `TryFrom<i32>` impl, which the Python layer relies on.
+ * mapping (0/1/2) lives in the `TryFrom<i32>` impl, which the Python layer relies on.
  */
 export declare const enum VocabType {
   /** Tokens are used verbatim. */

@@ -19,48 +19,48 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
 #[pyfunction]
 fn structure_normalizer(grammar: &Grammar) -> Grammar {
-    Grammar::wrap(xgrammar::functor::structure_normalizer(&grammar.inner))
+    Grammar::from(xgrammar::functor::structure_normalizer(grammar.as_ref()))
 }
 
 #[pyfunction]
 fn rule_inliner(grammar: &Grammar) -> Grammar {
-    let mut g = grammar.inner.clone();
+    let mut g = grammar.as_ref().clone();
     xgrammar::functor::rule_inliner(&mut g);
-    Grammar::wrap(g)
+    Grammar::from(g)
 }
 
 #[pyfunction]
 fn byte_string_fuser(grammar: &Grammar) -> Grammar {
-    let mut g = grammar.inner.clone();
+    let mut g = grammar.as_ref().clone();
     xgrammar::functor::byte_string_fuser(&mut g);
-    Grammar::wrap(g)
+    Grammar::from(g)
 }
 
 #[pyfunction]
 fn dead_code_eliminator(grammar: &Grammar) -> Grammar {
-    Grammar::wrap(xgrammar::functor::dead_code_eliminator(&grammar.inner))
+    Grammar::from(xgrammar::functor::dead_code_eliminator(grammar.as_ref()))
 }
 
 #[pyfunction]
 fn lookahead_assertion_analyzer(grammar: &Grammar) -> Grammar {
-    Grammar::wrap(xgrammar::functor::lookahead_assertion_analyzer(&grammar.inner))
+    Grammar::from(xgrammar::functor::lookahead_assertion_analyzer(grammar.as_ref()))
 }
 
 #[pyfunction]
 fn grammar_optimizer(grammar: &Grammar) -> PyResult<Grammar> {
-    xgrammar::functor::grammar_optimizer(&grammar.inner).map(Grammar::wrap).map_err(map_error)
+    xgrammar::functor::grammar_optimizer(grammar.as_ref()).map(Grammar::from).map_err(map_error)
 }
 
 #[pyfunction]
 fn fsm_builder(grammar: &Grammar) -> PyResult<Grammar> {
-    let mut g = grammar.inner.clone();
+    let mut g = grammar.as_ref().clone();
     xgrammar::functor::GrammarFsmBuilder::apply(&mut g).map_err(map_error)?;
-    Ok(Grammar::wrap(g))
+    Ok(Grammar::from(g))
 }
 
 #[pyfunction]
 fn repetition_normalizer(grammar: &Grammar) -> Grammar {
-    let mut g = grammar.inner.clone();
+    let mut g = grammar.as_ref().clone();
     xgrammar::functor::repetition_normalizer(&mut g);
-    Grammar::wrap(g)
+    Grammar::from(g)
 }

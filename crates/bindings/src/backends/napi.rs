@@ -74,17 +74,19 @@ impl Backend for Napi {
 
     fn method_attributes(metadata: &MethodMetadata) -> TokenStream {
         match metadata.flavor {
+            // `strict` checks every argument's JS type, including that a class argument is an
+            // instance of that class, before it is unwrapped into a Rust reference.
             MethodFlavor::Plain | MethodFlavor::StreamNext => quote! {
-                #[cfg_attr(feature = "bindings-napi", napi)]
+                #[cfg_attr(feature = "bindings-napi", napi(strict))]
             },
             MethodFlavor::Constructor => quote! {
-                #[cfg_attr(feature = "bindings-napi", napi(constructor))]
+                #[cfg_attr(feature = "bindings-napi", napi(constructor, strict))]
             },
             MethodFlavor::Getter => quote! {
                 #[cfg_attr(feature = "bindings-napi", napi(getter))]
             },
             MethodFlavor::Setter => quote! {
-                #[cfg_attr(feature = "bindings-napi", napi(setter))]
+                #[cfg_attr(feature = "bindings-napi", napi(setter, strict))]
             },
             MethodFlavor::Factory | MethodFlavor::FactoryWithCallback => {
                 quote! {}
@@ -417,7 +419,7 @@ fn constructor_expansion(
         #[cfg(feature = "bindings-napi")]
         #[napi_derive::napi]
         impl #self_type {
-            #[napi(constructor)]
+            #[napi(constructor, strict)]
             pub #asyncness fn new( #inputs ) #output {
                 #body
             }
@@ -444,7 +446,7 @@ fn factory_expansion(
         #[cfg(feature = "bindings-napi")]
         #[napi_derive::napi]
         impl #self_type {
-            #[napi(js_name = #method_name)]
+            #[napi(js_name = #method_name, strict)]
             #( #allows )*
             pub #asyncness fn #wrapper_ident( #inputs ) #output {
                 <#self_type>::#method_ident( #( #arg_idents ),* )#forward_await

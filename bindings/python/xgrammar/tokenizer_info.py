@@ -18,12 +18,6 @@ from transformers import PreTrainedTokenizerBase, PreTrainedTokenizerFast
 
 from .base import XGRObject, _core
 
-_BYTE_TOKEN_PREFIX = "\ue000xgrammar-bytes:"
-
-
-def _encode_vocab_for_binding(encoded_vocab: List[Union[bytes, str]]) -> List[str]:
-    return [_BYTE_TOKEN_PREFIX + token.hex() if isinstance(token, bytes) else token for token in encoded_vocab]
-
 
 class VocabType(Enum):
     """The type of the vocabulary. Used in TokenizerInfo. XGrammar supports three types of
@@ -121,8 +115,8 @@ class TokenizerInfo(XGRObject):
         if isinstance(stop_token_ids, int):
             stop_token_ids = [stop_token_ids]
         self._init_handle(
-            _core.TokenizerInfo(
-                _encode_vocab_for_binding(encoded_vocab),
+            _core.TokenizerInfo._from_vocab_tokens(
+                encoded_vocab,
                 vocab_type.value,
                 vocab_size,
                 stop_token_ids,
@@ -486,7 +480,7 @@ class TokenizerInfo(XGRObject):
             The metadata string in json format.
         """
         return TokenizerInfo._create_from_handle(
-            _core.TokenizerInfo.from_vocab_and_metadata(_encode_vocab_for_binding(encoded_vocab), metadata)
+            _core.TokenizerInfo._from_vocab_tokens_and_metadata(encoded_vocab, metadata)
         )
 
     @staticmethod

@@ -24,10 +24,9 @@ pub struct Grammar {
     suffix_stop_infos: Vec<SuffixStopInfo>,
     exprs: Compact2dArray<i32>,
     root_rule_id: i32,
-    /// The shared FSM holding every rule's compiled automaton (empty until optimized). Not
-    /// serialized; rebuilt by the grammar optimizer.
+    /// The complete FSM produced by the grammar optimizer (empty until optimized).
     complete_fsm: CompactFsm,
-    /// Per-rule compiled FSMs into [`Self::complete_fsm`] (empty until optimized).
+    /// Per-rule compiled FSMs, usually sharing [`Self::complete_fsm`] (empty until optimized).
     per_rule_fsms: Vec<Option<CompactFsmWithStartEndWithSize>>,
     /// Per-rule FSM structural hashes (set by the FSM hasher; compile-time only).
     per_rule_fsm_hashes: Vec<Option<u64>>,
@@ -66,6 +65,29 @@ impl Grammar {
     #[inline]
     pub fn complete_fsm(&self) -> &CompactFsm {
         &self.complete_fsm
+    }
+
+    /// State-cache offsets for distinct FSM storage. Shared rule views reuse one state range.
+    #[must_use]
+    pub fn fsm_state_offsets(&self) -> Vec<usize> {
+        let mut storage = vec![(&self.complete_fsm, 0)];
+        let mut next_offset = self.complete_fsm.num_states() as usize;
+        self.per_rule_fsms
+            .iter()
+            .map(|view| {
+                let Some(view) = view else {
+                    return 0;
+                };
+                let fsm = view.fsm().fsm();
+                if let Some((_, offset)) = storage.iter().find(|(shared, _)| fsm.shares_storage(shared)) {
+                    return *offset;
+                }
+                let offset = next_offset;
+                next_offset += fsm.num_states() as usize;
+                storage.push((fsm, offset));
+                offset
+            })
+            .collect()
     }
 
     /// The compiled FSM for `rule_id`, if built.

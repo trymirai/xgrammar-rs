@@ -58,11 +58,9 @@ impl LanguageBackend for TypeScriptLanguageBackend {
                 command = command.with_env("CARGO_ZIGBUILD_ZIG_PATH", &zig_path);
             }
             command.run()?;
-            let _ = Command::pnpm_run("fix").with_current_path(&bindings_path).run();
-            let _ = Command::pnpm_run("build").with_current_path(&bindings_path).run();
         }
 
-        Ok(())
+        Command::pnpm_run("build").with_current_path(&bindings_path).run()
     }
 
     fn test_target(
@@ -72,7 +70,7 @@ impl LanguageBackend for TypeScriptLanguageBackend {
     ) -> Result<()> {
         let paths = Paths::new()?;
         let bindings_path = paths.bindings_for_language_path(self.language());
-        Command::pnpm_jest().with_current_path(&bindings_path).run()
+        Command::pnpm_run("test").with_current_path(&bindings_path).run()
     }
 
     fn example_target(

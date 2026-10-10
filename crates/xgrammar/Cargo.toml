@@ -39,6 +39,8 @@ tokenizers = { version = "0.22", default-features = false, features = ["fancy-re
 
 [dev-dependencies]
 serde_json = { version = "1", features = ["preserve_order"] }
+# Downloads the upstream release for the Python suite. Path-only, so `cargo publish` drops it.
+xgrammar-upstream = { path = "../xgrammar-upstream" }
 
 [lints]
 workspace = true

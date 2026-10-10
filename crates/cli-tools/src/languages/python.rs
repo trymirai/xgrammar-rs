@@ -1,4 +1,7 @@
-use std::{fs, path::PathBuf};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 use anyhow::{Context, Result};
 
@@ -67,7 +70,7 @@ impl LanguageBackend for PythonLanguageBackend {
     ) -> Result<()> {
         let paths = Paths::new()?;
         let bindings_path = paths.bindings_for_language_path(self.language());
-        let suite = paths.root_path.join("external").join("xgrammar").join("tests").join("python");
+        let suite = Path::new(xgrammar_upstream::DIR).join("tests").join("python");
         Command::uv_pytest_path(suite).with_current_path(&bindings_path).run()
     }
 

@@ -6,10 +6,10 @@ Build the NAPI addon first:
 cargo tools build typescript --targets host
 ```
 
-Then:
+Then run an example with Bun:
 
 ```bash
 cargo tools example typescript json-grammar
-# or:
-pnpm exec tsx examples/jsonGrammar.ts
+# or, from bindings/typescript:
+bun examples/jsonGrammar.ts
 ```

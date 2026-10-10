@@ -1,16 +1,15 @@
 {
   "name": "xgrammar",
-  "version": "0.3.0",
-  "description": "TypeScript / NAPI bindings for pure-Rust XGrammar",
+  "version": "0.2.8",
+  "description": "Efficient, Flexible and Portable Structured Generation — pure-Rust XGrammar.",
   "license": "Apache-2.0",
   "packageManager": "pnpm@10.18.1",
   "main": "src/index.ts",
   "types": "src/index.ts",
   "scripts": {
-    "build": "echo skip-ts-build",
-    "fix": "echo skip-ts-format",
-    "tsn": "tsx",
-    "test": "echo no-typescript-tests-yet"
+    "build": "tsc --noEmit --strict --target es2022 --module nodenext --moduleResolution nodenext --types node src/index.ts examples/jsonGrammar.ts",
+    "tsn": "bun",
+    "test": "bun test ./tests"
   },
   "napi": {
     "binaryName": "xgrammar_rs",

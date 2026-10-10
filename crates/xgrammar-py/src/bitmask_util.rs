@@ -1,48 +1,79 @@
 //! Helpers for borrowing CPU tensor buffers (bitmasks, temperatures) from Python array-likes.
 
-use pyo3::{exceptions::PyRuntimeError, intern, prelude::*, sync::PyOnceLock};
+mod buffer_element;
 
-/// A tensor element type the bindings write into: its numpy dtype kind and item size, and the
-/// matching torch dtype.
-pub trait BufferElement: Copy {
-    /// The numpy dtype kind (`"i"` or `"f"`).
-    const KIND: &'static str;
-    /// The torch dtype attribute (`"int32"` or `"float32"`).
-    const TORCH_DTYPE: &'static str;
-    /// The size of one element in bytes.
-    const ITEM_SIZE: usize = std::mem::size_of::<Self>();
-    /// The cached `torch.<TORCH_DTYPE>` object, compared by identity.
-    fn torch_dtype_cell() -> &'static PyOnceLock<Py<PyAny>>;
-}
+use std::{mem::size_of, ptr};
 
-impl BufferElement for i32 {
-    const KIND: &'static str = "i";
-    const TORCH_DTYPE: &'static str = "int32";
-
-    fn torch_dtype_cell() -> &'static PyOnceLock<Py<PyAny>> {
-        static DTYPE: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
-        &DTYPE
-    }
-}
-
-impl BufferElement for f32 {
-    const KIND: &'static str = "f";
-    const TORCH_DTYPE: &'static str = "float32";
-
-    fn torch_dtype_cell() -> &'static PyOnceLock<Py<PyAny>> {
-        static DTYPE: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
-        &DTYPE
-    }
-}
+pub use buffer_element::BufferElement;
+use pyo3::{
+    exceptions::{PyBufferError, PyRuntimeError},
+    intern,
+    prelude::*,
+    sync::PyOnceLock,
+    types::{PyDict, PyMemoryView, PyType},
+};
 
 fn dtype_error<T: BufferElement>(describe: &str) -> PyErr {
     PyRuntimeError::new_err(format!("{describe} must have dtype {}", T::TORCH_DTYPE))
 }
 
-/// Invokes `f` with a mutable view of the contiguous CPU buffer backing `obj` (a torch tensor or
-/// a numpy array) and its shape. The view aliases the tensor memory, so writes are visible to
-/// the caller without copying. Errors use `describe` as the subject, e.g. "The temperatures
-/// tensor".
+/// The cached `torch.Tensor` type, or `None` when its module is not loaded. Does not import torch.
+fn torch_tensor_type(py: Python<'_>) -> PyResult<Option<&Py<PyType>>> {
+    static TENSOR: PyOnceLock<Py<PyType>> = PyOnceLock::new();
+    if let Some(tensor) = TENSOR.get(py) {
+        return Ok(Some(tensor));
+    }
+    let modules = py.import("sys")?.getattr(intern!(py, "modules"))?.cast_into::<PyDict>()?;
+    let Some(torch) = modules.get_item(intern!(py, "torch"))? else {
+        return Ok(None);
+    };
+    TENSOR.get_or_try_init(py, || Ok(torch.getattr(intern!(py, "Tensor"))?.cast_into::<PyType>()?.unbind())).map(Some)
+}
+
+/// Runs `f` on the `len` elements of `T` at `address`. Rust slices must be non-null and aligned,
+/// so a misaligned buffer (which numpy and `torch.frombuffer` allow) is filled through aligned
+/// scratch that starts as a copy and is copied back after `f`, even when `f` fails: entries `f`
+/// wrote and entries it left untouched read exactly as after a direct write.
+///
+/// # Safety
+/// `address` must be valid for reads and writes of `len` elements of `T` for the whole call, with
+/// no other access to that memory meanwhile. Its total byte size must not exceed `isize::MAX`.
+unsafe fn with_buffer_at<T: BufferElement, R>(
+    address: usize,
+    len: usize,
+    shape: &[i64],
+    f: impl FnOnce(&mut [T], &[i64]) -> PyResult<R>,
+) -> PyResult<R> {
+    let data = address as *mut T;
+    if data.is_null() {
+        return Err(PyRuntimeError::new_err("The buffer has no data pointer"));
+    }
+    if data.is_aligned() {
+        // SAFETY: non-null, aligned, and valid for `len` elements (caller contract).
+        return f(unsafe { std::slice::from_raw_parts_mut(data, len) }, shape);
+    }
+    let bytes = len * size_of::<T>();
+    let mut scratch = Vec::<T>::with_capacity(len);
+    // SAFETY: byte copies have no alignment requirement; `data` is valid for `bytes` (caller
+    // contract) and `scratch` has capacity for them. `BufferElement` types (`i32`, `f32`) are valid
+    // for every bit pattern, so all `len` elements are initialized.
+    unsafe {
+        ptr::copy_nonoverlapping(data.cast::<u8>(), scratch.as_mut_ptr().cast::<u8>(), bytes);
+        scratch.set_len(len);
+    }
+    let result = f(&mut scratch, shape);
+    // SAFETY: as above, in the other direction.
+    unsafe { ptr::copy_nonoverlapping(scratch.as_ptr().cast::<u8>(), data.cast::<u8>(), bytes) };
+    result
+}
+
+/// Invokes `f` with a mutable view of the contiguous CPU buffer backing `obj` (a `torch.Tensor`, or
+/// any object exporting a writable native-endian buffer, such as a numpy array) and its shape. The
+/// view aliases the object's own memory, so writes are visible to the caller; only a misaligned
+/// buffer goes through a copy-back scratch (see [`with_buffer_at`]). Inputs that could only be
+/// converted by copying are rejected. The caller must not resize, free, or concurrently write the
+/// buffer during the call (as with upstream's DLPack borrow). Errors use `describe` as the subject,
+/// e.g. "The temperatures tensor".
 pub fn with_writable_buffer<T: BufferElement, R>(
     py: Python<'_>,
     obj: &Bound<'_, PyAny>,
@@ -50,8 +81,13 @@ pub fn with_writable_buffer<T: BufferElement, R>(
     f: impl FnOnce(&mut [T], &[i64]) -> PyResult<R>,
 ) -> PyResult<R> {
     // Torch tensors (the common case, once per decoded token) are validated with a few cheap
-    // attribute reads instead of a numpy round trip, like upstream's DLPack conversion.
-    if let Ok(data_ptr) = obj.getattr(intern!(py, "data_ptr")) {
+    // attribute reads instead of a numpy round trip, like upstream's DLPack conversion. Only real
+    // tensors qualify: objects imitating their attributes go through the buffer protocol below.
+    let is_tensor = match torch_tensor_type(py)? {
+        Some(tensor) => obj.is_instance(tensor.bind(py))?,
+        None => false,
+    };
+    if is_tensor {
         if !obj.getattr(intern!(py, "is_cpu"))?.is_truthy()? {
             return Err(PyRuntimeError::new_err(format!("{describe} must be on CPU")));
         }
@@ -71,34 +107,27 @@ pub fn with_writable_buffer<T: BufferElement, R>(
         if len == 0 {
             return f(&mut [], &shape);
         }
-        let address = data_ptr.call0()?.extract::<usize>()?;
+        let address = obj.call_method0(intern!(py, "data_ptr"))?.extract::<usize>()?;
         // SAFETY: `obj` is a live, contiguous CPU tensor of `len` elements of `T` (checked above;
-        // `data_ptr` includes the storage offset), kept alive by the caller for this call. The
-        // interpreter is attached and the slice does not escape `f`.
-        let buffer = unsafe { std::slice::from_raw_parts_mut(address as *mut T, len) };
-        return f(buffer, &shape);
+        // `data_ptr` includes the storage offset), kept alive by the caller for this call.
+        return unsafe { with_buffer_at(address, len, &shape, f) };
     }
-    let array = if obj.hasattr("numpy")? {
-        let device_type = obj.getattr("device")?.getattr("type")?.extract::<String>()?;
-        if device_type != "cpu" {
-            return Err(PyRuntimeError::new_err(format!("{describe} must be on CPU")));
-        }
-        if !obj.call_method0("is_contiguous")?.extract::<bool>()? {
-            return Err(PyRuntimeError::new_err(format!("{describe} must be contiguous")));
-        }
-        obj.call_method0("numpy")?
-    } else {
-        py.import("numpy")?.call_method1("asarray", (obj,))?
-    };
+    // Borrow the object's own buffer (a `TypeError` for objects without one, such as lists), then
+    // view it through numpy only to read its dtype, flags, and address: no copy is ever filled.
+    let view = PyMemoryView::from(obj)?;
+    let array = py.import("numpy")?.call_method1("asarray", (view,))?;
     let dtype = array.getattr("dtype")?;
     if dtype.getattr("kind")?.extract::<String>()? != T::KIND
         || dtype.getattr("itemsize")?.extract::<usize>()? != T::ITEM_SIZE
     {
         return Err(dtype_error::<T>(describe));
     }
+    if !dtype.getattr("isnative")?.extract::<bool>()? {
+        return Err(PyBufferError::new_err(format!("{describe} must use the native byte order")));
+    }
     let flags = array.getattr("flags")?;
     if !flags.getattr("writeable")?.extract::<bool>()? {
-        return Err(PyRuntimeError::new_err(format!("{describe} is read-only")));
+        return Err(PyBufferError::new_err(format!("{describe} is read-only")));
     }
     if !flags.getattr("c_contiguous")?.extract::<bool>()? {
         return Err(PyRuntimeError::new_err(format!("{describe} must be contiguous")));
@@ -109,11 +138,10 @@ pub fn with_writable_buffer<T: BufferElement, R>(
         return f(&mut [], &shape);
     }
     let address = array.getattr("__array_interface__")?.get_item("data")?.get_item(0)?.extract::<usize>()?;
-    // SAFETY: `array` is a live, writeable, C-contiguous CPU buffer of `len` elements of `T`
-    // (checked above), kept alive by `obj`/`array` for the duration of this call. The GIL is held
-    // and the slice does not escape `f`.
-    let buffer = unsafe { std::slice::from_raw_parts_mut(address as *mut T, len) };
-    f(buffer, &shape)
+    // SAFETY: `array` views the live, writeable, C-contiguous, native-endian buffer of `obj` holding
+    // `len` elements of `T` (checked above), kept alive by `obj`/`view` for the duration of this
+    // call.
+    unsafe { with_buffer_at(address, len, &shape, f) }
 }
 
 /// Reads a one-dimensional CPU int64 tensor or array.

@@ -902,6 +902,12 @@ public protocol GrammarCompilerProtocol: AnyObject, Sendable {
     ) throws -> CompiledGrammar
 
     /**
+     * Compiles a grammar from Lark syntax, resolving named special tokens against the
+     * compiler's tokenizer info; `named_grammars` resolves its `@name` references.
+     */
+    func compileLark(larkString: String, namedGrammars: NamedGrammars) throws -> CompiledGrammar
+
+    /**
      * Compiles a regular expression.
      */
     func compileRegex(regex: String) throws -> CompiledGrammar
@@ -1069,6 +1075,23 @@ open class GrammarCompiler: GrammarCompilerProtocol, @unchecked Sendable {
     }
 
     /**
+     * Compiles a grammar from Lark syntax, resolving named special tokens against the
+     * compiler's tokenizer info; `named_grammars` resolves its `@name` references.
+     */
+    open func compileLark(larkString: String, namedGrammars: NamedGrammars) throws
+        -> CompiledGrammar
+    {
+        return try FfiConverterTypeCompiledGrammar_lift(
+            try rustCallWithError(FfiConverterTypeXgrammarError_lift) {
+                uniffi_xgrammar_rs_fn_method_grammarcompiler_compile_lark(
+                    self.uniffiCloneHandle(),
+                    FfiConverterString.lower(larkString),
+                    FfiConverterTypeNamedGrammars_lower(namedGrammars), $0
+                )
+            })
+    }
+
+    /**
      * Compiles a regular expression.
      */
     open func compileRegex(regex: String) throws -> CompiledGrammar {
@@ -1158,6 +1181,11 @@ public protocol GrammarMatcherProtocol: AnyObject, Sendable {
     func acceptBytes(input: Data, debugPrint: Bool) -> Bool
 
     /**
+     * Accepts the stop token, terminating the matcher. Returns whether it was accepted.
+     */
+    func acceptStopToken() -> Bool
+
+    /**
      * Accepts a UTF-8 string, advancing the matcher. Returns whether it was accepted.
      */
     func acceptString(input: String, debugPrint: Bool) -> Bool
@@ -1166,6 +1194,23 @@ public protocol GrammarMatcherProtocol: AnyObject, Sendable {
      * Accepts a single token id, advancing the matcher. Returns whether it was accepted.
      */
     func acceptToken(tokenId: Int32, debugPrint: Bool) -> Bool
+
+    /**
+     * The values captured so far, in completion order. With `deduplicate`, only the last
+     * (longest) completion of each rule occurrence is kept.
+     */
+    func captureValues(deduplicate: Bool) -> [Capture]
+
+    /**
+     * The longest byte string that will be valid according to the current syntax, for
+     * jump-forward decoding. Does not change the matcher state.
+     */
+    func findJumpForwardBytes() throws -> Data
+
+    /**
+     * The jump-forward bytes as a string; fails when they are not valid UTF-8.
+     */
+    func findJumpForwardString() throws -> String
 
     /**
      * Returns a deep copy of the matcher at its current state.
@@ -1181,6 +1226,11 @@ public protocol GrammarMatcherProtocol: AnyObject, Sendable {
      * Whether the matcher has reached an accepting terminal state.
      */
     func isTerminated() -> Bool
+
+    /**
+     * The tokens acceptable next, as an owned bitmask row.
+     */
+    func nextTokenBitmask() throws -> TokenBitmask
 
     /**
      * Resets the matcher to its initial state.
@@ -1201,6 +1251,11 @@ public protocol GrammarMatcherProtocol: AnyObject, Sendable {
      * The sampling temperature of the current position, if any rule or default specifies one.
      */
     func temperature() -> Double?
+
+    /**
+     * The tokenizer info the matcher was built with.
+     */
+    func tokenizerInfo() -> TokenizerInfo
 
 }
 /// Drives constrained decoding over a compiled grammar.
@@ -1284,6 +1339,18 @@ open class GrammarMatcher: GrammarMatcherProtocol, @unchecked Sendable {
     }
 
     /**
+     * Accepts the stop token, terminating the matcher. Returns whether it was accepted.
+     */
+    open func acceptStopToken() -> Bool {
+        return try! FfiConverterBool.lift(
+            try! rustCall {
+                uniffi_xgrammar_rs_fn_method_grammarmatcher_accept_stop_token(
+                    self.uniffiCloneHandle(), $0
+                )
+            })
+    }
+
+    /**
      * Accepts a UTF-8 string, advancing the matcher. Returns whether it was accepted.
      */
     open func acceptString(input: String, debugPrint: Bool) -> Bool {
@@ -1307,6 +1374,45 @@ open class GrammarMatcher: GrammarMatcherProtocol, @unchecked Sendable {
                     self.uniffiCloneHandle(),
                     FfiConverterInt32.lower(tokenId),
                     FfiConverterBool.lower(debugPrint), $0
+                )
+            })
+    }
+
+    /**
+     * The values captured so far, in completion order. With `deduplicate`, only the last
+     * (longest) completion of each rule occurrence is kept.
+     */
+    open func captureValues(deduplicate: Bool) -> [Capture] {
+        return try! FfiConverterSequenceTypeCapture.lift(
+            try! rustCall {
+                uniffi_xgrammar_rs_fn_method_grammarmatcher_capture_values(
+                    self.uniffiCloneHandle(),
+                    FfiConverterBool.lower(deduplicate), $0
+                )
+            })
+    }
+
+    /**
+     * The longest byte string that will be valid according to the current syntax, for
+     * jump-forward decoding. Does not change the matcher state.
+     */
+    open func findJumpForwardBytes() throws -> Data {
+        return try FfiConverterData.lift(
+            try rustCallWithError(FfiConverterTypeXgrammarError_lift) {
+                uniffi_xgrammar_rs_fn_method_grammarmatcher_find_jump_forward_bytes(
+                    self.uniffiCloneHandle(), $0
+                )
+            })
+    }
+
+    /**
+     * The jump-forward bytes as a string; fails when they are not valid UTF-8.
+     */
+    open func findJumpForwardString() throws -> String {
+        return try FfiConverterString.lift(
+            try rustCallWithError(FfiConverterTypeXgrammarError_lift) {
+                uniffi_xgrammar_rs_fn_method_grammarmatcher_find_jump_forward_string(
+                    self.uniffiCloneHandle(), $0
                 )
             })
     }
@@ -1342,6 +1448,18 @@ open class GrammarMatcher: GrammarMatcherProtocol, @unchecked Sendable {
         return try! FfiConverterBool.lift(
             try! rustCall {
                 uniffi_xgrammar_rs_fn_method_grammarmatcher_is_terminated(
+                    self.uniffiCloneHandle(), $0
+                )
+            })
+    }
+
+    /**
+     * The tokens acceptable next, as an owned bitmask row.
+     */
+    open func nextTokenBitmask() throws -> TokenBitmask {
+        return try FfiConverterTypeTokenBitmask_lift(
+            try rustCallWithError(FfiConverterTypeXgrammarError_lift) {
+                uniffi_xgrammar_rs_fn_method_grammarmatcher_next_token_bitmask(
                     self.uniffiCloneHandle(), $0
                 )
             })
@@ -1394,6 +1512,18 @@ open class GrammarMatcher: GrammarMatcherProtocol, @unchecked Sendable {
             })
     }
 
+    /**
+     * The tokenizer info the matcher was built with.
+     */
+    open func tokenizerInfo() -> TokenizerInfo {
+        return try! FfiConverterTypeTokenizerInfo_lift(
+            try! rustCall {
+                uniffi_xgrammar_rs_fn_method_grammarmatcher_tokenizer_info(
+                    self.uniffiCloneHandle(), $0
+                )
+            })
+    }
+
 }
 
 #if swift(>=5.8)
@@ -1435,6 +1565,150 @@ public func FfiConverterTypeGrammarMatcher_lift(_ handle: UInt64) throws -> Gram
 #endif
 public func FfiConverterTypeGrammarMatcher_lower(_ value: GrammarMatcher) -> UInt64 {
     return FfiConverterTypeGrammarMatcher.lower(value)
+}
+
+/// Grammars and Lark sources referenced by name from a Lark grammar, passed to
+/// `Grammar.from_lark` and `GrammarCompiler.compile_lark`.
+public protocol NamedGrammarsProtocol: AnyObject, Sendable {
+
+    /**
+     * Adds `grammar`, referenced as `@name` (without the `@`).
+     */
+    func addGrammar(name: String, grammar: Grammar)
+
+    /**
+     * Adds a Lark source with its own `start` rule, referenced as `@name` (without the `@`).
+     */
+    func addLark(name: String, source: String)
+
+}
+/// Grammars and Lark sources referenced by name from a Lark grammar, passed to
+/// `Grammar.from_lark` and `GrammarCompiler.compile_lark`.
+open class NamedGrammars: NamedGrammarsProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+    #if swift(>=5.8)
+        @_documentation(visibility: private)
+    #endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    #if swift(>=5.8)
+        @_documentation(visibility: private)
+    #endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+    #if swift(>=5.8)
+        @_documentation(visibility: private)
+    #endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+    #if swift(>=5.8)
+        @_documentation(visibility: private)
+    #endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_xgrammar_rs_fn_clone_namedgrammars(self.handle, $0) }
+    }
+    public convenience init() {
+        let handle =
+            try! rustCall {
+                uniffi_xgrammar_rs_fn_constructor_namedgrammars_new(
+                    $0
+                )
+            }
+        self.init(unsafeFromHandle: handle)
+    }
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_xgrammar_rs_fn_free_namedgrammars(handle, $0) }
+    }
+
+    /**
+     * Adds `grammar`, referenced as `@name` (without the `@`).
+     */
+    open func addGrammar(name: String, grammar: Grammar) {
+        try! rustCall {
+            uniffi_xgrammar_rs_fn_method_namedgrammars_add_grammar(
+                self.uniffiCloneHandle(),
+                FfiConverterString.lower(name),
+                FfiConverterTypeGrammar_lower(grammar), $0
+            )
+        }
+    }
+
+    /**
+     * Adds a Lark source with its own `start` rule, referenced as `@name` (without the `@`).
+     */
+    open func addLark(name: String, source: String) {
+        try! rustCall {
+            uniffi_xgrammar_rs_fn_method_namedgrammars_add_lark(
+                self.uniffiCloneHandle(),
+                FfiConverterString.lower(name),
+                FfiConverterString.lower(source), $0
+            )
+        }
+    }
+
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNamedGrammars: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = NamedGrammars
+
+    public static func lift(_ handle: UInt64) throws -> NamedGrammars {
+        return NamedGrammars(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: NamedGrammars) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws
+        -> NamedGrammars
+    {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: NamedGrammars, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNamedGrammars_lift(_ handle: UInt64) throws -> NamedGrammars {
+    return try FfiConverterTypeNamedGrammars.lift(handle)
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNamedGrammars_lower(_ value: NamedGrammars) -> UInt64 {
+    return FfiConverterTypeNamedGrammars.lower(value)
 }
 
 /// A thin opaque wrapper over [`xgrammar::tokenizer::TokenizerInfo`].
@@ -1692,14 +1966,149 @@ public func FfiConverterTypeTokenizerInfo_lower(_ value: TokenizerInfo) -> UInt6
     return FfiConverterTypeTokenizerInfo.lower(value)
 }
 
+/// The text matched by a capturing rule, as raw bytes: a capture may end inside a UTF-8
+/// character.
+public struct Capture: Equatable, Hashable {
+    /**
+     * The capture name.
+     */
+    public var name: String
+    /**
+     * The captured bytes.
+     */
+    public var value: Data
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The capture name.
+         */
+        name: String,
+        /**
+         * The captured bytes.
+         */
+        value: Data
+    ) {
+        self.name = name
+        self.value = value
+    }
+
+}
+
+#if compiler(>=6)
+    extension Capture: Sendable {}
+#endif
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCapture: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Capture {
+        return
+            try Capture(
+                name: FfiConverterString.read(from: &buf),
+                value: FfiConverterData.read(from: &buf)
+            )
+    }
+
+    public static func write(_ value: Capture, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.name, into: &buf)
+        FfiConverterData.write(value.value, into: &buf)
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCapture_lift(_ buf: RustBuffer) throws -> Capture {
+    return try FfiConverterTypeCapture.lift(buf)
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCapture_lower(_ value: Capture) -> RustBuffer {
+    return FfiConverterTypeCapture.lower(value)
+}
+
+/// The tokens a matcher accepts next, as one bitmask row.
+///
+/// `words` holds `ceil(vocab_size / 32)` words; token `k` is allowed when bit `k % 32` of word
+/// `k / 32` is set. The signed words are raw bit patterns, so a set bit 31 reads as a negative
+/// number. Bits at or beyond `vocab_size` carry no meaning.
+public struct TokenBitmask: Equatable, Hashable {
+    /**
+     * The packed mask words.
+     */
+    public var words: [Int32]
+    /**
+     * Whether the mask must be applied, i.e. some token is rejected.
+     */
+    public var needApply: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The packed mask words.
+         */
+        words: [Int32],
+        /**
+         * Whether the mask must be applied, i.e. some token is rejected.
+         */
+        needApply: Bool
+    ) {
+        self.words = words
+        self.needApply = needApply
+    }
+
+}
+
+#if compiler(>=6)
+    extension TokenBitmask: Sendable {}
+#endif
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTokenBitmask: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TokenBitmask
+    {
+        return
+            try TokenBitmask(
+                words: FfiConverterSequenceInt32.read(from: &buf),
+                needApply: FfiConverterBool.read(from: &buf)
+            )
+    }
+
+    public static func write(_ value: TokenBitmask, into buf: inout [UInt8]) {
+        FfiConverterSequenceInt32.write(value.words, into: &buf)
+        FfiConverterBool.write(value.needApply, into: &buf)
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTokenBitmask_lift(_ buf: RustBuffer) throws -> TokenBitmask {
+    return try FfiConverterTypeTokenBitmask.lift(buf)
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTokenBitmask_lower(_ value: TokenBitmask) -> RustBuffer {
+    return FfiConverterTypeTokenBitmask.lower(value)
+}
+
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 /**
  * How a tokenizer vocabulary is encoded (RAW, BYTE_FALLBACK, BYTE_LEVEL).
  *
  * No explicit discriminants — NAPI's string-enum codegen rejects them. The numeric
- * mapping (0/1/2) lives in [`VocabType::to_core`] / [`VocabType::from_core`] and the
- * `TryFrom<i32>` impl, which the Python layer relies on.
+ * mapping (0/1/2) lives in the `TryFrom<i32>` impl, which the Python layer relies on.
  */
 
 public enum VocabType: Equatable, Hashable {
@@ -2013,6 +2422,31 @@ private struct FfiConverterSequenceData: FfiConverterRustBuffer {
         return seq
     }
 }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+private struct FfiConverterSequenceTypeCapture: FfiConverterRustBuffer {
+    typealias SwiftType = [Capture]
+
+    public static func write(_ value: [Capture], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeCapture.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [Capture] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [Capture]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0..<len {
+            seq.append(try FfiConverterTypeCapture.read(from: &buf))
+        }
+        return seq
+    }
+}
 public func compiledGrammarDeserializeJson(jsonString: String, tokenizerInfo: TokenizerInfo) throws
     -> CompiledGrammar
 {
@@ -2074,6 +2508,27 @@ public func grammarFromJsonSchema(
                 FfiConverterOptionInt32.lower(maxWhitespaceCnt),
                 FfiConverterBool.lower(printConvertedEbnf),
                 FfiConverterBool.lower(anyOrder), $0
+            )
+        })
+}
+public func grammarFromLark(larkString: String, namedGrammars: NamedGrammars) throws -> Grammar {
+    return try FfiConverterTypeGrammar_lift(
+        try rustCallWithError(FfiConverterTypeXgrammarError_lift) {
+            uniffi_xgrammar_rs_fn_func_grammar_from_lark(
+                FfiConverterString.lower(larkString),
+                FfiConverterTypeNamedGrammars_lower(namedGrammars), $0
+            )
+        })
+}
+public func grammarFromLarkWithTokenizer(
+    larkString: String, tokenizerInfo: TokenizerInfo, namedGrammars: NamedGrammars
+) throws -> Grammar {
+    return try FfiConverterTypeGrammar_lift(
+        try rustCallWithError(FfiConverterTypeXgrammarError_lift) {
+            uniffi_xgrammar_rs_fn_func_grammar_from_lark_with_tokenizer(
+                FfiConverterString.lower(larkString),
+                FfiConverterTypeTokenizerInfo_lower(tokenizerInfo),
+                FfiConverterTypeNamedGrammars_lower(namedGrammars), $0
             )
         })
 }
@@ -2156,7 +2611,7 @@ private let initializationResult: InitializationResult = {
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
     }
-    if uniffi_xgrammar_rs_checksum_func_compiled_grammar_deserialize_json() != 24099 {
+    if uniffi_xgrammar_rs_checksum_func_compiled_grammar_deserialize_json() != 15896 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_xgrammar_rs_checksum_func_grammar_builtin_json_grammar() != 8945 {
@@ -2172,6 +2627,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_xgrammar_rs_checksum_func_grammar_from_json_schema() != 11142 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_xgrammar_rs_checksum_func_grammar_from_lark() != 53783 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_xgrammar_rs_checksum_func_grammar_from_lark_with_tokenizer() != 50136 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_xgrammar_rs_checksum_func_grammar_from_regex() != 30139 {
@@ -2195,43 +2656,16 @@ private let initializationResult: InitializationResult = {
     if uniffi_xgrammar_rs_checksum_func_tokenizer_info_from_vocab_and_metadata() != 40111 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_xgrammar_rs_checksum_method_compiledgrammar_grammar() != 43562 {
+    if uniffi_xgrammar_rs_checksum_method_compiledgrammar_grammar() != 12087 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_xgrammar_rs_checksum_method_compiledgrammar_memory_size_bytes() != 47290 {
+    if uniffi_xgrammar_rs_checksum_method_compiledgrammar_memory_size_bytes() != 27492 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_xgrammar_rs_checksum_method_compiledgrammar_serialize_json() != 34432 {
+    if uniffi_xgrammar_rs_checksum_method_compiledgrammar_serialize_json() != 63119 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_xgrammar_rs_checksum_method_compiledgrammar_tokenizer_info() != 901 {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if uniffi_xgrammar_rs_checksum_method_grammarcompiler_cache_limit_bytes() != 44569 {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if uniffi_xgrammar_rs_checksum_method_grammarcompiler_clear_cache() != 6194 {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if uniffi_xgrammar_rs_checksum_method_grammarcompiler_compile_builtin_json_grammar() != 55798 {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if uniffi_xgrammar_rs_checksum_method_grammarcompiler_compile_grammar_ebnf() != 38676 {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if uniffi_xgrammar_rs_checksum_method_grammarcompiler_compile_grammar_from_strings() != 51582 {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if uniffi_xgrammar_rs_checksum_method_grammarcompiler_compile_json_schema() != 36545 {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if uniffi_xgrammar_rs_checksum_method_grammarcompiler_compile_regex() != 58861 {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if uniffi_xgrammar_rs_checksum_method_grammarcompiler_compile_structural_tag() != 2173 {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if uniffi_xgrammar_rs_checksum_method_grammarcompiler_get_cache_size_bytes() != 950 {
+    if uniffi_xgrammar_rs_checksum_method_compiledgrammar_tokenizer_info() != 57137 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_xgrammar_rs_checksum_method_grammar_serialize_json() != 42309 {
@@ -2240,34 +2674,88 @@ private let initializationResult: InitializationResult = {
     if uniffi_xgrammar_rs_checksum_method_grammar_to_string() != 5604 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_xgrammar_rs_checksum_method_grammarmatcher_accept_bytes() != 7396 {
+    if uniffi_xgrammar_rs_checksum_method_grammarcompiler_cache_limit_bytes() != 27471 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_xgrammar_rs_checksum_method_grammarmatcher_accept_string() != 40620 {
+    if uniffi_xgrammar_rs_checksum_method_grammarcompiler_clear_cache() != 6866 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_xgrammar_rs_checksum_method_grammarmatcher_accept_token() != 45185 {
+    if uniffi_xgrammar_rs_checksum_method_grammarcompiler_compile_builtin_json_grammar() != 45726 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_xgrammar_rs_checksum_method_grammarmatcher_fork() != 24213 {
+    if uniffi_xgrammar_rs_checksum_method_grammarcompiler_compile_grammar_ebnf() != 2005 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_xgrammar_rs_checksum_method_grammarmatcher_is_completed() != 27310 {
+    if uniffi_xgrammar_rs_checksum_method_grammarcompiler_compile_grammar_from_strings() != 62460 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_xgrammar_rs_checksum_method_grammarmatcher_is_terminated() != 11311 {
+    if uniffi_xgrammar_rs_checksum_method_grammarcompiler_compile_json_schema() != 60009 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_xgrammar_rs_checksum_method_grammarmatcher_reset() != 12638 {
+    if uniffi_xgrammar_rs_checksum_method_grammarcompiler_compile_lark() != 7557 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_xgrammar_rs_checksum_method_grammarmatcher_rollback() != 32056 {
+    if uniffi_xgrammar_rs_checksum_method_grammarcompiler_compile_regex() != 4848 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_xgrammar_rs_checksum_method_grammarmatcher_stop_token_ids() != 15172 {
+    if uniffi_xgrammar_rs_checksum_method_grammarcompiler_compile_structural_tag() != 43025 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_xgrammar_rs_checksum_method_grammarmatcher_temperature() != 25431 {
+    if uniffi_xgrammar_rs_checksum_method_grammarcompiler_get_cache_size_bytes() != 18387 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_xgrammar_rs_checksum_method_grammarmatcher_accept_bytes() != 8859 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_xgrammar_rs_checksum_method_grammarmatcher_accept_stop_token() != 35326 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_xgrammar_rs_checksum_method_grammarmatcher_accept_string() != 44912 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_xgrammar_rs_checksum_method_grammarmatcher_accept_token() != 30451 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_xgrammar_rs_checksum_method_grammarmatcher_capture_values() != 12693 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_xgrammar_rs_checksum_method_grammarmatcher_find_jump_forward_bytes() != 48104 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_xgrammar_rs_checksum_method_grammarmatcher_find_jump_forward_string() != 27094 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_xgrammar_rs_checksum_method_grammarmatcher_fork() != 52847 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_xgrammar_rs_checksum_method_grammarmatcher_is_completed() != 50961 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_xgrammar_rs_checksum_method_grammarmatcher_is_terminated() != 36709 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_xgrammar_rs_checksum_method_grammarmatcher_next_token_bitmask() != 51424 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_xgrammar_rs_checksum_method_grammarmatcher_reset() != 17854 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_xgrammar_rs_checksum_method_grammarmatcher_rollback() != 7423 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_xgrammar_rs_checksum_method_grammarmatcher_stop_token_ids() != 15970 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_xgrammar_rs_checksum_method_grammarmatcher_temperature() != 45937 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_xgrammar_rs_checksum_method_grammarmatcher_tokenizer_info() != 27128 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_xgrammar_rs_checksum_method_namedgrammars_add_grammar() != 43674 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_xgrammar_rs_checksum_method_namedgrammars_add_lark() != 40779 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_xgrammar_rs_checksum_method_tokenizerinfo_add_prefix_space() != 31876 {
@@ -2294,10 +2782,13 @@ private let initializationResult: InitializationResult = {
     if uniffi_xgrammar_rs_checksum_method_tokenizerinfo_vocab_type() != 8015 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_xgrammar_rs_checksum_constructor_grammarcompiler_new() != 22434 {
+    if uniffi_xgrammar_rs_checksum_constructor_grammarcompiler_new() != 35735 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_xgrammar_rs_checksum_constructor_grammarmatcher_new() != 62180 {
+    if uniffi_xgrammar_rs_checksum_constructor_grammarmatcher_new() != 65078 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_xgrammar_rs_checksum_constructor_namedgrammars_new() != 5996 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_xgrammar_rs_checksum_constructor_tokenizerinfo_new() != 12687 {

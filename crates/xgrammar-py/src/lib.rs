@@ -21,21 +21,25 @@
 uniffi::setup_scaffolding!();
 
 // Core types — exported to every backend via `#[bindings::export]`.
-mod compiler;
+mod capture;
+mod compiled_grammar;
 mod error;
 mod grammar;
+mod grammar_compiler;
+mod named_grammars;
+mod token_bitmask;
 mod tokenizer_info;
 mod vocab_type;
 
 // The binding wrapper stores matcher state behind a mutex. This gives UniFFI's `Arc<T>` model
 // the same stateful matcher API as PyO3, NAPI, and wasm without putting locks in the Rust core.
-mod matcher;
+mod grammar_matcher;
 
-// PyO3-only surface: the torch/DLPack bitmask helpers, the `testing`/`config`/`kernels`
-// submodules, and the batch matcher. These use the CPython C-API directly and only exist
-// for the Python backend; the other backends expose the core grammar API only.
+// Python-backend surface: the torch/DLPack bitmask helpers, the `testing`/`config`/`kernels`
+// submodules, and the batch matcher. These currently use the CPython C-API directly and exist
+// only for the Python backend.
 #[cfg(feature = "bindings-pyo3")]
-mod batch_matcher;
+mod batch_grammar_matcher;
 #[cfg(feature = "bindings-pyo3")]
 mod bitmask_util;
 #[cfg(feature = "bindings-pyo3")]
@@ -59,7 +63,7 @@ fn xgrammar_rs(m: &pyo3::Bound<'_, pyo3::types::PyModule>) -> pyo3::PyResult<()>
     }
 
     error::register_exceptions(m)?;
-    batch_matcher::register(m)?;
+    batch_grammar_matcher::register(m)?;
 
     let py = m.py();
     let config_mod = pyo3::types::PyModule::new(py, "config")?;

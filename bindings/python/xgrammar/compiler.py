@@ -8,8 +8,8 @@ from .base import XGRObject, _core
 from .grammar import (
     Grammar,
     StructuralTagItem,
-    _convert_named_grammars_to_lists,
     _convert_schema_to_str,
+    _create_named_grammars,
     _get_structural_tag_str_from_args,
 )
 from .structural_tag import StructuralTag
@@ -257,8 +257,8 @@ class GrammarCompiler(XGRObject):
         compiled_grammar : CompiledGrammar
             The compiled Lark grammar.
         """
-        names, values = _convert_named_grammars_to_lists(named_grammars)
-        return CompiledGrammar._create_from_handle(self._handle.compile_lark(lark_string, names, values))
+        named_handle = _create_named_grammars(named_grammars)
+        return CompiledGrammar._create_from_handle(self._handle.compile_lark(lark_string, named_handle))
 
     @overload
     def compile_structural_tag(self, structural_tag: Union[StructuralTag, str, Dict[str, Any]]) -> CompiledGrammar: ...

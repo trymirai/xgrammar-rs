@@ -9,34 +9,14 @@
 use serde_json::{Value, json};
 
 use super::{
-    grammar::Grammar, grammar_expr_type::GrammarExprType, rule::Rule, suffix_stop_info::SuffixStopInfo,
-    tag_dispatch::EXTRA_PARAMETERS as TAG_DISPATCH_EXTRA_PARAMETER,
+    error::DeserializeError, grammar::Grammar, grammar_expr_type::GrammarExprType, rule::Rule,
+    suffix_stop_info::SuffixStopInfo, tag_dispatch::EXTRA_PARAMETERS as TAG_DISPATCH_EXTRA_PARAMETER,
 };
 use crate::{
     config::SERIALIZATION_VERSION,
     fsm::{CompactFsm, CompactFsmWithStartEnd, CompactFsmWithStartEndWithSize},
     support::{Compact2dArray, byte_to_latin1, latin1_to_bytes, parse_json},
 };
-
-/// An error from [`Grammar::deserialize_json`] (and other deserializers).
-/// `SerializationError` family.
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-pub enum DeserializeError {
-    /// The input was not valid JSON.
-    #[error("invalid JSON: {0}")]
-    InvalidJson(String),
-    /// The serialized `__VERSION__` did not match the current one.
-    #[error("version mismatch: expected {expected}, got {got}")]
-    Version {
-        /// The version this build expects.
-        expected: String,
-        /// The version found in the input.
-        got: String,
-    },
-    /// The JSON was structurally valid but missing/ill-typed for the target type.
-    #[error("invalid format: {0}")]
-    Format(String),
-}
 
 impl Grammar {
     /// Serializes the grammar to its `"v16"` JSON form (FSMs are `null`/`[]` until optimized).
@@ -242,19 +222,17 @@ impl Grammar {
             } else {
                 CompactFsm::deserialize_json_value(complete_fsm)?
             };
-            // Every per-rule FSM is a view of the complete FSM (each is serialized as a copy of it);
-            // the views share its storage again, and the parser keys per-state caches by state id.
+            // Generated views share the complete FSM; independently serialized rule graphs stay distinct.
             let per_rule_fsms = per_rule_json
                 .iter()
-                .enumerate()
-                .map(|(rule_id, entry)| {
+                .map(|entry| {
                     if entry.is_null() {
                         return Ok(None);
                     }
                     let fsm = CompactFsmWithStartEndWithSize::deserialize_json_value(entry)?;
                     let view = fsm.fsm();
                     if view.fsm() != &complete_fsm {
-                        return Err(format_error(&format!("The FSM of rule {rule_id} is not a view of complete_fsm")));
+                        return Ok(Some(fsm));
                     }
                     let shared = CompactFsmWithStartEnd::new(
                         complete_fsm.clone(),

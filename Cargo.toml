@@ -6,12 +6,13 @@ members = [
     "crates/bindings-types",
     "crates/xgrammar-py",
     "crates/cli-tools",
+    "crates/xgrammar-upstream",
 ]
-# Upstream C++/Python reference: the test-only `external/xgrammar` submodule.
+# Upstream C++/Python reference, downloaded (gitignored) by `crates/xgrammar-upstream`.
 exclude = ["external"]
 
 [workspace.package]
-version = "0.3.0"
+version = "0.2.8"
 edition = "2024"
 rust-version = "1.85"
 license = "Apache-2.0"
@@ -32,7 +33,7 @@ colored = "3.1"
 minijinja = { version = "2.17", features = ["json", "preserve_order"] }
 regex = "1"
 getrandom = { version = "0.3", features = ["wasm_js"] }
-xgrammar = { package = "xgrammar-rs", path = "crates/xgrammar", version = "0.3.0" }
+xgrammar = { package = "xgrammar-rs", path = "crates/xgrammar", version = "0.2.8" }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order", "unbounded_depth"] }
 thiserror = "2"
@@ -42,8 +43,8 @@ rayon = "1"
 dlpark = "0.7"
 
 # Cross-language bindings (uzu `#[bindings::export]` approach).
-bindings = { path = "crates/bindings", version = "0.3.0" }
-bindings-types = { path = "crates/bindings-types", version = "0.3.0" }
+bindings = { path = "crates/bindings", version = "0.2.8" }
+bindings-types = { path = "crates/bindings-types", version = "0.2.8" }
 # proc-macro deps for the `bindings` crate.
 heck = "0.5.0"
 proc-macro2 = "1.0"
@@ -60,9 +61,9 @@ pyo3-build-config = "0.28.3"
 pyo3-async-runtimes = { version = "0.28.0", features = ["tokio-runtime"] }
 inventory = "0.3.24"
 uniffi = { version = "0.31.1", features = ["tokio"] }
-napi = { version = "3.8.3", features = ["napi10", "object_indexmap", "tokio_rt"] }
-napi-derive = "3.5.2"
-napi-build = "2.3.1"
+napi = { version = "=3.4.0", features = ["napi10", "object_indexmap", "tokio_rt"] }
+napi-derive = "=3.3.0"
+napi-build = "=2.2.4"
 wasm-bindgen = { version = "0.2.114", features = ["serde-serialize"] }
 serde-wasm-bindgen = "0.6.5"
 wasm-bindgen-futures = "0.4.64"

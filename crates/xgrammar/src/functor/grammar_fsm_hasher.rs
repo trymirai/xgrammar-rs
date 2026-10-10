@@ -95,6 +95,7 @@ struct GrammarFsmHasher<'a> {
     ref_graph_from_referee_to_referrer: Vec<Vec<i32>>,
     sorted_edges: Vec<Vec<FsmEdge>>,
     has_inward_edges: Vec<bool>,
+    fsm_state_offsets: Vec<usize>,
     per_rule_fsm_hashes: Vec<Option<u64>>,
     per_rule_fsm_new_state_ids: Vec<Vec<(i32, i32)>>,
     /// The worklist of FSMs whose references are all hashed (except possibly a self-recursion).
@@ -112,6 +113,7 @@ impl<'a> GrammarFsmHasher<'a> {
             ref_graph_from_referee_to_referrer: Vec::new(),
             sorted_edges: Vec::new(),
             has_inward_edges: Vec::new(),
+            fsm_state_offsets: Vec::new(),
             per_rule_fsm_hashes: Vec::new(),
             per_rule_fsm_new_state_ids: Vec::new(),
             ready_queue: VecDeque::new(),
@@ -123,12 +125,7 @@ impl<'a> GrammarFsmHasher<'a> {
         self.per_rule_fsm_hashes = vec![None; num_rules];
         self.per_rule_fsm_new_state_ids = vec![Vec::new(); num_rules];
         self.visited = vec![false; num_rules];
-        self.has_inward_edges = vec![false; self.grammar.complete_fsm().num_states() as usize];
-        for state in 0..self.grammar.complete_fsm().num_states() {
-            for edge in self.grammar.complete_fsm().state_edges(state) {
-                self.has_inward_edges[edge.target as usize] = true;
-            }
-        }
+        self.fsm_state_offsets = self.grammar.fsm_state_offsets();
 
         self.ref_graph_from_referee_to_referrer = rule_ref_graph(self.grammar);
         self.ref_graph_from_referrer_to_referee = vec![Vec::new(); num_rules];
@@ -138,12 +135,23 @@ impl<'a> GrammarFsmHasher<'a> {
             }
         }
 
-        let complete_fsm = self.grammar.complete_fsm();
-        self.sorted_edges.reserve(complete_fsm.num_states() as usize);
-        for state in 0..complete_fsm.num_states() {
-            let mut edges: Vec<FsmEdge> = complete_fsm.state_edges(state).to_vec();
-            edges.sort_unstable();
-            self.sorted_edges.push(edges);
+        let complete = std::iter::once((0, self.grammar.complete_fsm()));
+        let per_rule = self.grammar.per_rule_fsms_slice().iter().enumerate().filter_map(|(rule_id, view)| {
+            view.as_ref().map(|view| (self.fsm_state_offsets[rule_id], view.fsm().fsm()))
+        });
+        for (offset, fsm) in complete.chain(per_rule) {
+            if offset != self.sorted_edges.len() {
+                continue;
+            }
+            self.has_inward_edges.resize(offset + fsm.num_states() as usize, false);
+            for state in 0..fsm.num_states() {
+                let mut edges = fsm.state_edges(state).to_vec();
+                edges.sort_unstable();
+                for edge in &edges {
+                    self.has_inward_edges[offset + edge.target as usize] = true;
+                }
+                self.sorted_edges.push(edges);
+            }
         }
 
         for (i, per_rule_fsm) in self.grammar.per_rule_fsms_slice().iter().enumerate() {
@@ -181,7 +189,7 @@ impl<'a> GrammarFsmHasher<'a> {
                 continue;
             }
             let start = self.grammar.per_rule_fsm(rule_id).expect("per-rule FSM").fsm().start();
-            if self.has_inward_edges[start as usize] {
+            if self.has_inward_edges[self.fsm_state_offsets[rule_id as usize] + start as usize] {
                 continue;
             }
             if let Some(hash_value) = self.is_partial_hashable(rule_id) {
@@ -296,6 +304,7 @@ impl<'a> GrammarFsmHasher<'a> {
     ) -> Option<u64> {
         let mut hash_result = 0u64;
         let fsm = self.grammar.per_rule_fsm(fsm_index).expect("per-rule FSM").fsm();
+        let offset = self.fsm_state_offsets[fsm_index as usize];
         let mut original_state_id_to_new_id = BTreeMap::from([(fsm.start(), 0)]);
         let mut bfs_queue = VecDeque::from([fsm.start()]);
         let mut hash_and_target: BTreeSet<(u64, i32)> = BTreeSet::new();
@@ -337,13 +346,13 @@ impl<'a> GrammarFsmHasher<'a> {
                 true
             };
 
-            for edge in &self.sorted_edges[current_old_state_id as usize] {
+            for edge in &self.sorted_edges[offset + current_old_state_id as usize] {
                 if edge.is_rule_ref() {
                     if !hash_rule_like_edge(edge.ref_rule_id(), edge.target) {
                         return None;
                     }
                 } else if edge.is_repeat_ref() {
-                    let info = self.grammar.complete_fsm().repeat_edge_info(edge.aux_index());
+                    let info = fsm.fsm().repeat_edge_info(edge.aux_index());
                     if !hash_rule_like_edge(info.rule_id(), edge.target) {
                         return None;
                     }
@@ -359,7 +368,7 @@ impl<'a> GrammarFsmHasher<'a> {
                 hash_result = hash_combine(hash_result, &[current_new_state_id as u64, hash, target_new_id as u64]);
             }
 
-            for edge in &self.sorted_edges[current_old_state_id as usize] {
+            for edge in &self.sorted_edges[offset + current_old_state_id as usize] {
                 if !original_state_id_to_new_id.contains_key(&edge.target) {
                     original_state_id_to_new_id.insert(edge.target, original_state_id_to_new_id.len() as i32);
                     bfs_queue.push_back(edge.target);
@@ -383,6 +392,7 @@ impl<'a> GrammarFsmHasher<'a> {
     ) -> u64 {
         let mut hash_result = 0u64;
         let fsm = self.grammar.per_rule_fsm(fsm_index).expect("per-rule FSM").fsm();
+        let offset = self.fsm_state_offsets[fsm_index as usize];
         let mut original_state_id_to_new_id = BTreeMap::from([(fsm.start(), 0)]);
         let mut bfs_queue = VecDeque::from([fsm.start()]);
         let mut hash_and_target: BTreeSet<(i32, i32)> = BTreeSet::new();
@@ -402,7 +412,7 @@ impl<'a> GrammarFsmHasher<'a> {
                 );
             }
 
-            for edge in &self.sorted_edges[current_old_state_id as usize] {
+            for edge in &self.sorted_edges[offset + current_old_state_id as usize] {
                 if edge.is_rule_ref() {
                     let ref_rule_id = edge.ref_rule_id();
                     if ref_rule_id == fsm_index {
@@ -415,7 +425,7 @@ impl<'a> GrammarFsmHasher<'a> {
                         ));
                     }
                 } else if edge.is_repeat_ref() {
-                    let info = self.grammar.complete_fsm().repeat_edge_info(edge.aux_index());
+                    let info = fsm.fsm().repeat_edge_info(edge.aux_index());
                     let ref_rule_id = info.rule_id();
                     if ref_rule_id == fsm_index {
                         let repeat_hash = hash_combine_i32(SELF_RECURSION_FLAG as u64, &[info.lower(), info.upper()]);
@@ -438,7 +448,7 @@ impl<'a> GrammarFsmHasher<'a> {
                 hash_result = hash_combine_i32(hash_result, &[current_new_state_id, hash, target_new_id]);
             }
 
-            for edge in &self.sorted_edges[current_old_state_id as usize] {
+            for edge in &self.sorted_edges[offset + current_old_state_id as usize] {
                 if !original_state_id_to_new_id.contains_key(&edge.target) {
                     original_state_id_to_new_id.insert(edge.target, original_state_id_to_new_id.len() as i32);
                     bfs_queue.push_back(edge.target);

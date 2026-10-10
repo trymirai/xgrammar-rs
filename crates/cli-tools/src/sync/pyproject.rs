@@ -26,6 +26,7 @@ impl SyncTask for PyprojectSyncTask {
         if project.get("urls").and_then(Item::as_table_like).is_none() {
             project.insert("urls", Item::Table(toml_edit::Table::new()));
         }
+        project.insert("version", Item::Value(Value::from(package.version.as_str())));
         project.insert("description", Item::Value(Value::from(package.description.as_str())));
         // Workspace README lives at the repo root; pyproject.toml is under bindings/python/.
         let mut readme = InlineTable::new();

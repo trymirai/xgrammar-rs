@@ -25,6 +25,7 @@ minijinja.workspace = true
 anyhow.workspace = true
 indexmap.workspace = true
 colored.workspace = true
+xgrammar-upstream = { path = "../xgrammar-upstream" }
 
 [lints]
 workspace = true

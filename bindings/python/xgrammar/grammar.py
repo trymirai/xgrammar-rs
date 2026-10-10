@@ -13,27 +13,24 @@ if TYPE_CHECKING:
     from .tokenizer_info import TokenizerInfo
 
 
-def _convert_named_grammars_to_lists(
+def _create_named_grammars(
     named_grammars: Optional[Dict[str, Union["Grammar", str]]],
-) -> Tuple[List[str], List[Any]]:
+) -> "_core.NamedGrammars":
     if named_grammars is None:
         named_grammars = {}
     if not isinstance(named_grammars, dict):
         raise TypeError("named_grammars must be a dictionary")
-    names: List[str] = []
-    values: List[Any] = []
+    handle = _core.NamedGrammars()
     for name, grammar_or_source in named_grammars.items():
         if not isinstance(name, str):
             raise TypeError("named grammar names must be strings")
         if isinstance(grammar_or_source, Grammar):
-            value = grammar_or_source._handle
+            handle.add_grammar(name, grammar_or_source._handle)
         elif isinstance(grammar_or_source, str):
-            value = grammar_or_source
+            handle.add_lark(name, grammar_or_source)
         else:
             raise TypeError("named grammar values must be Grammar instances or Lark strings")
-        names.append(name)
-        values.append(value)
-    return names, values
+    return handle
 
 
 def _convert_instance_to_str(instance: Union[str, Dict[str, Any], StructuralTag]) -> str:
@@ -348,9 +345,12 @@ class Grammar(XGRObject):
             contain Lark grammar sources with their own ``start`` rules. Dictionary
             keys are passed without the leading ``@``.
         """
-        tokenizer_handle = None if tokenizer_info is None else tokenizer_info._handle
-        names, values = _convert_named_grammars_to_lists(named_grammars)
-        return Grammar._create_from_handle(_core.Grammar.from_lark(lark_string, tokenizer_handle, names, values))
+        named_handle = _create_named_grammars(named_grammars)
+        if tokenizer_info is None:
+            return Grammar._create_from_handle(_core.Grammar.from_lark(lark_string, named_handle))
+        return Grammar._create_from_handle(
+            _core.Grammar.from_lark_with_tokenizer(lark_string, tokenizer_info._handle, named_handle)
+        )
 
     @overload
     @staticmethod

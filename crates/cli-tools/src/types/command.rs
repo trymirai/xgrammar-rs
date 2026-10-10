@@ -374,10 +374,6 @@ impl Command {
         Self::new("pnpm").with_argument("exec")
     }
 
-    pub fn pnpm_jest() -> Self {
-        Self::pnpm_exec().with_argument("jest")
-    }
-
     pub fn pnpm_tsn(path: PathBuf) -> Self {
         Self::pnpm_run("tsn").with_argument(&path.to_string_lossy())
     }

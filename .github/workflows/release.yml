@@ -4,6 +4,9 @@ on:
   release:
     types: [published]
 
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
 
@@ -11,22 +14,37 @@ jobs:
   test:
     name: Test release inputs
     runs-on: ubuntu-latest
+    # Warnings fail the upstream suite, except the ones observed from upstream's own tests: the
+    # deprecated max_rollback_tokens argument, stop-token auto-detection, and a transformers
+    # deprecation raised while loading a tokenizer config. Each is allowed only as the exact whole
+    # message, category, and module (anchored regexes in pytest's filterwarnings, one per line).
+    env:
+      HF_HUB_DISABLE_XET: "1"
+      PYTEST_ADDOPTS: |-
+        -o "filterwarnings=error
+        ignore:\Amax_rollback_tokens\ is\ deprecated\.\ You\ don't\ need\ to\ set\ it\ and\ it's\ always\ unlimited\ \(\-1\)\.\Z:DeprecationWarning:\Axgrammar\.matcher\Z
+        ignore:\AWhen\ constructing\ TokenizerInfo\ from\ a\ huggingface\ tokenizer,\ stop_token_ids\ is\ neither\ provided\ by\ user\ nor\ found\ from\ the\ tokenizer\.\ It\ will\ be\ automatically\ detected\.\Z:UserWarning:\Axgrammar\.tokenizer_info\Z
+        ignore:\A`rope_config_validation`\ is\ deprecated\ and\ has\ been\ removed\.\ Its\ functionality\ has\ been\ moved\ to\ RotaryEmbeddingConfigMixin\.validate_rope\ method\.\ PreTrainedConfig\ inherits\ this\ class,\ so\ please\ call\ self\.validate_rope\(\)\ instead\.\ Also,\ make\ sure\ to\ use\ the\ new\ rope_parameters\ syntax\.\ You\ can\ call\ self\.standardize_rope_params\(\)\ in\ the\ meantime\.\Z:FutureWarning:\Atransformers\.modeling_rope_utils\Z"
     steps:
-      # The upstream reference (tests + C++ sources) is the pinned `external/xgrammar` submodule.
-      - uses: actions/checkout@v4
-        with:
-          submodules: true
+      # `cargo test` below downloads the upstream release (tests + C++ sources) into external/xgrammar.
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.85.0
       - uses: Swatinem/rust-cache@v2
       - run: cargo test -p xgrammar-rs --locked
       - run: cargo test -p xgrammar-rs --locked --features tokenizers --test rust_api
       - run: cargo publish -p xgrammar-rs --dry-run --locked
-      - uses: astral-sh/setup-uv@v4
+      - uses: astral-sh/setup-uv@v7
         with:
           python-version: "3.12"
+          version: 0.12.24
           enable-cache: true
       - name: Build Python package
-        run: uv sync --project bindings/python --extra test
+        run: |
+          uv cache clean xgrammar
+          uv sync --locked --project bindings/python --extra test
+      - name: Run Python binding regressions
+        run: uv run --no-sync --project bindings/python python -m pytest bindings/python/tests
+
       - name: Check that tests import this repository's xgrammar
         shell: bash
         run: |
@@ -52,7 +70,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: test
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.85.0
       - name: Publish to crates.io
         env:
@@ -78,9 +96,9 @@ jobs:
           - os: macos-15-intel
             target: x86_64-apple-darwin
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
-      - uses: astral-sh/setup-uv@v4
+      - uses: astral-sh/setup-uv@v7
       - name: Build ABI3 wheel
         working-directory: bindings/python
         run: uvx maturin build --release --out ../../dist
@@ -94,9 +112,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: test
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
-      - uses: astral-sh/setup-uv@v4
+      - uses: astral-sh/setup-uv@v7
       - name: Build source distribution
         working-directory: bindings/python
         run: uvx maturin sdist --out ../../dist

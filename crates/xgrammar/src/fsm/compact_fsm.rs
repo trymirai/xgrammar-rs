@@ -18,7 +18,7 @@ use crate::support::Compact2dArray;
 /// A finite-state machine stored as CSR rows of edges plus a shared auxiliary-data buffer.
 ///
 /// The storage is immutable and shared, so clones are cheap (the C++ pimpl `CompactFSM`): every
-/// per-rule FSM of a grammar is a view over the same complete FSM.
+/// generated per-rule FSMs can share the complete FSM's storage.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct CompactFsm {
     edges: Arc<Compact2dArray<FsmEdge>>,
@@ -26,6 +26,15 @@ pub struct CompactFsm {
 }
 
 impl CompactFsm {
+    /// Whether two FSMs share both immutable storage buffers.
+    #[must_use]
+    pub fn shares_storage(
+        &self,
+        other: &Self,
+    ) -> bool {
+        Arc::ptr_eq(&self.edges, &other.edges) && Arc::ptr_eq(&self.edge_aux_data, &other.edge_aux_data)
+    }
+
     /// Builds a compact FSM from `fsm`, sorting each state's edges (matching the C++
     /// `ToCompact`, which sorts before packing).
     #[must_use]

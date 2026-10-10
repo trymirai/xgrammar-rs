@@ -53,8 +53,9 @@ pub struct EarleyParser {
     pub tmp_states_visited_in_queue: RepeatDetector,
     /// Whether the stop token has been accepted.
     pub stop_token_is_accepted: bool,
-    /// Lazily computed FSM state properties, indexed by rule id and state id.
-    fsm_state_flags_cache: Vec<u8>,
+    /// Graph-state properties tagged with the rule whose accepting states they include.
+    fsm_state_flags_cache: Vec<u64>,
+    fsm_state_offsets: Vec<usize>,
     /// Whether each rule can match the empty string.
     rule_is_nullable: Vec<bool>,
     /// The index of the LLM token currently being accepted, set by the matcher; `-1` before
@@ -104,6 +105,7 @@ impl EarleyParser {
             "The grammar is not optimized. Please optimize the grammar before using the Earley parser."
         );
         let num_rules = grammar.num_rules() as usize;
+        let fsm_state_offsets = grammar.fsm_state_offsets();
         let has_budget_rules = grammar.rules().iter().any(|rule| rule.max_tokens >= 0);
         let has_char_budget_rules = grammar.rules().iter().any(|rule| rule.max_chars >= 0);
         let capture_tracking = grammar.rules().iter().any(|rule| !rule.capture_name.is_empty())
@@ -125,6 +127,7 @@ impl EarleyParser {
             tmp_states_visited_in_queue: RepeatDetector::new(),
             stop_token_is_accepted: false,
             fsm_state_flags_cache: Vec::new(),
+            fsm_state_offsets,
             rule_is_nullable,
             current_token_index: -1,
             skip_expired_states: false,
@@ -437,12 +440,12 @@ impl EarleyParser {
             }
             // The rule is referenced by a FSM: check whether the parent sits on a repeat edge (by
             // invariance, a state with a repeat edge has exactly one outgoing edge).
-            let complete_fsm = self.grammar.complete_fsm();
-            let repeat = complete_fsm
+            let fsm = self.grammar.per_rule_fsm(parent_state.rule_id).expect("per-rule FSM").fsm().fsm();
+            let repeat = fsm
                 .state_edges(parent_state.element_id)
                 .iter()
                 .filter(|edge| edge.is_repeat_ref())
-                .map(|edge| (edge.target, complete_fsm.repeat_edge_info(edge.aux_index())))
+                .map(|edge| (edge.target, self.grammar.complete_fsm().repeat_edge_info(edge.aux_index())))
                 .find(|(_, info)| info.rule_id() == ref_id)
                 .map(|(target, info)| (target, info.lower(), info.upper()));
             let Some((target, lower, upper)) = repeat else {
@@ -611,11 +614,9 @@ impl EarleyParser {
         rule_id: i32,
         state_id: i32,
     ) -> u8 {
-        // Per-rule FSMs are views over the grammar's complete FSM, so a state id determines its
-        // rule and one cache over the complete FSM serves every rule (upstream keeps a full-size
-        // cache per rule).
-        match self.fsm_state_flags_cache.get(state_id as usize) {
-            Some(&flags) if flags != 0 => flags,
+        let index = self.fsm_state_offsets[rule_id as usize] + state_id as usize;
+        match self.fsm_state_flags_cache.get(index) {
+            Some(&entry) if entry as u8 != 0 && entry >> 8 == rule_id as u64 => entry as u8,
             _ => self.initialize_fsm_state_flags(rule_id, state_id),
         }
     }
@@ -628,9 +629,10 @@ impl EarleyParser {
         state_id: i32,
     ) -> u8 {
         let fsm = self.grammar.per_rule_fsm(rule_id).expect("per-rule FSM").fsm();
+        let offset = self.fsm_state_offsets[rule_id as usize];
         let cache = &mut self.fsm_state_flags_cache;
-        if cache.is_empty() {
-            cache.resize(fsm.num_states() as usize, 0);
+        if cache.len() < offset + fsm.num_states() as usize {
+            cache.resize(offset + fsm.num_states() as usize, 0);
         }
         let mut flags = FSM_STATE_INITIALIZED;
         if fsm.is_end_state(state_id) {
@@ -647,7 +649,7 @@ impl EarleyParser {
                 flags |= FSM_STATE_NON_TERMINAL;
             }
         }
-        cache[state_id as usize] = flags;
+        cache[offset + state_id as usize] = (rule_id as u64) << 8 | u64::from(flags);
         flags
     }
 
@@ -805,8 +807,9 @@ impl EarleyParser {
         &mut self,
         state: &ParserState,
     ) {
-        let edges: SmallVec<[FsmEdge; 8]> =
-            SmallVec::from_slice(self.grammar.complete_fsm().state_edges(state.element_id));
+        let edges: SmallVec<[FsmEdge; 8]> = SmallVec::from_slice(
+            self.grammar.per_rule_fsm(state.rule_id).expect("per-rule FSM").fsm().fsm().state_edges(state.element_id),
+        );
         for edge in &edges {
             if edge.is_epsilon() {
                 self.enqueue(state.at_element(edge.target));
@@ -987,7 +990,10 @@ impl EarleyParser {
         let value = i32::from(ch);
         let targets: SmallVec<[i32; 4]> = self
             .grammar
-            .complete_fsm()
+            .per_rule_fsm(state.rule_id)
+            .expect("per-rule FSM")
+            .fsm()
+            .fsm()
             .state_edges(state.element_id)
             .iter()
             .filter(|edge| edge.is_char_range() && edge.min <= value && value <= edge.max)
@@ -1009,7 +1015,7 @@ impl EarleyParser {
         if state.rule_id == -1 {
             return;
         }
-        let fsm = self.grammar.complete_fsm();
+        let fsm = self.grammar.per_rule_fsm(state.rule_id).expect("per-rule FSM").fsm().fsm();
         let targets: SmallVec<[i32; 4]> = fsm
             .state_edges(state.element_id)
             .iter()

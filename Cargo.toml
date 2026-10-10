@@ -21,7 +21,7 @@ homepage = "https://github.com/trymirai/xgrammar-rs"
 authors = ["Eugene Bokhan <eugenebokhan@gmail.com>"]
 description = "Efficient, Flexible and Portable Structured Generation — pure-Rust XGrammar."
 readme = "README.md"
-keywords = ["llm", "grammar", "structured-generation", "json-schema", "parser"]
+keywords = ["llm", "grammar", "structured-output", "json-schema", "parser"]
 
 [workspace.dependencies]
 clap = { version = "4.6", features = ["derive"] }

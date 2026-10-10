@@ -29,7 +29,7 @@ authors = [{ name = "Eugene Bokhan", email = "eugenebokhan@gmail.com" }]
 keywords = [
     "llm",
     "grammar",
-    "structured-generation",
+    "structured-output",
     "json-schema",
     "parser",
 ]
